@@ -121,6 +121,64 @@ int a_pay_push (void) {
     return n;
 }
 
+void a_pay_save (APay* s) {
+    s->v   = a_pay;
+    s->n   = a_pay_n;
+    s->cap = PAY_CAP;
+    a_pay   = NULL;
+    a_pay_n = 0;
+    PAY_CAP = 0;
+}
+
+void a_pay_restore (APay* s) {
+    a_pay_clear();
+    free(a_pay);
+    a_pay   = s->v;
+    a_pay_n = s->n;
+    PAY_CAP = s->cap;
+}
+
+void a_pay_drop (APay* s) {
+    for (int i=0; i<s->n; i++) {
+        a_dec(s->v[i]);
+    }
+    free(s->v);
+}
+
+AStatus a_catch (AVal cnd, int* ok) {
+    if (cnd.type == A_BOOL) {
+        *ok = cnd.u.b;
+        return A_OK;
+    }
+    if (cnd.type != A_FUNC) {
+        *ok = a_is((a_pay_n > 0) ? a_pay[0] : a_nil(), cnd);
+        return A_OK;
+    }
+
+    // the function may use the payload itself
+    int base = a_top;
+    for (int i=0; i<a_pay_n; i++) {
+        a_pushc(a_pay[i]);
+    }
+    APay saved;
+    a_pay_save(&saved);
+    AStatus st = a_call(cnd, base);
+    if (st != A_OK) {
+        a_pay_drop(&saved);
+        return st;
+    }
+    *ok = (a_top > base) && a_truthy(a_stk[base]);
+    if (*ok) {
+        a_pay_drop(&saved);
+        a_pay_pull(a_top - base - 1);
+        a_settop(base);
+    } else {
+        a_settop(base);
+        a_pay_restore(&saved);
+    }
+    return A_OK;
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // MEMORY
 ///////////////////////////////////////////////////////////////////////////////

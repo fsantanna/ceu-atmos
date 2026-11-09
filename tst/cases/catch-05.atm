@@ -1,0 +1,25 @@
+val ok, msg = catch true {
+    nil + 1
+}
+print(ok, msg)
+val ok2, msg2 = catch true {
+    assert(false, "boom")
+}
+print(ok2, msg2)
+func f (n) {
+    if n == 0 {
+        throw(:Deep, n)
+    }
+    f(n - 1)
+}
+print(catch :Deep { f(10) })
+var n = 0
+loop i in 5 {
+    catch :X {
+        if (i % 2) == 0 {
+            throw(:X)
+        }
+        set n = n + 1
+    }
+}
+print(n)

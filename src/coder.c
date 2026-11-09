@@ -625,11 +625,13 @@ static Opnd gen_index (Unit* u, Expr* e) {
 // and control goes to an end label.
 //  - break: the body of a loop
 //  - return: the body of a lambda expanded in place
+//  - error: the body of a catch, which only diverts to its label
 typedef struct Hnd {
     int brk;
     Dst brkd;
     int ret;
     Dst retd;
+    int err;
 } Hnd;
 
 static void gen_block_x (Unit* u, List* es, Dst d, Hnd h) {
@@ -674,6 +676,9 @@ static void gen_block_x (Unit* u, List* es, Dst d, Hnd h) {
     }
     out(u, "if (st != A_OK) {");
     out(u, "    a_settop(base);");
+    if (h.err > 0) {
+        out(u, "    if (st == A_ERROR) goto LC_%d;", h.err);
+    }
     out(u, "    goto CL_%d;", up);
     out(u, "}");
     u->ind--;
@@ -683,7 +688,7 @@ static void gen_block_x (Unit* u, List* es, Dst d, Hnd h) {
 }
 
 static void gen_block (Unit* u, List* es, Dst d) {
-    Hnd h = { 0, dst_none(), 0, dst_none() };
+    Hnd h = { 0, dst_none(), 0, dst_none(), 0 };
     gen_block_x(u, es, d, h);
 }
 
@@ -828,7 +833,7 @@ static void gen_inline (Unit* u, Expr* p, Opnd arg, Dst d) {
     }
     // a return inside the lambda gives its value
     int end = ++u->nlabels;
-    Hnd h = { 0, dst_none(), end, d };
+    Hnd h = { 0, dst_none(), end, d, 0 };
     gen_block_x(u, &p->u.proto.blk->u.block.es, d, h);
     out0(u, "LE_%d: ;", end);
 }
@@ -933,7 +938,7 @@ static void gen_loop (Unit* u, Expr* e, Dst d) {
         out_try(u, "a_next(%s, %s, &%s, &%s, &%s)", it.c, lim.c, pos.c, k, v);
         out(u, "if (%s.type == A_NIL) break;", k);
     }
-    Hnd h = { end, d, 0, dst_none() };
+    Hnd h = { end, d, 0, dst_none(), 0 };
     gen_block_x(u, &e->u.loop.blk->u.block.es, dst_none(), h);
     u->ind--;
     out(u, "}");
@@ -995,6 +1000,64 @@ static void gen_break (Unit* u, Expr* e) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+// EXCEPTIONS
+///////////////////////////////////////////////////////////////////////////////
+
+// catch e {...}: `true` plus the values of the body, or `false` plus
+// the values of a matching throw.
+static void gen_catch (Unit* u, Expr* e, Dst d) {
+    Opnd c = gen_expr(u, e->u.xcatch.cnd);
+    int lc  = ++u->nlabels;
+    int end = ++u->nlabels;
+
+    Dst m = (d.kind == D_MULTI) ? dst_multi(u) : dst_none();
+    Hnd h = { 0, dst_none(), 0, dst_none(), lc };
+    gen_block_x(u, &e->u.xcatch.blk->u.block.es, m, h);
+
+    // no error
+    switch (d.kind) {
+        case D_NONE:
+            break;
+        case D_SLOT:
+            out(u, "a_set(&%s, a_bool(1));", d.slot);
+            break;
+        case D_MULTI:
+            out(u, "a_open(%s, 1);", m.n);
+            out(u, "a_putc(a_top-%s-1, a_bool(1));", m.n);
+            out(u, "%s = %s + 1;", d.n, m.n);
+            break;
+    }
+    out(u, "goto LE_%d;", end);
+
+    // error: caught here, or propagated
+    out0(u, "LC_%d:", lc);
+    out(u, "{");
+    out(u, "    int ok;");
+    out(u, "    if ((st = a_catch(%s, &ok)) != A_OK) goto CL_%d;",
+        c.c, u->cleanup);
+    out(u, "    if (!ok) {");
+    out(u, "        st = A_ERROR;");
+    out(u, "        goto CL_%d;", u->cleanup);
+    out(u, "    }");
+    out(u, "}");
+    switch (d.kind) {
+        case D_NONE:
+            out(u, "a_pay_clear();");
+            break;
+        case D_SLOT:
+            out(u, "a_set(&%s, a_bool(0));", d.slot);
+            out(u, "a_pay_clear();");
+            break;
+        case D_MULTI:
+            out(u, "a_push(a_bool(0));");
+            out(u, "%s = 1 + a_pay_push();", d.n);
+            break;
+    }
+    out0(u, "LE_%d: ;", end);
+    opnd_rel(u, c);
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // CALLS
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -1022,6 +1085,15 @@ static void gen_call (Unit* u, Expr* e, Dst d) {
             gen_args(u, &e->u.call.es, m.n, NULL);
             out(u, "a_pay_pull(%s);", m.n);
             out(u, "st = A_RETURN;");
+            out(u, "goto CL_%d;", u->cleanup);
+            store_void(u, d);
+            return;
+        }
+        case SP_THROW: {
+            Dst m = dst_multi(u);
+            gen_args(u, &e->u.call.es, m.n, NULL);
+            out(u, "a_pay_pull(%s);", m.n);
+            out(u, "st = a_throw();");
             out(u, "goto CL_%d;", u->cleanup);
             store_void(u, d);
             return;
@@ -1262,10 +1334,12 @@ static void gen (Unit* u, Expr* e, Dst d) {
         case E_DOTS:
             gen_dots(u, d);
             break;
+        case E_CATCH:
+            gen_catch(u, e, d);
+            break;
         case E_NAT:
         case E_MET:
         case E_DEFER:
-        case E_CATCH:
         case E_ME:
             err(e->tk, "expression not implemented");
             break;

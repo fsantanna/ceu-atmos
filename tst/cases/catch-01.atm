@@ -1,0 +1,13 @@
+print(:1)
+catch :X {
+    print(:2)
+    throw(:X)
+    print(:3)
+}
+print(:4)
+catch true {
+    print(:5)
+    throw()
+    print(:6)
+}
+print(:7)

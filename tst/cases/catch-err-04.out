@@ -1,0 +1,5 @@
+==> ERROR:
+ |  catch-err-04.atm:8 (call)
+ |  catch-err-04.atm:5 (call)
+ v  catch-err-04.atm:2 (throw)
+==> X, 10, s

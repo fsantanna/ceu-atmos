@@ -1,0 +1,20 @@
+val ok,v = catch true {
+    throw(10)
+}
+print(ok,v)
+val ok2,v2 = catch true {
+    (10)
+}
+print(ok2,v2)
+val ok3, x = catch :X {
+    throw(:X [v=10, msg="error"])
+    print("unreachable")
+}
+print(ok3, x.msg)
+val ok4, v4 = catch \{(true,42)} {
+    throw :X
+}
+print(ok4, v4)
+print(catch true { throw(:a, :b, :c) })
+print(catch true { (1, 2, 3) })
+print(catch true { })

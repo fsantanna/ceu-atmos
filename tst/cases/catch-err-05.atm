@@ -1,0 +1,3 @@
+catch (func (e) { e.x }) {
+    throw(10)
+}

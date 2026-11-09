@@ -292,6 +292,31 @@ void a_pay_pull (int n);
 // Moves the payload onto the stack. Returns the number of values.
 int a_pay_push (void);
 
+// A payload set aside while other code runs (defers, catch tests).
+typedef struct APay {
+    AVal* v;
+    int   n;
+    int   cap;
+} APay;
+
+// Moves the payload into `s`, leaving it empty.
+void a_pay_save (APay* s);
+
+// Releases the payload and moves `s` back.
+void a_pay_restore (APay* s);
+
+// Releases a saved payload.
+void a_pay_drop (APay* s);
+
+// Tests the pending error against the condition of a catch:
+//  - true: any error
+//  - false: none
+//  - function: called with the thrown values; catches if its first
+//    result holds, and the other results replace the thrown values
+//  - otherwise: the first thrown value `??` the condition
+// Sets `ok`. Fails if the function fails.
+AStatus a_catch (AVal cnd, int* ok);
+
 ///////////////////////////////////////////////////////////////////////////////
 // STRINGS
 ///////////////////////////////////////////////////////////////////////////////

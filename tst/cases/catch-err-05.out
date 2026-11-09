@@ -1,0 +1,4 @@
+==> ERROR:
+ |  catch-err-05.atm:2 (call)
+ v  catch-err-05.atm:1 (throw)
+==> invalid index : expected table : got number

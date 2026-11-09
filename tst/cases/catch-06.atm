@@ -1,0 +1,19 @@
+val r = loop {
+    catch true {
+        break(:out)
+    }
+    print(:no)
+}
+print(r)
+func g () {
+    catch true {
+        return(:ret)
+    }
+    :no
+}
+print(g())
+val v = catch :X {
+    val s = "a" ++ "b"
+    throw(:X, s ++ "c")
+}
+print(v)

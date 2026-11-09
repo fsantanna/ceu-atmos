@@ -1,0 +1,7 @@
+val x = catch :X {
+    catch :Y {
+        throw (:Z)
+    }
+    :ok
+}
+print(:ok)

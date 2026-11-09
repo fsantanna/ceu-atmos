@@ -1,0 +1,20 @@
+val _,x = catch :X {
+    catch :Y {
+        throw <- :X [10]
+    }
+}
+X.print(x)
+val _,y = catch :Y {
+    catch :Z {
+        (func() { throw (:Y.X [10]) })()
+    }
+    :ok
+}
+X.print(y)
+val a = 1
+catch :X {
+    val b = 2
+    print(a+b)
+}
+val ok = catch false { 1 }
+print(ok)

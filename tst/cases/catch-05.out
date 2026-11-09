@@ -1,0 +1,4 @@
+false	invalid operation '+' : expected number : got nil
+false	boom
+false	Deep	0
+2

@@ -1,0 +1,21 @@
+print(:1)
+catch :Y {
+    print(:2)
+    catch :X {
+        print(:3)
+        throw(:Y)
+        print(:4)
+    }
+    print(:5)
+}
+print(:6)
+catch (func (e) {e==10}) {
+    print(:7)
+    catch (func (e) {e!=10}) {
+        print(:8)
+        throw(10)
+        print(:9)
+    }
+    print(:10)
+}
+print(:11)

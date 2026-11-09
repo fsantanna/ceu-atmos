@@ -1,0 +1,9 @@
+func f () {
+    throw(:X, 10, "s")
+}
+func g () {
+    f()
+}
+catch :Y {
+    g()
+}
