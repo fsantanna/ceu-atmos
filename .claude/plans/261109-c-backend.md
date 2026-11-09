@@ -667,7 +667,7 @@ exs/        examples
       `val`/`var`/`set`, static globals.
 - [x] M2 functions: closures, boxes, multiple values, varargs, `return`,
       lambdas, method sugar.
-- [ ] M3 control and errors: blocks, `defer`, `escape`, `break`,
+- [x] M3 control and errors: blocks, `defer`, `escape`, `break`,
       `until`, `while`, `throw`, `catch`, traces with `#line`.
 - [ ] M4 tasks core: prototypes, `spawn`, `await` on values and tags,
       default and `:global` emit, main as task, `pin` for tasks,
