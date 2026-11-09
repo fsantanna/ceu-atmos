@@ -1,0 +1,7 @@
+print(:1)
+do {
+    print(:2)
+    val v = do { print(:3) ; "x" ++ "y" }
+    print(v)
+}
+print(:4)

@@ -1,0 +1,8 @@
+val x = do {
+    10
+}
+print(x)
+val y = do {
+    do(10) ; 20
+}
+print(y, do { }, do { val z = 1 })

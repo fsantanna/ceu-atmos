@@ -1,0 +1,5 @@
+var x = 1
+print(x, do(set x = 2), x)
+val s = "a" ++ "b"
+val t = s
+print(s == t, s, t)

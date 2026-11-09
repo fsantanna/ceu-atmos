@@ -5,8 +5,8 @@ ASAN   := -fsanitize=address -fno-omit-frame-pointer
 RT_SRC := rt/val.c rt/str.c rt/std.c
 RT_HDR := rt/atmos.h
 
-CC_SRC := src/aux.c src/lexer.c src/parser.c src/ast.c src/coder.c \
-          src/main.c
+CC_SRC := src/aux.c src/lexer.c src/parser.c src/ast.c src/resolver.c \
+          src/coder.c src/main.c
 CC_HDR := src/atmc.h
 
 all: atmos build/libatmos.a build/libatmos-asan.a

@@ -135,7 +135,10 @@ int main (int argc, char** argv) {
         return 0;
     }
 
-    char* c = coder_main(prog);
+    int nglobals;
+    Var** globals = resolver_main(prog, &nglobals);
+
+    char* c = coder_main(prog, globals, nglobals);
 
     if (only) {
         fputs(c, stdout);

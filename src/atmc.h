@@ -93,6 +93,7 @@ typedef enum {
 } ETag;
 
 typedef struct Expr Expr;
+typedef struct Var  Var;
 
 typedef struct List {
     int    n;
@@ -103,6 +104,12 @@ typedef struct List {
 typedef enum {
     IDX_EXPR, IDX_LAST, IDX_NEXT
 } IdxKind;
+
+// Calls to reserved names are statements in disguise.
+typedef enum {
+    SP_NONE, SP_DO, SP_BREAK, SP_UNTIL, SP_WHILE,
+    SP_RETURN, SP_ESCAPE, SP_THROW, SP_ABORT
+} Special;
 
 // One case of an if/ifs/match.
 typedef struct Case {
@@ -120,6 +127,10 @@ struct Expr {
     Tk   tk;
     // pipe or where operator that built this node (to reject mixes)
     const char* out;
+    // resolver: variable of an access
+    Var*  var;
+    // resolver: variables of a declaration, loop, or prototype
+    Var** vars;
     union {
         struct { Expr* t; IdxKind kind; Expr* idx; }    index;
         // positional entries have a NULL key
@@ -127,7 +138,8 @@ struct Expr {
         struct { Expr* e; }                             tagged;
         struct { Expr* e; }                             uno;
         struct { Expr* e1; Expr* e2; }                  bin;
-        struct { Expr* f; List es; }                    call;
+        // sp: set by the resolver
+        struct { Expr* f; List es; Special sp; }        call;
         struct { Expr* o; Tk met; }                     met;
         struct { Expr* e; }                             parens;
         struct { List es; }                             list;
@@ -165,10 +177,35 @@ Expr* parser_main (void);
 void ast_dump (Expr* e);
 
 ///////////////////////////////////////////////////////////////////////////////
+// RESOLVER
+///////////////////////////////////////////////////////////////////////////////
+
+typedef enum {
+    V_VAL, V_VAR, V_PIN, V_PAR
+} VarKind;
+
+struct Var {
+    Tk      tk;
+    VarKind kind;
+    // unique number
+    int     id;
+    // runtime global: C symbol
+    const char* csym;
+    // top-level variable of the main chunk: static C variable
+    int     global;
+    // coder: slot in `L`
+    int     slot;
+};
+
+// Binds every access to its declaration and checks assignments.
+// Returns the top-level variables of the main chunk.
+Var** resolver_main (Expr* prog, int* n);
+
+///////////////////////////////////////////////////////////////////////////////
 // CODER
 ///////////////////////////////////////////////////////////////////////////////
 
 // Generates the C source of the whole program.
-char* coder_main (Expr* prog);
+char* coder_main (Expr* prog, Var** globals, int nglobals);
 
 #endif

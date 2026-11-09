@@ -1,0 +1,11 @@
+val x = 10
+print(x)
+do {
+    val x = 20
+    print(x)
+    do {
+        val x = x + 1
+        print(x)
+    }
+}
+print(x)

@@ -1,0 +1,9 @@
+do {
+    val s = "a" ++ "b"
+    do {
+        val t = s ++ "c"
+        print(t + 1)
+    }
+    print(:no)
+}
+print(:no)

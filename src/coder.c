@@ -40,11 +40,24 @@ typedef struct Unit {
     Buf body;
     // number of slots in `L`
     int nslots;
+    // number of cleanup labels
+    int nlabels;
     // cleanup label of the enclosing block
     int cleanup;
     // extra indentation of the generated lines
     int ind;
 } Unit;
+
+// Appends one line at column zero (labels).
+static void out0 (Unit* u, const char* fmt, ...) {
+    char line[1024];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(line, sizeof(line), fmt, ap);
+    va_end(ap);
+    buf_add(&u->body, line);
+    buf_add(&u->body, "\n");
+}
 
 // Appends one line to the body of the unit.
 static void out (Unit* u, const char* fmt, ...) {
@@ -231,13 +244,21 @@ static void opnd_push (Unit* u, Opnd o) {
 // EXPRESSIONS
 ///////////////////////////////////////////////////////////////////////////////
 
-// Global variables provided by the runtime.
-static const char* GLOBALS[][2] = {
-    { "print", "atm_g_print" },
-    { NULL, NULL }
-};
-
 static Opnd gen_expr (Unit* u, Expr* e);
+
+// C expression of the storage of a variable.
+static const char* var_c (Unit* u, Var* v) {
+    if (v->csym != NULL) {
+        return v->csym;
+    } else if (v->global) {
+        return xfmt("G%d_%s", v->id, v->tk.str);
+    } else {
+        if (v->slot < 0) {
+            v->slot = u->nslots++;
+        }
+        return xfmt("L[%d]", v->slot);
+    }
+}
 
 // Appends the expressions in `src` to `dst`, splicing nested lists:
 // f((a,b),c) is f(a,b,c).
@@ -252,15 +273,79 @@ static void flatten (List* dst, List* src) {
     }
 }
 
+// An immutable variable is borrowed in place. A mutable one is
+// copied, since it may change before the value is consumed.
 static Opnd gen_acc (Unit* u, Expr* e) {
-    (void) u;
-    for (int i=0; GLOBALS[i][0]!=NULL; i++) {
-        if (!strcmp(GLOBALS[i][0], e->tk.str)) {
-            return opnd_c(GLOBALS[i][1]);
+    Var* v = e->var;
+    if (v->kind != V_VAR) {
+        return opnd_c(var_c(u, v));
+    } else {
+        Opnd d = opnd_tmp(u);
+        out(u, "a_cpy(&%s, %s);", d.c, var_c(u,v));
+        return d;
+    }
+}
+
+// Sequence of expressions in a new block. Its value is the value of
+// the last expression, moved out before the block is cleaned up.
+static Opnd gen_block (Unit* u, List* es) {
+    Opnd d = opnd_tmp(u);
+
+    int up = u->cleanup;
+    int lo = u->nslots;
+    u->cleanup = ++u->nlabels;
+
+    out(u, "{");
+    u->ind++;
+    for (int i=0; i<es->n; i++) {
+        Opnd o = gen_expr(u, es->v[i]);
+        if (i == es->n-1) {
+            opnd_mov(u, o, d.c);
+        } else {
+            opnd_rel(u, o);
         }
     }
-    err(e->tk, "undeclared variable");
-    return opnd_c(NULL);
+    u->ind--;
+    out0(u, "CL_%d:", u->cleanup);
+    if (u->nslots > lo) {
+        out(u, "    a_clrs(&L[%d], %d);", lo, u->nslots-lo);
+    }
+    out(u, "    if (st != A_OK) goto CL_%d;", up);
+    out(u, "}");
+
+    u->cleanup = up;
+    return d;
+}
+
+// val x = e  |  var x = e
+static Opnd gen_dcl (Unit* u, Expr* e) {
+    if (e->u.dcl.n > 1) {
+        err(e->tk, "multiple declaration : not implemented");
+    }
+    if (e->tk.str[0] == 'p') {
+        err(e->tk, "pin : not implemented");
+    }
+    if (e->u.dcl.set != NULL) {
+        Opnd o = gen_expr(u, e->u.dcl.set);
+        opnd_mov(u, o, var_c(u,e->vars[0]));
+    } else {
+        var_c(u, e->vars[0]);
+    }
+    return opnd_c("a_nil()");
+}
+
+// set x = e
+static Opnd gen_set (Unit* u, Expr* e) {
+    if (e->u.set.dsts.n > 1) {
+        err(e->tk, "multiple assignment : not implemented");
+    }
+    Expr* dst = e->u.set.dsts.v[0];
+    if (dst->tag != E_ACC) {
+        err(dst->tk, "assignment : not implemented");
+    }
+    Opnd o = gen_expr(u, e->u.set.src);
+    opnd_mov(u, o, var_c(u,dst->var));
+    return opnd_c("a_nil()");
 }
 
 static Opnd gen_uno (Unit* u, Expr* e) {
@@ -340,6 +425,16 @@ static Opnd gen_call (Unit* u, Expr* e) {
     List args = { 0, NULL };
     flatten(&args, &e->u.call.es);
 
+    // do(...): evaluates and discards
+    if (e->u.call.sp == SP_DO) {
+        for (int i=0; i<args.n; i++) {
+            opnd_rel(u, gen_expr(u,args.v[i]));
+        }
+        return opnd_c("a_nil()");
+    } else if (e->u.call.sp != SP_NONE) {
+        err(e->tk, "statement not implemented");
+    }
+
     Opnd  f  = gen_expr(u, e->u.call.f);
     Opnd* xs = xalloc(args.n * sizeof(Opnd));
     for (int i=0; i<args.n; i++) {
@@ -393,6 +488,17 @@ static Opnd gen_expr (Unit* u, Expr* e) {
             return gen_bin(u, e);
         case E_CALL:
             return gen_call(u, e);
+        case E_DCL:
+            return gen_dcl(u, e);
+        case E_SET:
+            return gen_set(u, e);
+        case E_BLOCK:
+            return gen_block(u, &e->u.block.es);
+        case E_DO:
+            if (e->u.xdo.esc) {
+                err(e->tk, "escape : not implemented");
+            }
+            return gen_block(u, &e->u.xdo.blk->u.block.es);
         default:
             err(e->tk, "expression not implemented");
             return opnd_c(NULL);
@@ -403,19 +509,22 @@ static Opnd gen_expr (Unit* u, Expr* e) {
 // MAIN
 ///////////////////////////////////////////////////////////////////////////////
 
-char* coder_main (Expr* prog) {
+char* coder_main (Expr* prog, Var** globals, int nglobals) {
     Unit u;
     memset(&u, 0, sizeof(u));
 
-    // each statement is evaluated and its value discarded
-    for (int i=0; i<prog->u.block.es.n; i++) {
-        Opnd o = gen_expr(&u, prog->u.block.es.v[i]);
-        opnd_rel(&u, o);
-    }
+    // the value of the main block is discarded
+    opnd_rel(&u, gen_block(&u, &prog->u.block.es));
 
     int n = (u.nslots > 0) ? u.nslots : 1;
     Buf c = { NULL, 0, 0 };
     buf_add(&c, "#include \"atmos.h\"\n\n");
+
+    // top-level variables
+    for (int i=0; i<nglobals; i++) {
+        buf_add(&c, xfmt("static AVal %s;\n", var_c(&u,globals[i])));
+    }
+    buf_add(&c, "\n");
 
     // constants
     buf_add(&c, xfmt("static AVal K[%d];\n\n", (KN > 0) ? KN : 1));
@@ -439,6 +548,9 @@ char* coder_main (Expr* prog) {
     buf_add(&c, "        a_settop(base);\n");
     buf_add(&c, "    }\n");
     buf_add(&c, xfmt("    a_clrs(L, %d);\n", n));
+    for (int i=nglobals-1; i>=0; i--) {
+        buf_add(&c, xfmt("    a_clr(&%s);\n", var_c(&u,globals[i])));
+    }
     buf_add(&c, xfmt("    a_clrs(K, %d);\n", KN));
     buf_add(&c, "    return st;\n");
     buf_add(&c, "}\n");
