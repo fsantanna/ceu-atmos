@@ -662,7 +662,7 @@ exs/        examples
 ## Milestones
 
 - [x] M0 skeleton: build system, `AVal`, `print`, compile `print(1+2)`.
-- [ ] M1 expressions: numbers, strings, tags, tables, all operators,
+- [x] M1 expressions: numbers, strings, tags, tables, all operators,
       indexing, `if`/`ifs`/`match`, non-event loops, `where`, pipes,
       `val`/`var`/`set`, static globals.
 - [ ] M2 functions: closures, boxes, multiple values, varargs, `return`,
