@@ -1,0 +1,7 @@
+print("xxx")
+print(:2)
+print(" b ")
+print("a\nb")
+print("tab\there", 'q"q', "q'q")
+print("\65\066\x41\\", "a\z   b")
+print("", :X.y.z, :)
