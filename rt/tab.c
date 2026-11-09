@@ -307,3 +307,10 @@ AStatus a_tag (AVal t, AVal tag) {
     a_dec(k);
     return A_OK;
 }
+
+void a_tab_fill (AVal t, int i, int n) {
+    for (int j=0; j<n; j++) {
+        a_tab_set(A_TAB_OF(t), a_num(i+j), a_stk[a_top-n+j]);
+    }
+    a_settop(a_top - n);
+}

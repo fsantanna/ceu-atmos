@@ -1,0 +1,15 @@
+val a, b = do { (10, 20) }
+print(a, b)
+val c, d = if true { (1, 2) } else { 3 }
+val e, f = if false { (1, 2) } else { 3 }
+print(c, d, e, f)
+val g, h = loop { break(1, 2) }
+val i, j = loop { until(true, 1, 2) }
+val k, l = loop { while(false, 3, 4) }
+print(g, h, i, j, k, l)
+val m, n = (x, y) where { x = 1 ; y = 2 }
+print(m, n)
+val o, p = match 1 { 1 => (:a, :b) }
+print(o, p)
+print(do { }, 1)
+print(1, do { })

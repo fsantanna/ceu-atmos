@@ -1,0 +1,10 @@
+val x, y, z = (10, 20)
+print(x, y, z)
+var a, b, c = (10, 20)
+set a, b = (b, (a, c))
+print(a, b, c)
+val p, q, r = ((10, 20))
+print(p, q, r)
+var death_count, level = (2, 1)
+set death_count = death_count + 1
+print(death_count, level)

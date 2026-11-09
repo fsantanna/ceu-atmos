@@ -60,6 +60,23 @@ void a_pay_take (AVal* dst, int i) {
     }
 }
 
+void a_pay_pull (int n) {
+    a_pay_clear();
+    for (int i=a_top-n; i<a_top; i++) {
+        a_pay_add(a_stk[i]);
+    }
+    a_top -= n;
+}
+
+int a_pay_push (void) {
+    int n = a_pay_n;
+    for (int i=0; i<n; i++) {
+        a_push(a_pay[i]);
+    }
+    a_pay_n = 0;
+    return n;
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // MEMORY
 ///////////////////////////////////////////////////////////////////////////////

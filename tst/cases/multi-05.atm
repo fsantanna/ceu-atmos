@@ -1,0 +1,11 @@
+val t = [1, 2]
+set t@0, t@1 = (t@1, t@0)
+X.print(t)
+val u = []
+set u@+, u.x, u@+ = (10, 20, 30)
+X.print(u)
+var x, y = (1, 2)
+set x, y = (y, x)
+print(x, y)
+set x, y = 5
+print(x, y)

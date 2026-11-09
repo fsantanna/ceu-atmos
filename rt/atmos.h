@@ -202,6 +202,48 @@ static inline void a_ret1 (AVal* dst, int base) {
     a_settop(base);
 }
 
+// Moves the top value into a slot.
+static inline void a_pop (AVal* dst) {
+    a_set(dst, a_stk[--a_top]);
+}
+
+// Makes the top `n` values exactly `want`: drops the extra ones, or
+// completes with nils.
+static inline void a_adj (int n, int want) {
+    for (; n>want; n--) {
+        a_dec(a_stk[--a_top]);
+    }
+    for (; n<want; n++) {
+        a_push(a_nil());
+    }
+}
+
+// Shifts the top `n` values up, opening `k` empty positions below.
+static inline void a_open (int n, int k) {
+    if (a_top + k > A_STK_MAX) {
+        a_stk_overflow();
+    }
+    for (int i=a_top-1; i>=a_top-n; i--) {
+        a_stk[i+k] = a_stk[i];
+    }
+    for (int i=a_top-n; i<a_top-n+k; i++) {
+        a_stk[i] = a_nil();
+    }
+    a_top += k;
+}
+
+// Fills an opened position with a borrowed value.
+static inline void a_putc (int i, AVal v) {
+    a_inc(v);
+    a_stk[i] = v;
+}
+
+// Fills an opened position with the value of a slot, emptying it.
+static inline void a_putm (int i, AVal* src) {
+    a_stk[i] = *src;
+    *src = a_nil();
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // PAYLOAD
 ///////////////////////////////////////////////////////////////////////////////
@@ -226,6 +268,13 @@ static inline void a_pay_addm (AVal* src) {
 
 // Moves value `i` of the payload (or nil) into a slot.
 void a_pay_take (AVal* dst, int i);
+
+// Moves the top `n` values of the stack into the payload, replacing
+// it.
+void a_pay_pull (int n);
+
+// Moves the payload onto the stack. Returns the number of values.
+int a_pay_push (void);
 
 ///////////////////////////////////////////////////////////////////////////////
 // STRINGS
@@ -314,6 +363,9 @@ AStatus a_setindex_next (AVal t, AVal v);
 
 // :X [...]  (sets the `tag` key of a table)
 AStatus a_tag (AVal t, AVal tag);
+
+// Moves the top `n` values of the stack into the keys `i, i+1, ...`.
+void a_tab_fill (AVal t, int i, int n);
 
 ///////////////////////////////////////////////////////////////////////////////
 // FUNCTIONS

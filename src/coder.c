@@ -1,12 +1,21 @@
 // Atmos compiler: C code generation.
 //
-// Every expression is compiled to statements that leave its value in
-// an operand: either a borrowed C expression (constant, variable), or
-// an owned temporary slot `L[n]`. A temporary is released or moved by
-// whoever consumes it.
+// A construct is compiled against a destination: nowhere (effects
+// only), a slot (one value), or the value stack (all its values, with
+// the count in a C variable).
 //
-// Failures set `st` and jump to the cleanup label of the enclosing
-// block, which releases the slots and propagates the status.
+// A simple expression is compiled to an operand: either a borrowed C
+// expression (constant, immutable variable), or an owned temporary
+// slot `L[n]`. A temporary is released or moved by whoever consumes
+// it.
+//
+// Invariant: when an expression starts to evaluate, its function has
+// no pending values on the stack. Arguments are evaluated into slots
+// and only then pushed, so an exit can always unwind to `base`.
+//
+// Failures and non-local exits set `st` and jump to the cleanup label
+// of the enclosing block, which releases its slots and propagates the
+// status. The values of an exit travel in the payload.
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -40,6 +49,8 @@ typedef struct Unit {
     Buf body;
     // number of slots in `L`
     int nslots;
+    // number of count variables `n<i>`
+    int ncnts;
     // number of cleanup labels
     int nlabels;
     // cleanup label of the enclosing block
@@ -251,9 +262,87 @@ static void opnd_push (Unit* u, Opnd o) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+// DESTINATIONS
+///////////////////////////////////////////////////////////////////////////////
+
+typedef enum {
+    D_NONE, D_SLOT, D_MULTI
+} DKind;
+
+typedef struct Dst {
+    DKind kind;
+    // D_SLOT: C expression of the slot
+    const char* slot;
+    // D_MULTI: C variable that receives the number of values
+    const char* n;
+} Dst;
+
+static Dst dst_none (void) {
+    Dst d = { D_NONE, NULL, NULL };
+    return d;
+}
+
+static Dst dst_slot (const char* slot) {
+    Dst d = { D_SLOT, slot, NULL };
+    return d;
+}
+
+static Dst dst_multi (Unit* u) {
+    Dst d = { D_MULTI, NULL, xfmt("n%d", u->ncnts++) };
+    return d;
+}
+
+// Delivers an operand, consuming it.
+static void store (Unit* u, Opnd o, Dst d) {
+    switch (d.kind) {
+        case D_NONE:
+            opnd_rel(u, o);
+            break;
+        case D_SLOT:
+            opnd_mov(u, o, d.slot);
+            break;
+        case D_MULTI:
+            opnd_push(u, o);
+            out(u, "%s = 1;", d.n);
+            break;
+    }
+}
+
+// Delivers no value: nil for a slot, nothing for the stack.
+static void store_void (Unit* u, Dst d) {
+    switch (d.kind) {
+        case D_NONE:
+            break;
+        case D_SLOT:
+            out(u, "a_clr(&%s);", d.slot);
+            break;
+        case D_MULTI:
+            out(u, "%s = 0;", d.n);
+            break;
+    }
+}
+
+// Delivers the payload of an exit.
+static void store_pay (Unit* u, Dst d) {
+    switch (d.kind) {
+        case D_NONE:
+            out(u, "a_pay_clear();");
+            break;
+        case D_SLOT:
+            out(u, "a_pay_take(&%s, 0);", d.slot);
+            out(u, "a_pay_clear();");
+            break;
+        case D_MULTI:
+            out(u, "%s = a_pay_push();", d.n);
+            break;
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // EXPRESSIONS
 ///////////////////////////////////////////////////////////////////////////////
 
+static void gen      (Unit* u, Expr* e, Dst d);
 static Opnd gen_expr (Unit* u, Expr* e);
 
 // C expression of the storage of a variable.
@@ -283,6 +372,67 @@ static void flatten (List* dst, List* src) {
     }
 }
 
+// Expressions that may yield a number of values other than one.
+static int is_multi (Expr* e) {
+    switch (e->tag) {
+        case E_CALL:
+        case E_DOTS:
+        case E_LIST:
+        case E_BLOCK:
+        case E_DO:
+        case E_IFS:
+        case E_LOOP:
+        case E_CATCH:
+        case E_WHERE:
+            return 1;
+        default:
+            return 0;
+    }
+}
+
+// Pushes the values of a list of expressions: one of each, except the
+// last, which gives all of its values. Sets the count in `n`.
+static void gen_args (Unit* u, List* es, const char* n) {
+    List args = { 0, NULL };
+    flatten(&args, es);
+    int k = args.n;
+    if (k == 0) {
+        out(u, "%s = 0;", n);
+        return;
+    }
+
+    int multi = is_multi(args.v[k-1]);
+    int fix = multi ? k-1 : k;
+    Opnd* xs = xalloc(k * sizeof(Opnd));
+    for (int i=0; i<fix; i++) {
+        xs[i] = gen_expr(u, args.v[i]);
+    }
+
+    if (!multi) {
+        for (int i=0; i<k; i++) {
+            opnd_push(u, xs[i]);
+        }
+        out(u, "%s = %d;", n, k);
+        return;
+    }
+
+    // the last expression may suspend or fail: the others wait in
+    // slots and are inserted below its values
+    Dst d = { D_MULTI, NULL, n };
+    gen(u, args.v[k-1], d);
+    if (fix > 0) {
+        out(u, "a_open(%s, %d);", n, fix);
+        for (int i=0; i<fix; i++) {
+            if (xs[i].tmp >= 0) {
+                out(u, "a_putm(a_top-%s-%d, &L[%d]);", n, fix-i, xs[i].tmp);
+            } else {
+                out(u, "a_putc(a_top-%s-%d, %s);", n, fix-i, xs[i].c);
+            }
+        }
+        out(u, "%s += %d;", n, fix);
+    }
+}
+
 // An immutable variable is borrowed in place. A mutable one is
 // copied, since it may change before the value is consumed.
 static Opnd gen_acc (Unit* u, Expr* e) {
@@ -294,294 +444,6 @@ static Opnd gen_acc (Unit* u, Expr* e) {
         out(u, "a_cpy(&%s, %s);", d.c, var_c(u,v));
         return d;
     }
-}
-
-// Sequence of expressions in a new block. Its value is the value of
-// the last expression, moved out before the block is cleaned up.
-// As the body of a loop, it stops a break: the payload becomes the
-// value in `brk`, and control goes to the end label `loop`.
-static Opnd gen_block_x (Unit* u, List* es, int loop, const char* brk) {
-    Opnd d = opnd_tmp(u);
-
-    int up = u->cleanup;
-    int lo = u->nslots;
-    u->cleanup = ++u->nlabels;
-
-    out(u, "{");
-    u->ind++;
-    for (int i=0; i<es->n; i++) {
-        Opnd o = gen_expr(u, es->v[i]);
-        if (i == es->n-1) {
-            opnd_mov(u, o, d.c);
-        } else {
-            opnd_rel(u, o);
-        }
-    }
-    u->ind--;
-    out0(u, "CL_%d:", u->cleanup);
-    if (u->nslots > lo) {
-        out(u, "    a_clrs(&L[%d], %d);", lo, u->nslots-lo);
-    }
-    if (loop > 0) {
-        out(u, "    if (st == A_BREAK) {");
-        out(u, "        st = A_OK;");
-        out(u, "        a_pay_take(&%s, 0);", brk);
-        out(u, "        a_pay_clear();");
-        out(u, "        goto LE_%d;", loop);
-        out(u, "    }");
-    }
-    out(u, "    if (st != A_OK) goto CL_%d;", up);
-    out(u, "}");
-
-    u->cleanup = up;
-    return d;
-}
-
-static Opnd gen_block (Unit* u, List* es) {
-    return gen_block_x(u, es, 0, NULL);
-}
-
-// loop {...}  |  loop i {...}  |  loop k,v in e {...}
-// Its value is nil, or the value of a break.
-static Opnd gen_loop (Unit* u, Expr* e) {
-    Opnd d = opnd_tmp(u);
-    int iter = (e->u.loop.n > 0) || (e->u.loop.itr != NULL);
-
-    // iterator, limit of a range, cursor
-    Opnd it  = opnd_c(NULL);
-    Opnd lim = opnd_c(NULL);
-    Opnd pos = opnd_c(NULL);
-    const char* k = NULL;
-    const char* v = NULL;
-    if (iter) {
-        it  = opnd_tmp(u);
-        lim = opnd_tmp(u);
-        pos = opnd_tmp(u);
-        Expr* itr = e->u.loop.itr;
-        if (itr!=NULL && itr->tag==E_LIST && itr->u.list.es.n==2) {
-            // loop i in (a,b)
-            opnd_mov(u, gen_expr(u,itr->u.list.es.v[0]), it.c);
-            opnd_mov(u, gen_expr(u,itr->u.list.es.v[1]), lim.c);
-        } else if (itr != NULL) {
-            opnd_mov(u, gen_expr(u,itr), it.c);
-        }
-        k = (e->u.loop.n > 0) ? var_c(u,e->vars[0]) : opnd_tmp(u).c;
-        v = (e->u.loop.n > 1) ? var_c(u,e->vars[1]) : opnd_tmp(u).c;
-    }
-
-    int end = ++u->nlabels;
-    out(u, "while (1) {");
-    u->ind++;
-    if (iter) {
-        out_try(u, "a_next(%s, %s, &%s, &%s, &%s)", it.c, lim.c, pos.c, k, v);
-        out(u, "if (%s.type == A_NIL) break;", k);
-    }
-    opnd_rel(u, gen_block_x(u, &e->u.loop.blk->u.block.es, end, d.c));
-    u->ind--;
-    out(u, "}");
-    out0(u, "LE_%d: ;", end);
-
-    if (iter) {
-        opnd_rel(u, it);
-        opnd_rel(u, lim);
-        opnd_rel(u, pos);
-    }
-    return d;
-}
-
-// break(...)  until(c,...)  while(c,...)
-static Opnd gen_break (Unit* u, Expr* e, List* args) {
-    Opnd* xs = xalloc((args->n + 1) * sizeof(Opnd));
-    for (int i=0; i<args->n; i++) {
-        xs[i] = gen_expr(u, args->v[i]);
-    }
-
-    // values of the break, from argument `fr` on
-    int fr = (e->u.call.sp == SP_BREAK) ? 0 : 1;
-    if (e->u.call.sp!=SP_BREAK && args->n==0) {
-        err(e->tk, "expected condition");
-    }
-
-    if (e->u.call.sp == SP_UNTIL) {
-        out(u, "if (a_truthy(%s)) {", xs[0].c);
-    } else if (e->u.call.sp == SP_WHILE) {
-        out(u, "if (!a_truthy(%s)) {", xs[0].c);
-    } else {
-        out(u, "{");
-    }
-    u->ind++;
-    out(u, "a_pay_clear();");
-    if (e->u.call.sp==SP_UNTIL && args->n>1) {
-        // until(c, v, ...) breaks with `v, ...` if `v` holds, else `c`
-        out(u, "if (!a_truthy(%s)) {", xs[1].c);
-        out(u, "    a_pay_addc(%s);", xs[0].c);
-        out(u, "} else {");
-        u->ind++;
-    }
-    if (e->u.call.sp==SP_UNTIL && args->n==1) {
-        out(u, "a_pay_addc(%s);", xs[0].c);
-    }
-    for (int i=fr; i<args->n; i++) {
-        out(u, "a_pay_addc(%s);", xs[i].c);
-    }
-    if (e->u.call.sp==SP_UNTIL && args->n>1) {
-        u->ind--;
-        out(u, "}");
-    }
-    out(u, "st = A_BREAK;");
-    out(u, "goto CL_%d;", u->cleanup);
-    u->ind--;
-    out(u, "}");
-
-    for (int i=0; i<args->n; i++) {
-        opnd_rel(u, xs[i]);
-    }
-    return opnd_c("a_nil()");
-}
-
-// e where { x = e1 ; y = e2 }
-static Opnd gen_where (Unit* u, Expr* e) {
-    List es = { 0, NULL };
-    for (int i=0; i<e->u.where.dcls.n; i++) {
-        list_add(&es, e->u.where.dcls.v[i]);
-    }
-    list_add(&es, e->u.where.e);
-    return gen_block(u, &es);
-}
-
-// Lambda expanded in place: binds its first parameter to `arg` and
-// evaluates its body as a block.
-static Opnd gen_inline (Unit* u, Expr* p, Opnd arg) {
-    if (p->u.proto.n > 0) {
-        opnd_mov(u, arg, var_c(u,p->vars[0]));
-    } else {
-        opnd_rel(u, arg);
-    }
-    return gen_block(u, &p->u.proto.blk->u.block.es);
-}
-
-// if, ifs, match: a chain of tests. The body of the first case that
-// holds gives the value, and receives the tested value if it is a
-// lambda.
-static Opnd gen_ifs (Unit* u, Expr* e) {
-    Opnd d = opnd_tmp(u);
-    Opnd h = opnd_c(NULL);
-    if (e->u.ifs.head != NULL) {
-        h = gen_expr(u, e->u.ifs.head);
-    }
-
-    for (int i=0; i<e->u.ifs.n; i++) {
-        Case* cs = &e->u.ifs.cases[i];
-        Opnd c;
-        if (h.c == NULL) {
-            // ifs: the condition itself
-            c = (cs->cnd == NULL) ? opnd_c("a_bool(1)") :
-                                    gen_expr(u, cs->cnd);
-        } else if (cs->test) {
-            // match: lambda applied to the head
-            Opnd arg = opnd_tmp(u);
-            out(u, "a_cpy(&%s, %s);", arg.c, h.c);
-            c = gen_inline(u, cs->cnd, arg);
-        } else {
-            // match: the head, if it is the case value (or else)
-            c = opnd_tmp(u);
-            const char* v = xfmt("(a_truthy(%s) ? %s : a_bool(1))", h.c, h.c);
-            if (cs->cnd == NULL) {
-                out(u, "a_cpy(&%s, %s);", c.c, v);
-            } else {
-                Opnd x = gen_expr(u, cs->cnd);
-                out(u, "if (a_is(%s, %s)) {", h.c, x.c);
-                out(u, "    a_cpy(&%s, %s);", c.c, v);
-                out(u, "}");
-                opnd_rel(u, x);
-            }
-        }
-
-        out(u, "if (a_truthy(%s)) {", c.c);
-        u->ind++;
-        Opnd v;
-        if (cs->body->tag == E_PROTO) {
-            v = gen_inline(u, cs->body, c);
-        } else {
-            opnd_rel(u, c);
-            v = gen_block(u, &cs->body->u.block.es);
-        }
-        opnd_mov(u, v, d.c);
-        u->ind--;
-        out(u, "} else {");
-        u->ind++;
-        opnd_rel(u, c);
-    }
-    for (int i=0; i<e->u.ifs.n; i++) {
-        u->ind--;
-        out(u, "}");
-    }
-
-    if (h.c != NULL) {
-        opnd_rel(u, h);
-    }
-    return d;
-}
-
-// val x = e  |  var x = e
-static Opnd gen_dcl (Unit* u, Expr* e) {
-    if (e->u.dcl.n > 1) {
-        err(e->tk, "multiple declaration : not implemented");
-    }
-    if (e->tk.str[0] == 'p') {
-        err(e->tk, "pin : not implemented");
-    }
-    if (e->u.dcl.set != NULL) {
-        Opnd o = gen_expr(u, e->u.dcl.set);
-        opnd_mov(u, o, var_c(u,e->vars[0]));
-    } else {
-        var_c(u, e->vars[0]);
-    }
-    return opnd_c("a_nil()");
-}
-
-// set x = e  |  set t@k = e
-static Opnd gen_set (Unit* u, Expr* e) {
-    if (e->u.set.dsts.n > 1) {
-        err(e->tk, "multiple assignment : not implemented");
-    }
-    Expr* dst = e->u.set.dsts.v[0];
-
-    if (dst->tag == E_ACC) {
-        Opnd o = gen_expr(u, e->u.set.src);
-        opnd_mov(u, o, var_c(u,dst->var));
-
-    } else if (dst->tag == E_INDEX) {
-        // the table and the key are evaluated before the value
-        Opnd t = gen_expr(u, dst->u.index.t);
-        switch (dst->u.index.kind) {
-            case IDX_EXPR: {
-                Opnd k = gen_expr(u, dst->u.index.idx);
-                Opnd v = gen_expr(u, e->u.set.src);
-                out_try(u, "a_setindex(%s, %s, %s)", t.c, k.c, v.c);
-                opnd_rel(u, k);
-                opnd_rel(u, v);
-                break;
-            }
-            case IDX_LAST: {
-                Opnd v = gen_expr(u, e->u.set.src);
-                out_try(u, "a_setindex_last(%s, %s)", t.c, v.c);
-                opnd_rel(u, v);
-                break;
-            }
-            case IDX_NEXT: {
-                Opnd v = gen_expr(u, e->u.set.src);
-                out_try(u, "a_setindex_next(%s, %s)", t.c, v.c);
-                opnd_rel(u, v);
-                break;
-            }
-        }
-        opnd_rel(u, t);
-
-    } else {
-        err(dst->tk, "assignment : not implemented");
-    }
-    return opnd_c("a_nil()");
 }
 
 static Opnd gen_uno (Unit* u, Expr* e) {
@@ -598,20 +460,101 @@ static Opnd gen_uno (Unit* u, Expr* e) {
     return d;
 }
 
-// [ e, id=e, @(k)=e ]: positional entries are numbered from 0.
+// a && b, a || b: the second operand is only evaluated if needed, and
+// the result is the value of the deciding operand.
+static Opnd gen_logic (Unit* u, Expr* e) {
+    int and = !strcmp(e->tk.str, "&&");
+    Opnd d = opnd_tmp(u);
+    opnd_mov(u, gen_expr(u,e->u.bin.e1), d.c);
+    out(u, "if (%sa_truthy(%s)) {", and ? "" : "!", d.c);
+    u->ind++;
+    opnd_mov(u, gen_expr(u,e->u.bin.e2), d.c);
+    u->ind--;
+    out(u, "}");
+    return d;
+}
+
+static Opnd gen_bin (Unit* u, Expr* e) {
+    // operator, runtime function, swapped operands
+    static const char* OPS[][3] = {
+        { "+",  "a_add",  "" }, { "-",  "a_sub", ""  },
+        { "*",  "a_mul",  "" }, { "/",  "a_div", ""  },
+        { "//", "a_idiv", "" }, { "%",  "a_mod", ""  },
+        { "**", "a_pow",  "" }, { "++", "a_cat", ""  },
+        { "<",  "a_lt",   "" }, { "<=", "a_le",  ""  },
+        { ">",  "a_lt",  "x" }, { ">=", "a_le",  "x" },
+        { NULL, NULL, NULL }
+    };
+    // operator, predicate, negated, swapped operands
+    static const char* PREDS[][4] = {
+        { "==",  "a_eq",  "",  ""  }, { "!=",  "a_eq",  "!", ""  },
+        { "??",  "a_is",  "",  ""  }, { "!?",  "a_is",  "!", ""  },
+        { "===", "a_deq", "",  ""  }, { "=!=", "a_deq", "!", ""  },
+        { "=>=", "a_gte", "",  ""  }, { "=<=", "a_gte", "",  "x" },
+        { NULL, NULL, NULL, NULL }
+    };
+    const char* op = e->tk.str;
+
+    if (!strcmp(op,"&&") || !strcmp(op,"||")) {
+        return gen_logic(u, e);
+    }
+
+    Opnd x = gen_expr(u, e->u.bin.e1);
+    Opnd y = gen_expr(u, e->u.bin.e2);
+    Opnd d = opnd_tmp(u);
+
+    int done = 0;
+    for (int i=0; PREDS[i][0]!=NULL; i++) {
+        if (!strcmp(PREDS[i][0], op)) {
+            int swap = (PREDS[i][3][0] != '\0');
+            out(u, "a_set(&%s, a_bool(%s%s(%s, %s)));",
+                d.c, PREDS[i][2], PREDS[i][1],
+                swap ? y.c : x.c, swap ? x.c : y.c);
+            done = 1;
+        }
+    }
+    for (int i=0; OPS[i][0]!=NULL; i++) {
+        if (!strcmp(OPS[i][0], op)) {
+            int swap = (OPS[i][2][0] != '\0');
+            out_try(u, "%s(&%s, %s, %s)",
+                OPS[i][1], d.c, swap ? y.c : x.c, swap ? x.c : y.c);
+            done = 1;
+        }
+    }
+    if (!strcmp(op,"?>") || !strcmp(op,"!>")) {
+        out_try(u, "a_in(&%s, %s, %s, %d)", d.c, x.c, y.c, op[0]=='!');
+        done = 1;
+    }
+    if (!done) {
+        err(e->tk, "operator not implemented");
+    }
+
+    opnd_rel(u, x);
+    opnd_rel(u, y);
+    return d;
+}
+
+// [ e, id=e, @(k)=e ]: positional entries are numbered from 0, and
+// the last entry, if positional, gives all of its values.
 static Opnd gen_table (Unit* u, Expr* e) {
     Opnd d = opnd_tmp(u);
     out(u, "a_set(&%s, a_tab());", d.c);
     int n = 0;
-    for (int i=0; i<e->u.table.vs.n; i++) {
+    int last = e->u.table.vs.n - 1;
+    for (int i=0; i<=last; i++) {
         Expr* key = e->u.table.ks.v[i];
-        if (key == NULL) {
-            Opnd v = gen_expr(u, e->u.table.vs.v[i]);
+        Expr* val = e->u.table.vs.v[i];
+        if (key==NULL && i==last && is_multi(val)) {
+            Dst m = dst_multi(u);
+            gen(u, val, m);
+            out(u, "a_tab_fill(%s, %d, %s);", d.c, n, m.n);
+        } else if (key == NULL) {
+            Opnd v = gen_expr(u, val);
             out(u, "a_tab_set(A_TAB_OF(%s), a_num(%d), %s);", d.c, n++, v.c);
             opnd_rel(u, v);
         } else {
             Opnd k = gen_expr(u, key);
-            Opnd v = gen_expr(u, e->u.table.vs.v[i]);
+            Opnd v = gen_expr(u, val);
             out_try(u, "a_setindex(%s, %s, %s)", d.c, k.c, v.c);
             opnd_rel(u, k);
             opnd_rel(u, v);
@@ -651,123 +594,414 @@ static Opnd gen_index (Unit* u, Expr* e) {
     return d;
 }
 
-// a && b, a || b: the second operand is only evaluated if needed, and
-// the result is the value of the deciding operand.
-static Opnd gen_logic (Unit* u, Expr* e) {
-    int and = !strcmp(e->tk.str, "&&");
-    Opnd d = opnd_tmp(u);
-    opnd_mov(u, gen_expr(u,e->u.bin.e1), d.c);
-    out(u, "if (%sa_truthy(%s)) {", and ? "" : "!", d.c);
+///////////////////////////////////////////////////////////////////////////////
+// BLOCKS
+///////////////////////////////////////////////////////////////////////////////
+
+// Sequence of expressions in a new block, whose value is the value of
+// the last expression.
+//
+// As the body of a loop, the block stops a break: the payload is
+// delivered to `brk`, and control goes to the end label `loop`.
+static void gen_block_x (Unit* u, List* es, Dst d, int loop, Dst brk) {
+    int up = u->cleanup;
+    int lo = u->nslots;
+    u->cleanup = ++u->nlabels;
+
+    out(u, "{");
     u->ind++;
-    opnd_mov(u, gen_expr(u,e->u.bin.e2), d.c);
+    for (int i=0; i<es->n; i++) {
+        gen(u, es->v[i], (i == es->n-1) ? d : dst_none());
+    }
+    if (es->n == 0) {
+        store_void(u, d);
+    }
+    u->ind--;
+    out0(u, "CL_%d:", u->cleanup);
+    u->ind++;
+    if (u->nslots > lo) {
+        out(u, "a_clrs(&L[%d], %d);", lo, u->nslots-lo);
+    }
+    if (loop > 0) {
+        out(u, "if (st == A_BREAK) {");
+        u->ind++;
+        out(u, "st = A_OK;");
+        out(u, "a_settop(base);");
+        store_pay(u, brk);
+        out(u, "goto LE_%d;", loop);
+        u->ind--;
+        out(u, "}");
+    }
+    out(u, "if (st != A_OK) {");
+    out(u, "    a_settop(base);");
+    out(u, "    goto CL_%d;", up);
+    out(u, "}");
     u->ind--;
     out(u, "}");
-    return d;
+
+    u->cleanup = up;
 }
 
-static Opnd gen_bin (Unit* u, Expr* e) {
-    // operator, runtime function, swapped operands
-    static const char* OPS[][3] = {
-        { "+",  "a_add",  "" }, { "-",  "a_sub", ""  },
-        { "*",  "a_mul",  "" }, { "/",  "a_div", ""  },
-        { "//", "a_idiv", "" }, { "%",  "a_mod", ""  },
-        { "**", "a_pow",  "" }, { "++", "a_cat", ""  },
-        { "<",  "a_lt",   "" }, { "<=", "a_le",  ""  },
-        { ">",  "a_lt",  "x" }, { ">=", "a_le",  "x" },
-        { NULL, NULL, NULL }
-    };
-    const char* op = e->tk.str;
+static void gen_block (Unit* u, List* es, Dst d) {
+    gen_block_x(u, es, d, 0, dst_none());
+}
 
-    if (!strcmp(op,"&&") || !strcmp(op,"||")) {
-        return gen_logic(u, e);
+// e where { x = e1 ; y = e2 }
+static void gen_where (Unit* u, Expr* e, Dst d) {
+    List es = { 0, NULL };
+    for (int i=0; i<e->u.where.dcls.n; i++) {
+        list_add(&es, e->u.where.dcls.v[i]);
     }
+    list_add(&es, e->u.where.e);
+    gen_block(u, &es, d);
+}
 
-    Opnd x = gen_expr(u, e->u.bin.e1);
-    Opnd y = gen_expr(u, e->u.bin.e2);
-    Opnd d = opnd_tmp(u);
+///////////////////////////////////////////////////////////////////////////////
+// DECLARATIONS AND ASSIGNMENTS
+///////////////////////////////////////////////////////////////////////////////
 
-    // operator, predicate, negated, swapped operands
-    static const char* PREDS[][4] = {
-        { "==",  "a_eq",  "",  ""  }, { "!=",  "a_eq",  "!", ""  },
-        { "??",  "a_is",  "",  ""  }, { "!?",  "a_is",  "!", ""  },
-        { "===", "a_deq", "",  ""  }, { "=!=", "a_deq", "!", ""  },
-        { "=>=", "a_gte", "",  ""  }, { "=<=", "a_gte", "",  "x" },
-        { NULL, NULL, NULL, NULL }
-    };
-    const char* pred = NULL;
-    for (int i=0; PREDS[i][0]!=NULL; i++) {
-        if (!strcmp(PREDS[i][0], op)) {
-            pred = PREDS[i][1];
-            int swap = (PREDS[i][3][0] != '\0');
-            out(u, "a_set(&%s, a_bool(%s%s(%s, %s)));",
-                d.c, PREDS[i][2], pred,
-                swap ? y.c : x.c, swap ? x.c : y.c);
+// val x = e  |  var x, y = e
+static void gen_dcl (Unit* u, Expr* e) {
+    if (e->tk.str[0] == 'p') {
+        err(e->tk, "pin : not implemented");
+    }
+    int k = e->u.dcl.n;
+    const char** vs = xalloc(k * sizeof(char*));
+    if (e->u.dcl.set == NULL) {
+        for (int i=0; i<k; i++) {
+            var_c(u, e->vars[i]);
+        }
+    } else if (k == 1) {
+        Opnd o = gen_expr(u, e->u.dcl.set);
+        opnd_mov(u, o, var_c(u,e->vars[0]));
+    } else {
+        Dst m = dst_multi(u);
+        gen(u, e->u.dcl.set, m);
+        out(u, "a_adj(%s, %d);", m.n, k);
+        for (int i=0; i<k; i++) {
+            vs[i] = var_c(u, e->vars[i]);
+        }
+        for (int i=k-1; i>=0; i--) {
+            out(u, "a_pop(&%s);", vs[i]);
         }
     }
+}
 
-    if (pred != NULL) {
-        // done
-    } else if (!strcmp(op,"?>") || !strcmp(op,"!>")) {
-        out_try(u, "a_in(&%s, %s, %s, %d)", d.c, x.c, y.c, op[0]=='!');
+// A destination of a set, with its table and key already evaluated.
+typedef struct Loc {
+    Expr* e;
+    Opnd  t;
+    Opnd  k;
+} Loc;
+
+static Loc gen_loc (Unit* u, Expr* dst) {
+    Loc l;
+    l.e = dst;
+    l.t = opnd_c(NULL);
+    l.k = opnd_c(NULL);
+    if (dst->tag == E_INDEX) {
+        l.t = gen_expr(u, dst->u.index.t);
+        if (dst->u.index.kind == IDX_EXPR) {
+            l.k = gen_expr(u, dst->u.index.idx);
+        }
+    } else if (dst->tag != E_ACC) {
+        err(dst->tk, "assignment : not implemented");
+    }
+    return l;
+}
+
+// Assigns an operand to a destination, consuming both.
+static void gen_assign (Unit* u, Loc l, Opnd v) {
+    if (l.e->tag == E_ACC) {
+        opnd_mov(u, v, var_c(u,l.e->var));
+        return;
+    }
+    switch (l.e->u.index.kind) {
+        case IDX_EXPR:
+            out_try(u, "a_setindex(%s, %s, %s)", l.t.c, l.k.c, v.c);
+            opnd_rel(u, l.k);
+            break;
+        case IDX_LAST:
+            out_try(u, "a_setindex_last(%s, %s)", l.t.c, v.c);
+            break;
+        case IDX_NEXT:
+            out_try(u, "a_setindex_next(%s, %s)", l.t.c, v.c);
+            break;
+    }
+    opnd_rel(u, v);
+    opnd_rel(u, l.t);
+}
+
+// set x = e  |  set t@k, y = e
+// Tables and keys are evaluated before the values.
+static void gen_set (Unit* u, Expr* e) {
+    int k = e->u.set.dsts.n;
+    Loc* ls = xalloc(k * sizeof(Loc));
+    for (int i=0; i<k; i++) {
+        ls[i] = gen_loc(u, e->u.set.dsts.v[i]);
+    }
+    if (k == 1) {
+        gen_assign(u, ls[0], gen_expr(u,e->u.set.src));
     } else {
-        const char* f = NULL;
-        int swap = 0;
-        for (int i=0; OPS[i][0]!=NULL; i++) {
-            if (!strcmp(OPS[i][0], op)) {
-                f = OPS[i][1];
-                swap = (OPS[i][2][0] != '\0');
+        Dst m = dst_multi(u);
+        gen(u, e->u.set.src, m);
+        out(u, "a_adj(%s, %d);", m.n, k);
+        // all values are taken before the first assignment
+        Opnd* vs = xalloc(k * sizeof(Opnd));
+        for (int i=k-1; i>=0; i--) {
+            vs[i] = opnd_tmp(u);
+            out(u, "a_pop(&%s);", vs[i].c);
+        }
+        for (int i=0; i<k; i++) {
+            gen_assign(u, ls[i], vs[i]);
+        }
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// CONDITIONALS
+///////////////////////////////////////////////////////////////////////////////
+
+// Lambda expanded in place: binds its first parameter to `arg` and
+// evaluates its body as a block.
+static void gen_inline (Unit* u, Expr* p, Opnd arg, Dst d) {
+    if (p->u.proto.n > 0) {
+        opnd_mov(u, arg, var_c(u,p->vars[0]));
+    } else {
+        opnd_rel(u, arg);
+    }
+    gen_block(u, &p->u.proto.blk->u.block.es, d);
+}
+
+// if, ifs, match: a chain of tests. The body of the first case that
+// holds gives the value, and receives the tested value if it is a
+// lambda.
+static void gen_ifs (Unit* u, Expr* e, Dst d) {
+    Opnd h = opnd_c(NULL);
+    if (e->u.ifs.head != NULL) {
+        h = gen_expr(u, e->u.ifs.head);
+    }
+
+    for (int i=0; i<e->u.ifs.n; i++) {
+        Case* cs = &e->u.ifs.cases[i];
+        Opnd c;
+        if (h.c == NULL) {
+            // ifs: the condition itself
+            c = (cs->cnd == NULL) ? opnd_c("a_bool(1)") :
+                                    gen_expr(u, cs->cnd);
+        } else if (cs->test) {
+            // match: lambda applied to the head
+            Opnd arg = opnd_tmp(u);
+            out(u, "a_cpy(&%s, %s);", arg.c, h.c);
+            c = opnd_tmp(u);
+            gen_inline(u, cs->cnd, arg, dst_slot(c.c));
+        } else {
+            // match: the head, if it is the case value (or else)
+            c = opnd_tmp(u);
+            const char* v = xfmt("(a_truthy(%s) ? %s : a_bool(1))", h.c, h.c);
+            if (cs->cnd == NULL) {
+                out(u, "a_cpy(&%s, %s);", c.c, v);
+            } else {
+                Opnd x = gen_expr(u, cs->cnd);
+                out(u, "if (a_is(%s, %s)) {", h.c, x.c);
+                out(u, "    a_cpy(&%s, %s);", c.c, v);
+                out(u, "}");
+                opnd_rel(u, x);
             }
         }
-        if (f == NULL) {
-            err(e->tk, "operator not implemented");
+
+        out(u, "if (a_truthy(%s)) {", c.c);
+        u->ind++;
+        if (cs->body->tag == E_PROTO) {
+            gen_inline(u, cs->body, c, d);
+        } else {
+            opnd_rel(u, c);
+            gen_block(u, &cs->body->u.block.es, d);
         }
-        out_try(u, "%s(&%s, %s, %s)",
-            f, d.c, swap ? y.c : x.c, swap ? x.c : y.c);
+        u->ind--;
+        out(u, "} else {");
+        u->ind++;
+        opnd_rel(u, c);
     }
-    opnd_rel(u, x);
-    opnd_rel(u, y);
-    return d;
+    // no case holds
+    store_void(u, d);
+    for (int i=0; i<e->u.ifs.n; i++) {
+        u->ind--;
+        out(u, "}");
+    }
+
+    if (h.c != NULL) {
+        opnd_rel(u, h);
+    }
 }
 
-static Opnd gen_call (Unit* u, Expr* e) {
+///////////////////////////////////////////////////////////////////////////////
+// LOOPS
+///////////////////////////////////////////////////////////////////////////////
+
+// loop {...}  |  loop i {...}  |  loop k,v in e {...}
+// Its value is nothing, or the values of a break.
+static void gen_loop (Unit* u, Expr* e, Dst d) {
+    int iter = (e->u.loop.n > 0) || (e->u.loop.itr != NULL);
+
+    // iterator, limit of a range, cursor
+    Opnd it  = opnd_c(NULL);
+    Opnd lim = opnd_c(NULL);
+    Opnd pos = opnd_c(NULL);
+    const char* k = NULL;
+    const char* v = NULL;
+    if (iter) {
+        it  = opnd_tmp(u);
+        lim = opnd_tmp(u);
+        pos = opnd_tmp(u);
+        if (e->u.loop.itr != NULL) {
+            // loop i in (a,b) gives two values
+            Dst m = dst_multi(u);
+            gen(u, e->u.loop.itr, m);
+            out(u, "a_adj(%s, 2);", m.n);
+            out(u, "a_pop(&%s);", lim.c);
+            out(u, "a_pop(&%s);", it.c);
+        }
+        k = (e->u.loop.n > 0) ? var_c(u,e->vars[0]) : opnd_tmp(u).c;
+        v = (e->u.loop.n > 1) ? var_c(u,e->vars[1]) : opnd_tmp(u).c;
+    }
+
+    int end = ++u->nlabels;
+    out(u, "while (1) {");
+    u->ind++;
+    if (iter) {
+        out_try(u, "a_next(%s, %s, &%s, &%s, &%s)", it.c, lim.c, pos.c, k, v);
+        out(u, "if (%s.type == A_NIL) break;", k);
+    }
+    gen_block_x(u, &e->u.loop.blk->u.block.es, dst_none(), end, d);
+    u->ind--;
+    out(u, "}");
+    // the loop ends without a break
+    store_void(u, d);
+    out0(u, "LE_%d: ;", end);
+
+    if (iter) {
+        opnd_rel(u, it);
+        opnd_rel(u, lim);
+        opnd_rel(u, pos);
+    }
+}
+
+// break(...)  until(c,...)  while(c,...)
+static void gen_break (Unit* u, Expr* e) {
+    Special sp = e->u.call.sp;
     List args = { 0, NULL };
     flatten(&args, &e->u.call.es);
 
-    // do(...): evaluates and discards
-    if (e->u.call.sp == SP_DO) {
-        for (int i=0; i<args.n; i++) {
-            opnd_rel(u, gen_expr(u,args.v[i]));
+    // condition, then the values of the break
+    Opnd c = opnd_c(NULL);
+    List vals = args;
+    if (sp != SP_BREAK) {
+        if (args.n == 0) {
+            err(e->tk, "expected condition");
         }
-        return opnd_c("a_nil()");
-    } else if (e->u.call.sp==SP_BREAK || e->u.call.sp==SP_UNTIL ||
-               e->u.call.sp==SP_WHILE)
-    {
-        return gen_break(u, e, &args);
-    } else if (e->u.call.sp != SP_NONE) {
-        err(e->tk, "statement not implemented");
+        c = gen_expr(u, args.v[0]);
+        vals.n--;
+        vals.v++;
+    }
+    Dst m = dst_multi(u);
+    gen_args(u, &vals, m.n);
+
+    if (sp == SP_UNTIL) {
+        // until(c, v, ...) breaks with `v, ...` if `v` holds, else `c`
+        out(u, "if (a_truthy(%s)) {", c.c);
+        out(u, "    if (%s>0 && a_truthy(a_stk[a_top-%s])) {", m.n, m.n);
+        out(u, "        a_pay_pull(%s);", m.n);
+        out(u, "    } else {");
+        out(u, "        a_settop(a_top - %s);", m.n);
+        out(u, "        a_pay_clear();");
+        out(u, "        a_pay_addc(%s);", c.c);
+        out(u, "    }");
+    } else if (sp == SP_WHILE) {
+        out(u, "if (!a_truthy(%s)) {", c.c);
+        out(u, "    a_pay_pull(%s);", m.n);
+    } else {
+        out(u, "{");
+        out(u, "    a_pay_pull(%s);", m.n);
+    }
+    out(u, "    st = A_BREAK;");
+    out(u, "    goto CL_%d;", u->cleanup);
+    out(u, "}");
+    if (sp != SP_BREAK) {
+        out(u, "a_settop(a_top - %s);", m.n);
+        opnd_rel(u, c);
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// CALLS
+///////////////////////////////////////////////////////////////////////////////
+
+static void gen_call (Unit* u, Expr* e, Dst d) {
+    switch (e->u.call.sp) {
+        case SP_NONE:
+            break;
+        case SP_DO: {
+            // do(...): evaluates and discards
+            Dst m = dst_multi(u);
+            gen_args(u, &e->u.call.es, m.n);
+            out(u, "a_settop(a_top - %s);", m.n);
+            store_void(u, d);
+            return;
+        }
+        case SP_BREAK:
+        case SP_UNTIL:
+        case SP_WHILE:
+            gen_break(u, e);
+            store_void(u, d);
+            return;
+        default:
+            err(e->tk, "statement not implemented");
     }
 
-    Opnd  f  = gen_expr(u, e->u.call.f);
-    Opnd* xs = xalloc(args.n * sizeof(Opnd));
-    for (int i=0; i<args.n; i++) {
-        xs[i] = gen_expr(u, args.v[i]);
-    }
+    Opnd f = gen_expr(u, e->u.call.f);
+    Dst  m = dst_multi(u);
+    gen_args(u, &e->u.call.es, m.n);
 
-    Opnd d = opnd_tmp(u);
     out(u, "{");
     u->ind++;
-    out(u, "int b = a_top;");
-    for (int i=0; i<args.n; i++) {
-        opnd_push(u, xs[i]);
-    }
+    out(u, "int b = a_top - %s;", m.n);
     out_try(u, "a_call(%s, b)", f.c);
-    out(u, "a_ret1(&%s, b);", d.c);
+    switch (d.kind) {
+        case D_NONE:
+            out(u, "a_settop(b);");
+            break;
+        case D_SLOT:
+            out(u, "a_ret1(&%s, b);", d.slot);
+            break;
+        case D_MULTI:
+            out(u, "%s = a_top - b;", d.n);
+            break;
+    }
     u->ind--;
     out(u, "}");
     opnd_rel(u, f);
-    return d;
 }
 
+// (e1, e2, ...): all values of the list, or only the first one.
+static void gen_list (Unit* u, Expr* e, Dst d) {
+    Dst m = (d.kind == D_MULTI) ? d : dst_multi(u);
+    gen_args(u, &e->u.list.es, m.n);
+    switch (d.kind) {
+        case D_NONE:
+            out(u, "a_settop(a_top - %s);", m.n);
+            break;
+        case D_SLOT:
+            out(u, "a_ret1(&%s, a_top - %s);", d.slot, m.n);
+            break;
+        case D_MULTI:
+            break;
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+// Compiles a simple expression to an operand.
 static Opnd gen_expr (Unit* u, Expr* e) {
     switch (e->tag) {
         case E_NIL:
@@ -806,28 +1040,62 @@ static Opnd gen_expr (Unit* u, Expr* e) {
             return gen_uno(u, e);
         case E_BIN:
             return gen_bin(u, e);
+        default: {
+            // compound: evaluated into a temporary
+            Opnd t = opnd_tmp(u);
+            gen(u, e, dst_slot(t.c));
+            return t;
+        }
+    }
+}
+
+// Compiles any expression against a destination.
+static void gen (Unit* u, Expr* e, Dst d) {
+    switch (e->tag) {
         case E_CALL:
-            return gen_call(u, e);
+            gen_call(u, e, d);
+            break;
+        case E_LIST:
+            gen_list(u, e, d);
+            break;
         case E_DCL:
-            return gen_dcl(u, e);
+            gen_dcl(u, e);
+            store_void(u, d);
+            break;
         case E_SET:
-            return gen_set(u, e);
+            gen_set(u, e);
+            store_void(u, d);
+            break;
         case E_BLOCK:
-            return gen_block(u, &e->u.block.es);
-        case E_IFS:
-            return gen_ifs(u, e);
-        case E_LOOP:
-            return gen_loop(u, e);
-        case E_WHERE:
-            return gen_where(u, e);
+            gen_block(u, &e->u.block.es, d);
+            break;
         case E_DO:
             if (e->u.xdo.esc) {
                 err(e->tk, "escape : not implemented");
             }
-            return gen_block(u, &e->u.xdo.blk->u.block.es);
-        default:
+            gen_block(u, &e->u.xdo.blk->u.block.es, d);
+            break;
+        case E_IFS:
+            gen_ifs(u, e, d);
+            break;
+        case E_LOOP:
+            gen_loop(u, e, d);
+            break;
+        case E_WHERE:
+            gen_where(u, e, d);
+            break;
+        case E_DOTS:
+        case E_NAT:
+        case E_MET:
+        case E_DEFER:
+        case E_CATCH:
+        case E_PROTO:
+        case E_ME:
             err(e->tk, "expression not implemented");
-            return opnd_c(NULL);
+            break;
+        default:
+            store(u, gen_expr(u,e), d);
+            break;
     }
 }
 
@@ -840,7 +1108,7 @@ char* coder_main (Expr* prog, Var** globals, int nglobals) {
     memset(&u, 0, sizeof(u));
 
     // the value of the main block is discarded
-    opnd_rel(&u, gen_block(&u, &prog->u.block.es));
+    gen_block(&u, &prog->u.block.es, dst_none());
 
     int n = (u.nslots > 0) ? u.nslots : 1;
     Buf c = { NULL, 0, 0 };
@@ -866,13 +1134,13 @@ char* coder_main (Expr* prog, Var** globals, int nglobals) {
     buf_add(&c, xfmt("    a_nils(L, %d);\n", n));
     buf_add(&c, "    AStatus st = A_OK;\n");
     buf_add(&c, "    int base = a_top;\n");
+    for (int i=0; i<u.ncnts; i++) {
+        buf_add(&c, xfmt("    int n%d = 0;\n", i));
+    }
     buf_add(&c, "    consts_init();\n");
     buf_add(&c, u.body.s ? u.body.s : "");
     buf_add(&c, "    goto CL_0;\n");
     buf_add(&c, "CL_0:\n");
-    buf_add(&c, "    if (st != A_OK) {\n");
-    buf_add(&c, "        a_settop(base);\n");
-    buf_add(&c, "    }\n");
     buf_add(&c, xfmt("    a_clrs(L, %d);\n", n));
     for (int i=nglobals-1; i>=0; i--) {
         buf_add(&c, xfmt("    a_clr(&%s);\n", var_c(&u,globals[i])));
