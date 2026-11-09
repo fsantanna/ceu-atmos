@@ -209,6 +209,15 @@ static void opnd_rel (Unit* u, Opnd o) {
     }
 }
 
+// Stores an operand into a slot, consuming it.
+static void opnd_mov (Unit* u, Opnd o, const char* dst) {
+    if (o.tmp >= 0) {
+        out(u, "a_mov(&%s, &L[%d]);", dst, o.tmp);
+    } else {
+        out(u, "a_cpy(&%s, %s);", dst, o.c);
+    }
+}
+
 // Pushes an operand onto the value stack.
 static void opnd_push (Unit* u, Opnd o) {
     if (o.tmp >= 0) {
@@ -269,27 +278,59 @@ static Opnd gen_uno (Unit* u, Expr* e) {
     return d;
 }
 
+// a && b, a || b: the second operand is only evaluated if needed, and
+// the result is the value of the deciding operand.
+static Opnd gen_logic (Unit* u, Expr* e) {
+    int and = !strcmp(e->tk.str, "&&");
+    Opnd d = opnd_tmp(u);
+    opnd_mov(u, gen_expr(u,e->u.bin.e1), d.c);
+    out(u, "if (%sa_truthy(%s)) {", and ? "" : "!", d.c);
+    u->ind++;
+    opnd_mov(u, gen_expr(u,e->u.bin.e2), d.c);
+    u->ind--;
+    out(u, "}");
+    return d;
+}
+
 static Opnd gen_bin (Unit* u, Expr* e) {
-    static const char* OPS[][2] = {
-        { "+",  "a_add"  }, { "-",  "a_sub" }, { "*",  "a_mul" },
-        { "/",  "a_div"  }, { "//", "a_idiv" }, { "%", "a_mod" },
-        { "**", "a_pow"  },
-        { NULL, NULL }
+    // operator, runtime function, swapped operands
+    static const char* OPS[][3] = {
+        { "+",  "a_add",  "" }, { "-",  "a_sub", ""  },
+        { "*",  "a_mul",  "" }, { "/",  "a_div", ""  },
+        { "//", "a_idiv", "" }, { "%",  "a_mod", ""  },
+        { "**", "a_pow",  "" }, { "++", "a_cat", ""  },
+        { "<",  "a_lt",   "" }, { "<=", "a_le",  ""  },
+        { ">",  "a_lt",  "x" }, { ">=", "a_le",  "x" },
+        { NULL, NULL, NULL }
     };
-    const char* f = NULL;
-    for (int i=0; OPS[i][0]!=NULL; i++) {
-        if (!strcmp(OPS[i][0], e->tk.str)) {
-            f = OPS[i][1];
-        }
+    const char* op = e->tk.str;
+
+    if (!strcmp(op,"&&") || !strcmp(op,"||")) {
+        return gen_logic(u, e);
     }
-    if (f == NULL) {
-        err(e->tk, "operator not implemented");
-    }
+
     Opnd x = gen_expr(u, e->u.bin.e1);
     Opnd y = gen_expr(u, e->u.bin.e2);
     Opnd d = opnd_tmp(u);
-    out(u, "if ((st = %s(&%s, %s, %s)) != A_OK) goto CL_%d;",
-        f, d.c, x.c, y.c, u->cleanup);
+
+    if (!strcmp(op,"==") || !strcmp(op,"!=")) {
+        out(u, "a_set(&%s, a_bool(%sa_eq(%s, %s)));",
+            d.c, (op[0] == '!') ? "!" : "", x.c, y.c);
+    } else {
+        const char* f = NULL;
+        int swap = 0;
+        for (int i=0; OPS[i][0]!=NULL; i++) {
+            if (!strcmp(OPS[i][0], op)) {
+                f = OPS[i][1];
+                swap = (OPS[i][2][0] != '\0');
+            }
+        }
+        if (f == NULL) {
+            err(e->tk, "operator not implemented");
+        }
+        out(u, "if ((st = %s(&%s, %s, %s)) != A_OK) goto CL_%d;",
+            f, d.c, swap ? y.c : x.c, swap ? x.c : y.c, u->cleanup);
+    }
     opnd_rel(u, x);
     opnd_rel(u, y);
     return d;

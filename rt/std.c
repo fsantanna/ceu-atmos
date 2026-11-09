@@ -11,25 +11,9 @@ AVal atm_g_print;
 ///////////////////////////////////////////////////////////////////////////////
 
 static void print1 (AVal v) {
-    char buf[64];
-    switch (v.type) {
-        case A_NIL:
-            fputs("nil", stdout);
-            break;
-        case A_BOOL:
-            fputs(v.u.b ? "true" : "false", stdout);
-            break;
-        case A_NUM:
-            a_num_fmt(buf, sizeof(buf), v.u.n);
-            fputs(buf, stdout);
-            break;
-        case A_STR:
-            fwrite(A_STR_OF(v)->s, 1, A_STR_OF(v)->len, stdout);
-            break;
-        default:
-            printf("%s: %p", a_typename(v), (void*)v.u.o);
-            break;
-    }
+    AVal s = a_tostring(v);
+    fwrite(A_STR_OF(s)->s, 1, A_STR_OF(s)->len, stdout);
+    a_dec(s);
 }
 
 // print(...): shows the arguments separated by tabs.

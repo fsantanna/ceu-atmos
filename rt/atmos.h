@@ -123,6 +123,13 @@ static inline void a_clr (AVal* dst) {
     a_set(dst, a_nil());
 }
 
+// Moves a slot into another, emptying the source.
+static inline void a_mov (AVal* dst, AVal* src) {
+    AVal v = *src;
+    *src = a_nil();
+    a_set(dst, v);
+}
+
 // Initializes `n` fresh slots.
 static inline void a_nils (AVal* vs, int n) {
     for (int i=0; i<n; i++) {
@@ -271,6 +278,47 @@ static inline AStatus a_mod (AVal* dst, AVal a, AVal b) {
 static inline AStatus a_pow (AVal* dst, AVal a, AVal b) {
     return a_arith(A_POW, dst, a, b);
 }
+
+// a == b: by value for nil, booleans, and numbers; by reference for
+// objects (strings are interned).
+static inline int a_eq (AVal a, AVal b) {
+    if (a.type != b.type) {
+        return 0;
+    }
+    switch (a.type) {
+        case A_NIL:  return 1;
+        case A_BOOL: return a.u.b == b.u.b;
+        case A_NUM:  return a.u.n == b.u.n;
+        default:     return a.u.o == b.u.o;
+    }
+}
+
+// Slow path of comparisons: strings, or raises.
+AStatus a_less (int eq, AVal* dst, AVal a, AVal b);
+
+// a < b
+static inline AStatus a_lt (AVal* dst, AVal a, AVal b) {
+    if (a.type==A_NUM && b.type==A_NUM) {
+        a_set(dst, a_bool(a.u.n < b.u.n));
+        return A_OK;
+    }
+    return a_less(0, dst, a, b);
+}
+
+// a <= b
+static inline AStatus a_le (AVal* dst, AVal a, AVal b) {
+    if (a.type==A_NUM && b.type==A_NUM) {
+        a_set(dst, a_bool(a.u.n <= b.u.n));
+        return A_OK;
+    }
+    return a_less(1, dst, a, b);
+}
+
+// a ++ b
+AStatus a_cat (AVal* dst, AVal a, AVal b);
+
+// String representation, as `print` shows it (owned).
+AVal a_tostring (AVal v);
 
 // -a
 AStatus a_neg (AVal* dst, AVal a);

@@ -4,6 +4,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "atmos.h"
 
@@ -163,6 +164,69 @@ AStatus a_neg (AVal* dst, AVal a) {
             a_typename(a));
     }
     a_set(dst, a_num(-a.u.n));
+    return A_OK;
+}
+
+AStatus a_less (int eq, AVal* dst, AVal a, AVal b) {
+    if (a.type==A_NUM && b.type==A_NUM) {
+        a_set(dst, a_bool(eq ? a.u.n<=b.u.n : a.u.n<b.u.n));
+        return A_OK;
+    }
+    if (a.type==A_STR && b.type==A_STR) {
+        // byte order, shorter first on a common prefix
+        AStr* x = A_STR_OF(a);
+        AStr* y = A_STR_OF(b);
+        size_t n = (x->len < y->len) ? x->len : y->len;
+        int c = memcmp(x->s, y->s, n);
+        if (c == 0) {
+            c = (x->len > y->len) - (x->len < y->len);
+        }
+        a_set(dst, a_bool(eq ? c<=0 : c<0));
+        return A_OK;
+    }
+    return a_error("invalid comparison : %s with %s",
+        a_typename(a), a_typename(b));
+}
+
+AVal a_tostring (AVal v) {
+    char buf[64];
+    switch (v.type) {
+        case A_NIL:
+            return a_strz("nil");
+        case A_BOOL:
+            return a_strz(v.u.b ? "true" : "false");
+        case A_NUM:
+            a_num_fmt(buf, sizeof(buf), v.u.n);
+            return a_strz(buf);
+        case A_STR:
+            a_inc(v);
+            return v;
+        default:
+            snprintf(buf, sizeof(buf), "%s: %p",
+                a_typename(v), (void*)v.u.o);
+            return a_strz(buf);
+    }
+}
+
+AStatus a_cat (AVal* dst, AVal a, AVal b) {
+    int ok_a = (a.type==A_STR || a.type==A_NUM);
+    int ok_b = (b.type==A_STR || b.type==A_NUM);
+    if (!ok_a || !ok_b) {
+        return a_error("invalid operation '++' : unexpected %s",
+            a_typename(ok_a ? b : a));
+    }
+    AVal x = a_tostring(a);
+    AVal y = a_tostring(b);
+    size_t nx = A_STR_OF(x)->len;
+    size_t ny = A_STR_OF(y)->len;
+    char* buf = malloc(nx + ny + 1);
+    memcpy(buf, A_STR_OF(x)->s, nx);
+    memcpy(buf+nx, A_STR_OF(y)->s, ny);
+    a_dec(x);
+    a_dec(y);
+    AVal ret = a_str(buf, nx+ny);
+    free(buf);
+    a_set(dst, ret);
     return A_OK;
 }
 

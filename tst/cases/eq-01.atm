@@ -1,0 +1,3 @@
+print(1 == 1, 1 == 2, 1 != 2, nil == nil, nil == false)
+print(:x == "x", "ab" == ("a" ++ "b"), "a" != "b")
+print(1 == "1", true == true, print == print)
