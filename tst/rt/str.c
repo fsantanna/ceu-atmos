@@ -6,6 +6,8 @@
 
 #include "atmos.h"
 
+const char* atm_file = "test";
+
 int main (void) {
     atm_init(0, NULL);
 

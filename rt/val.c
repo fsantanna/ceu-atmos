@@ -17,20 +17,64 @@ int   a_pay_n = 0;
 static int  PAY_CAP = 0;
 static char ERR[512];
 
+int a_lin = 0;
+
+// Trace of the pending error: the line that raised it, and the lines
+// of the calls it has crossed (innermost first).
+#define TRACE_MAX 32
+static int TRACE_THROW = 0;
+static int TRACE_CALLS[TRACE_MAX];
+static int TRACE_N = 0;
+static int TRACE_MORE = 0;
+
 ///////////////////////////////////////////////////////////////////////////////
 // STATUS
 ///////////////////////////////////////////////////////////////////////////////
+
+AStatus a_throw (void) {
+    TRACE_THROW = a_lin;
+    TRACE_N = 0;
+    TRACE_MORE = 0;
+    return A_ERROR;
+}
 
 AStatus a_error (const char* fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
     vsnprintf(ERR, sizeof(ERR), fmt, ap);
     va_end(ap);
-    return A_ERROR;
+    a_pay_clear();
+    a_pay_add(a_strz(ERR));
+    return a_throw();
 }
 
 const char* a_error_msg (void) {
+    if (a_pay_n == 0) {
+        return "";
+    }
+    AVal s = a_tostring(a_pay[0]);
+    snprintf(ERR, sizeof(ERR), "%s", A_STR_OF(s)->s);
+    a_dec(s);
     return ERR;
+}
+
+void a_error_dump (void) {
+    fflush(stdout);
+    fprintf(stderr, "==> ERROR:\n");
+    if (TRACE_MORE) {
+        fprintf(stderr, " |  ...\n");
+    }
+    for (int i=TRACE_N-1; i>=0; i--) {
+        fprintf(stderr, " |  %s:%d (call)\n", atm_file, TRACE_CALLS[i]);
+    }
+    fprintf(stderr, " v  %s:%d (throw)\n", atm_file, TRACE_THROW);
+    fprintf(stderr, "==> ");
+    for (int i=0; i<a_pay_n; i++) {
+        AVal s = a_tostring(a_pay[i]);
+        fprintf(stderr, "%s%s", (i > 0) ? ", " : "", A_STR_OF(s)->s);
+        a_dec(s);
+    }
+    fprintf(stderr, "\n");
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -157,12 +201,21 @@ AStatus a_call (AVal f, int base) {
     // the function must outlive its own call
     a_inc(f);
     int argc = a_top - base;
+    int lin  = a_lin;
     CALLS++;
     AStatus st = ((AFunc*)f.u.o)->fn((AFunc*)f.u.o, argc, &a_stk[base]);
     CALLS--;
+    a_lin = lin;
     a_dec(f);
 
     if (st != A_OK) {
+        if (st == A_ERROR) {
+            if (TRACE_N < TRACE_MAX) {
+                TRACE_CALLS[TRACE_N++] = lin;
+            } else {
+                TRACE_MORE = 1;
+            }
+        }
         a_settop(base);
         return st;
     }

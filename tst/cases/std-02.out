@@ -1,4 +1,6 @@
 true
 1	2
 ==> ERROR:
+ |  std-02.atm:3 (call)
+ v  std-02.atm:3 (throw)
 ==> my message

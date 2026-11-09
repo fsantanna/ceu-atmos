@@ -1,2 +1,4 @@
 ==> ERROR:
+ |  std-03.atm:1 (call)
+ v  std-03.atm:1 (throw)
 ==> assertion failed

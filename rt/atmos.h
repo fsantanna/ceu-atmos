@@ -76,11 +76,25 @@ typedef enum {
     A_OK, A_ERROR, A_ESCAPE, A_BREAK, A_RETURN, A_ABORT
 } AStatus;
 
-// Raises an error with a formatted message.
+// Raises an error with a formatted message as its value.
 AStatus a_error (const char* fmt, ...);
 
-// Message of the pending error.
+// Raises the payload as an error.
+AStatus a_throw (void);
+
+// First value of the pending error, as a string.
 const char* a_error_msg (void);
+
+// Source line being executed, set by the generated code. An error
+// records it, and so does every call it propagates through.
+extern int a_lin;
+
+// Source file of the program, set by the generated code.
+extern const char* atm_file;
+
+// Shows the pending error and its trace: the calls it crossed, from
+// the outermost one, then the line that raised it.
+void a_error_dump (void);
 
 // Payload of the pending exit: the values of a break, escape, return,
 // or throw, kept outside the value stack while blocks unwind.

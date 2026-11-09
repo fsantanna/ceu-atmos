@@ -1,3 +1,4 @@
 1
 ==> ERROR:
+ v  call-err-01.atm:1 (throw)
 ==> invalid call : expected function : got nil

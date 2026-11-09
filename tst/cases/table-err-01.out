@@ -1,2 +1,3 @@
 ==> ERROR:
+ v  table-err-01.atm:1 (throw)
 ==> invalid index : expected table : got number

@@ -1,2 +1,3 @@
 ==> ERROR:
+ v  loop-err-03.atm:1 (throw)
 ==> invalid loop : unexpected boolean

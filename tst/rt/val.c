@@ -6,6 +6,8 @@
 
 #include "atmos.h"
 
+const char* atm_file = "test";
+
 static AStatus two (AFunc* self, int argc, AVal* argv) {
     (void) self;
     assert(argc == 1);

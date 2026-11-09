@@ -1,3 +1,4 @@
 1
 ==> ERROR:
+ v  arith-err-01.atm:2 (throw)
 ==> invalid operation '+' : expected number : got nil

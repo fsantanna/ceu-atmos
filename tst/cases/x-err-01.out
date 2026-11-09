@@ -1,2 +1,4 @@
 ==> ERROR:
+ |  x-err-01.atm:1 (call)
+ v  x-err-01.atm:1 (throw)
 ==> invalid key : expected number or string : got table

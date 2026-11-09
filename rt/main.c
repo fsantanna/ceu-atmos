@@ -16,7 +16,7 @@ int main (int argc, char** argv) {
     a_settop(base);
     fflush(stdout);
     if (st != A_OK) {
-        fprintf(stderr, "==> ERROR:\n==> %s\n", a_error_msg());
+        a_error_dump();
     }
     atm_quit();
     return (st == A_OK) ? 0 : 1;

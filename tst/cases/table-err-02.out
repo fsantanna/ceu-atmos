@@ -1,2 +1,3 @@
 ==> ERROR:
+ v  table-err-02.atm:2 (throw)
 ==> invalid index : unexpected nil

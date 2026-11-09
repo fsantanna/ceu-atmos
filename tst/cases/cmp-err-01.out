@@ -1,2 +1,3 @@
 ==> ERROR:
+ v  cmp-err-01.atm:1 (throw)
 ==> invalid comparison : number with string

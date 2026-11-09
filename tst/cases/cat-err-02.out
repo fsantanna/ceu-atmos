@@ -1,2 +1,3 @@
 ==> ERROR:
+ v  cat-err-02.atm:1 (throw)
 ==> invalid operation '++' : unexpected number

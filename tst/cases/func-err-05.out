@@ -1,2 +1,5 @@
 ==> ERROR:
+ |  func-err-05.atm:3 (call)
+ |  func-err-05.atm:2 (call)
+ v  func-err-05.atm:1 (throw)
 ==> invalid operation '+' : expected number : got nil

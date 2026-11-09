@@ -1,2 +1,3 @@
 ==> ERROR:
+ v  table-err-03.atm:1 (throw)
 ==> invalid tag operation : expected table : got number

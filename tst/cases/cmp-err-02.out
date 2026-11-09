@@ -1,2 +1,3 @@
 ==> ERROR:
+ v  cmp-err-02.atm:1 (throw)
 ==> invalid comparison : nil with nil

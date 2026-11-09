@@ -640,6 +640,7 @@ static void gen_block_x (Unit* u, List* es, Dst d, Hnd h) {
     out(u, "{");
     u->ind++;
     for (int i=0; i<es->n; i++) {
+        out(u, "a_lin = %d;", es->v[i]->tk.lin);
         gen(u, es->v[i], (i == es->n-1) ? d : dst_none());
     }
     if (es->n == 0) {
@@ -1047,6 +1048,7 @@ static void gen_call (Unit* u, Expr* e, Dst d) {
     out(u, "{");
     u->ind++;
     out(u, "int b = a_top - %s;", m.n);
+    out(u, "a_lin = %d;", e->tk.lin);
     out_try(u, "a_call(%s, b)", f.c);
     switch (d.kind) {
         case D_NONE:
@@ -1287,6 +1289,8 @@ char* coder_main (Expr* prog, Var** globals, int nglobals) {
 
     Buf c = { NULL, 0, 0 };
     buf_add(&c, "#include \"atmos.h\"\n\n");
+    buf_add(&c, xfmt("const char* atm_file = %s;\n\n",
+        quote(FILENAME, strlen(FILENAME))));
 
     // top-level variables
     for (int i=0; i<nglobals; i++) {
