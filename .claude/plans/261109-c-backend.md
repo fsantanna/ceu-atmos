@@ -665,7 +665,7 @@ exs/        examples
 - [x] M1 expressions: numbers, strings, tags, tables, all operators,
       indexing, `if`/`ifs`/`match`, non-event loops, `where`, pipes,
       `val`/`var`/`set`, static globals.
-- [ ] M2 functions: closures, boxes, multiple values, varargs, `return`,
+- [x] M2 functions: closures, boxes, multiple values, varargs, `return`,
       lambdas, method sugar.
 - [ ] M3 control and errors: blocks, `defer`, `escape`, `break`,
       `until`, `while`, `throw`, `catch`, traces with `#line`.
