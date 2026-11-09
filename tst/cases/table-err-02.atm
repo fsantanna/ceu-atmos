@@ -1,0 +1,2 @@
+val t = []
+set t@(nil) = 1

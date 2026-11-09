@@ -1,0 +1,8 @@
+val p = :Pos [x=10, y=20]
+print(p.tag, p.x, p.y)
+val q = :T.A (p)
+print(q == p, p.tag)
+val t = [v=[1,2]]
+set t.v@0 = 9
+set t.w = t.v
+print(t.w@0, #t.v, #"abc", #"")

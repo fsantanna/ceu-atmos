@@ -1,0 +1,11 @@
+val t = []
+print(#t)
+set t@(#t) = 10
+print(t@0, #t)
+set t@(#t-1) = nil
+print(#t)
+val x = t
+set t@+ = 1
+set t@+ = 2
+set t@+ = 3
+print(#x, x@0, x@1, x@2, x@3)

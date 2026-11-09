@@ -273,6 +273,18 @@ AStatus a_setindex (AVal t, AVal k, AVal v);
 // #v
 AStatus a_len (AVal* dst, AVal v);
 
+// t@#  (last element)
+AStatus a_index_last (AVal* dst, AVal t);
+
+// set t@# = v
+AStatus a_setindex_last (AVal t, AVal v);
+
+// set t@+ = v  (append)
+AStatus a_setindex_next (AVal t, AVal v);
+
+// :X [...]  (sets the `tag` key of a table)
+AStatus a_tag (AVal t, AVal tag);
+
 ///////////////////////////////////////////////////////////////////////////////
 // FUNCTIONS
 ///////////////////////////////////////////////////////////////////////////////

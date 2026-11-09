@@ -1,0 +1,7 @@
+val t = [1, x=10, @(:y)=20]
+print(t@0, t@(1), t@(:x), t.y, t@(-1))
+val k = "idx"
+val u = [@k = 10, v = "x", 20, 30]
+print(u.idx, u@("v"), u@1, u@k)
+print(([[1]])@(([0])@0)@0)
+print(([1])@([]))

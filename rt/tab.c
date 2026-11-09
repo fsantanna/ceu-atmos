@@ -267,3 +267,43 @@ AStatus a_len (AVal* dst, AVal v) {
                 a_typename(v));
     }
 }
+
+static AStatus check (AVal t) {
+    if (t.type != A_TAB) {
+        return a_error("invalid index : expected table : got %s",
+            a_typename(t));
+    }
+    return A_OK;
+}
+
+AStatus a_index_last (AVal* dst, AVal t) {
+    if (check(t) != A_OK) {
+        return A_ERROR;
+    }
+    return a_index(dst, t, a_num((double)A_TAB_OF(t)->an - 1));
+}
+
+AStatus a_setindex_last (AVal t, AVal v) {
+    if (check(t) != A_OK) {
+        return A_ERROR;
+    }
+    return a_setindex(t, a_num((double)A_TAB_OF(t)->an - 1), v);
+}
+
+AStatus a_setindex_next (AVal t, AVal v) {
+    if (check(t) != A_OK) {
+        return A_ERROR;
+    }
+    return a_setindex(t, a_num(A_TAB_OF(t)->an), v);
+}
+
+AStatus a_tag (AVal t, AVal tag) {
+    if (t.type != A_TAB) {
+        return a_error("invalid tag operation : expected table : got %s",
+            a_typename(t));
+    }
+    AVal k = a_strz("tag");
+    a_tab_set(A_TAB_OF(t), k, tag);
+    a_dec(k);
+    return A_OK;
+}

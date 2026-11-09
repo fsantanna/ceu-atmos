@@ -1,0 +1,2 @@
+val x = nil
+set x.y = 10

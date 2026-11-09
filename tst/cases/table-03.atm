@@ -1,0 +1,12 @@
+val stk = [1,2,3]
+print(stk@#)
+set stk@# = 30
+print(stk@0, stk@1, stk@2)
+val x = stk@#
+set stk@# = nil
+print(x, #stk)
+set stk@+ = 3
+print(#stk, stk@#, stk@+)
+val e = []
+set e@# = nil
+print(#e, e@#)

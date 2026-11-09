@@ -73,6 +73,16 @@ static void out (Unit* u, const char* fmt, ...) {
     buf_add(&u->body, "\n");
 }
 
+// Emits a runtime call that may fail.
+static void out_try (Unit* u, const char* fmt, ...) {
+    char call[1024];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(call, sizeof(call), fmt, ap);
+    va_end(ap);
+    out(u, "if ((st = %s) != A_OK) goto CL_%d;", call, u->cleanup);
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // CONSTANTS
 ///////////////////////////////////////////////////////////////////////////////
@@ -334,17 +344,47 @@ static Opnd gen_dcl (Unit* u, Expr* e) {
     return opnd_c("a_nil()");
 }
 
-// set x = e
+// set x = e  |  set t@k = e
 static Opnd gen_set (Unit* u, Expr* e) {
     if (e->u.set.dsts.n > 1) {
         err(e->tk, "multiple assignment : not implemented");
     }
     Expr* dst = e->u.set.dsts.v[0];
-    if (dst->tag != E_ACC) {
+
+    if (dst->tag == E_ACC) {
+        Opnd o = gen_expr(u, e->u.set.src);
+        opnd_mov(u, o, var_c(u,dst->var));
+
+    } else if (dst->tag == E_INDEX) {
+        // the table and the key are evaluated before the value
+        Opnd t = gen_expr(u, dst->u.index.t);
+        switch (dst->u.index.kind) {
+            case IDX_EXPR: {
+                Opnd k = gen_expr(u, dst->u.index.idx);
+                Opnd v = gen_expr(u, e->u.set.src);
+                out_try(u, "a_setindex(%s, %s, %s)", t.c, k.c, v.c);
+                opnd_rel(u, k);
+                opnd_rel(u, v);
+                break;
+            }
+            case IDX_LAST: {
+                Opnd v = gen_expr(u, e->u.set.src);
+                out_try(u, "a_setindex_last(%s, %s)", t.c, v.c);
+                opnd_rel(u, v);
+                break;
+            }
+            case IDX_NEXT: {
+                Opnd v = gen_expr(u, e->u.set.src);
+                out_try(u, "a_setindex_next(%s, %s)", t.c, v.c);
+                opnd_rel(u, v);
+                break;
+            }
+        }
+        opnd_rel(u, t);
+
+    } else {
         err(dst->tk, "assignment : not implemented");
     }
-    Opnd o = gen_expr(u, e->u.set.src);
-    opnd_mov(u, o, var_c(u,dst->var));
     return opnd_c("a_nil()");
 }
 
@@ -352,14 +392,66 @@ static Opnd gen_uno (Unit* u, Expr* e) {
     Opnd x = gen_expr(u, e->u.uno.e);
     Opnd d = opnd_tmp(u);
     if (!strcmp(e->tk.str, "-")) {
-        out(u, "if ((st = a_neg(&%s, %s)) != A_OK) goto CL_%d;",
-            d.c, x.c, u->cleanup);
-    } else if (!strcmp(e->tk.str, "!")) {
-        out(u, "a_not(&%s, %s);", d.c, x.c);
+        out_try(u, "a_neg(&%s, %s)", d.c, x.c);
+    } else if (!strcmp(e->tk.str, "#")) {
+        out_try(u, "a_len(&%s, %s)", d.c, x.c);
     } else {
-        err(e->tk, "operator not implemented");
+        out(u, "a_not(&%s, %s);", d.c, x.c);
     }
     opnd_rel(u, x);
+    return d;
+}
+
+// [ e, id=e, @(k)=e ]: positional entries are numbered from 0.
+static Opnd gen_table (Unit* u, Expr* e) {
+    Opnd d = opnd_tmp(u);
+    out(u, "a_set(&%s, a_tab());", d.c);
+    int n = 0;
+    for (int i=0; i<e->u.table.vs.n; i++) {
+        Expr* key = e->u.table.ks.v[i];
+        if (key == NULL) {
+            Opnd v = gen_expr(u, e->u.table.vs.v[i]);
+            out(u, "a_tab_set(A_TAB_OF(%s), a_num(%d), %s);", d.c, n++, v.c);
+            opnd_rel(u, v);
+        } else {
+            Opnd k = gen_expr(u, key);
+            Opnd v = gen_expr(u, e->u.table.vs.v[i]);
+            out_try(u, "a_setindex(%s, %s, %s)", d.c, k.c, v.c);
+            opnd_rel(u, k);
+            opnd_rel(u, v);
+        }
+    }
+    return d;
+}
+
+// :X [...]: tags the table in place.
+static Opnd gen_tagged (Unit* u, Expr* e) {
+    Opnd t = gen_expr(u, e->u.tagged.e);
+    out_try(u, "a_tag(%s, K[%d])", t.c, konst(e->tk.str+1,e->tk.len-1));
+    return t;
+}
+
+// t@(e)  t.x  t@#  t@+
+static Opnd gen_index (Unit* u, Expr* e) {
+    Opnd t = gen_expr(u, e->u.index.t);
+    Opnd d = opnd_tmp(u);
+    switch (e->u.index.kind) {
+        case IDX_EXPR: {
+            Opnd k = gen_expr(u, e->u.index.idx);
+            out_try(u, "a_index(&%s, %s, %s)", d.c, t.c, k.c);
+            opnd_rel(u, k);
+            break;
+        }
+        case IDX_LAST:
+            out_try(u, "a_index_last(&%s, %s)", d.c, t.c);
+            break;
+        case IDX_NEXT:
+            // the next position is always empty
+            out_try(u, "a_len(&%s, %s)", d.c, t.c);
+            out(u, "a_clr(&%s);", d.c);
+            break;
+    }
+    opnd_rel(u, t);
     return d;
 }
 
@@ -413,8 +505,8 @@ static Opnd gen_bin (Unit* u, Expr* e) {
         if (f == NULL) {
             err(e->tk, "operator not implemented");
         }
-        out(u, "if ((st = %s(&%s, %s, %s)) != A_OK) goto CL_%d;",
-            f, d.c, swap ? y.c : x.c, swap ? x.c : y.c, u->cleanup);
+        out_try(u, "%s(&%s, %s, %s)",
+            f, d.c, swap ? y.c : x.c, swap ? x.c : y.c);
     }
     opnd_rel(u, x);
     opnd_rel(u, y);
@@ -448,8 +540,7 @@ static Opnd gen_call (Unit* u, Expr* e) {
     for (int i=0; i<args.n; i++) {
         opnd_push(u, xs[i]);
     }
-    out(u, "if ((st = a_call(%s, b)) != A_OK) goto CL_%d;",
-        f.c, u->cleanup);
+    out_try(u, "a_call(%s, b)", f.c);
     out(u, "a_ret1(&%s, b);", d.c);
     u->ind--;
     out(u, "}");
@@ -480,6 +571,12 @@ static Opnd gen_expr (Unit* u, Expr* e) {
             return opnd_c(xfmt("K[%d]", konst(e->tk.str+1,e->tk.len-1)));
         case E_ACC:
             return gen_acc(u, e);
+        case E_INDEX:
+            return gen_index(u, e);
+        case E_TABLE:
+            return gen_table(u, e);
+        case E_TAGGED:
+            return gen_tagged(u, e);
         case E_PARENS:
             return gen_expr(u, e->u.parens.e);
         case E_UNO:
