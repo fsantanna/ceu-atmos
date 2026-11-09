@@ -5,7 +5,7 @@ ASAN   := -fsanitize=address -fno-omit-frame-pointer
 RT_SRC := rt/val.c rt/std.c
 RT_HDR := rt/atmos.h
 
-CC_SRC := src/aux.c src/lexer.c src/main.c
+CC_SRC := src/aux.c src/lexer.c src/parser.c src/ast.c src/main.c
 CC_HDR := src/atmc.h
 
 all: atmos build/libatmos.a build/libatmos-asan.a
@@ -40,9 +40,12 @@ build/tst/rt/%: tst/rt/%.c $(RT_SRC) $(RT_HDR)
 test-lex: atmos
 	tst/run.sh lex
 
-test: test-rt test-lex
+test-ast: atmos
+	tst/run.sh ast
+
+test: test-rt test-lex test-ast
 
 clean:
 	rm -rf build
 
-.PHONY: all test test-rt test-lex clean
+.PHONY: all test test-rt test-lex test-ast clean

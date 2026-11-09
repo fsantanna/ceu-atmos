@@ -1,0 +1,5 @@
+(parens 1)
+(list 1 2)
+(list)
+(parens (list 1 2))
+(parens 1)

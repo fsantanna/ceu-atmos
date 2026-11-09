@@ -39,16 +39,19 @@ static void dump_lex (void) {
 }
 
 static void usage (void) {
-    fprintf(stderr, "Usage: atmos [--lex] <input>\n");
+    fprintf(stderr, "Usage: atmos [--lex|--ast] <input>\n");
     exit(1);
 }
 
 int main (int argc, char** argv) {
     int lex = 0;
+    int ast = 0;
     const char* inp = NULL;
     for (int i=1; i<argc; i++) {
         if (!strcmp(argv[i], "--lex")) {
             lex = 1;
+        } else if (!strcmp(argv[i], "--ast")) {
+            ast = 1;
         } else if (inp == NULL) {
             inp = argv[i];
         } else {
@@ -65,6 +68,16 @@ int main (int argc, char** argv) {
 
     if (lex) {
         dump_lex();
+        return 0;
+    }
+
+    Expr* prog = parser_main();
+
+    if (ast) {
+        for (int i=0; i<prog->u.block.es.n; i++) {
+            ast_dump(prog->u.block.es.v[i]);
+            printf("\n");
+        }
         return 0;
     }
 

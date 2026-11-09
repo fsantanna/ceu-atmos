@@ -1,0 +1,4 @@
+(call f (list 1 2))
+(call x y)
+(call (parens f) 1)
+(parens (call f 1 2))

@@ -1,0 +1,4 @@
+(call (:: o m))
+(call (:: o m) 1)
+(call (:: o m) "s")
+(call (:: (@ o "p") m) 1)

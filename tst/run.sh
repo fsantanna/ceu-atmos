@@ -3,7 +3,7 @@
 # Runs the golden tests.
 #
 #   tst/run.sh            all suites
-#   tst/run.sh lex        one suite
+#   tst/run.sh lex        one suite (lex, ast)
 #
 # Each case is a `NAME.atm` with the expected output in `NAME.out`
 # (stdout followed by stderr).
@@ -12,7 +12,7 @@ cd "$(dirname "$0")"
 
 ATMOS=../../atmos
 
-suites=${@:-lex}
+suites=${@:-lex ast}
 
 pass=0
 fail=0
@@ -20,6 +20,7 @@ fail=0
 for suite in $suites; do
     case $suite in
         lex) flags="--lex" ;;
+        ast) flags="--ast" ;;
         *)   echo "unknown suite: $suite" ; exit 1 ;;
     esac
     cd $suite

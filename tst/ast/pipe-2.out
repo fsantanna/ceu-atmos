@@ -1,0 +1,5 @@
+(call f x)
+(call f x)
+(call f (call g 10))
+(call g (call f x))
+(call f (call g x))

@@ -1,0 +1,5 @@
+(tag :X [10])
+(tag :X (parens t))
+:X
+[]
+:Y
