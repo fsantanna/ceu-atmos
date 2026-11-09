@@ -2,7 +2,7 @@ CC     ?= cc
 CFLAGS ?= -O2 -g -Wall -Wextra
 ASAN   := -fsanitize=address -fno-omit-frame-pointer
 
-RT_SRC := rt/val.c rt/str.c rt/std.c
+RT_SRC := rt/val.c rt/str.c rt/tab.c rt/std.c
 RT_HDR := rt/atmos.h
 
 CC_SRC := src/aux.c src/lexer.c src/parser.c src/ast.c src/resolver.c \

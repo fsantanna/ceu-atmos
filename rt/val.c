@@ -34,11 +34,15 @@ const char* a_error_msg (void) {
 ///////////////////////////////////////////////////////////////////////////////
 
 void a_str_free (AStr* s);
+void a_tab_free (ATab* t);
 
 void a_free (AObj* o) {
     switch (o->type) {
         case A_STR:
             a_str_free((AStr*) o);
+            break;
+        case A_TAB:
+            a_tab_free((ATab*) o);
             break;
         case A_FUNC: {
             AFunc* f = (AFunc*) o;

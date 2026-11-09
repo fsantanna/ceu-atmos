@@ -219,6 +219,61 @@ AVal a_str  (const char* s, size_t len);
 AVal a_strz (const char* s);
 
 ///////////////////////////////////////////////////////////////////////////////
+// TABLES
+///////////////////////////////////////////////////////////////////////////////
+
+// One mutable table type with an array part and a hash part.
+//
+// Array part: keys `0..an-1`. Its last element is never nil, so `an`
+// is always a border: `t@(an-1)` is not nil and `t@(an)` is nil.
+//
+// Hash part: dense entries in insertion order, plus an open
+// addressing index into them. A deleted entry leaves a tombstone,
+// compacted on rehash.
+
+typedef struct AEnt {
+    AVal k;
+    AVal v;
+} AEnt;
+
+typedef struct ATab {
+    AObj     hdr;
+    AVal*    arr;
+    uint32_t an;
+    uint32_t acap;
+    AEnt*    ents;
+    uint32_t en;
+    uint32_t ecap;
+    uint32_t elive;
+    int32_t* idx;
+    uint32_t icap;
+} ATab;
+
+#define A_TAB_OF(v) ((ATab*)(v).u.o)
+
+// New empty table (owned).
+AVal a_tab (void);
+
+// Value of a key (borrowed), or nil.
+AVal a_tab_get (ATab* t, AVal k);
+
+// Assigns a key, which must be neither nil nor NaN. Nil deletes it.
+void a_tab_set (ATab* t, AVal k, AVal v);
+
+// Iteration: array part, then hash part in insertion order.
+// Starts with `*pos == 0`. Returns 0 at the end.
+int a_tab_next (ATab* t, uint32_t* pos, AVal* k, AVal* v);
+
+// t@k
+AStatus a_index (AVal* dst, AVal t, AVal k);
+
+// set t@k = v
+AStatus a_setindex (AVal t, AVal k, AVal v);
+
+// #v
+AStatus a_len (AVal* dst, AVal v);
+
+///////////////////////////////////////////////////////////////////////////////
 // FUNCTIONS
 ///////////////////////////////////////////////////////////////////////////////
 
