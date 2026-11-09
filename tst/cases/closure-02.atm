@@ -1,0 +1,20 @@
+val counter = func () {
+    var n = 0
+    func () {
+        set n = n + 1
+        n
+    }
+}
+val c1 = counter()
+val c2 = counter()
+print(c1(), c1(), c1(), c2())
+val mk = func () {
+    var v = 0
+    val get = \{ v }
+    val set_ = \x { set v = x }
+    [get, set_]
+}
+val p = mk()
+print(p@0())
+p@1(10)
+print(p@0())

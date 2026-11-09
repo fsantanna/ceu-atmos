@@ -1,0 +1,12 @@
+(\{it()}) \{print :ok}
+val g = \{ it + 1 }
+print(g ?? :function, g(1))
+print((\+)(10, 20), (\*)(3, 7), (\-)(10, 3), (\!)(true), (\#)([1,2,3]))
+val f = func (op, x, y) {
+    op(x, y)
+}
+print(f(\+, 10, 20), f(\++, "a", "b"))
+val h = \(a, b) { (b, a) }
+print(h(1, 2))
+print(if 10 => \{ return(it + 1) ; 99 })
+print(match 5 { \{ return(true) } => \{ return(:ok) } })

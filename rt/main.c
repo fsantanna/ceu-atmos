@@ -6,7 +6,14 @@
 
 int main (int argc, char** argv) {
     atm_init(argc, argv);
-    AStatus st = atm_main();
+
+    // the program arguments are the `...` of the main chunk
+    int base = a_top;
+    for (int i=1; i<argc; i++) {
+        a_push(a_strz(argv[i]));
+    }
+    AStatus st = atm_main(a_top-base, &a_stk[base]);
+    a_settop(base);
     fflush(stdout);
     if (st != A_OK) {
         fprintf(stderr, "==> ERROR:\n==> %s\n", a_error_msg());

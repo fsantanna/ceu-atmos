@@ -1,0 +1,15 @@
+func f (a, ...) {
+    print(a)
+    print("x", ...)
+}
+f("a", 1, 2, 3)
+func g (...) {
+    val a, b = ...
+    print(a, b, (...))
+    [...]
+}
+X.print(g(1, 2, 3))
+X.print(g())
+func h (...) { ... }
+print(h(1, 2), h())
+print(#[...])

@@ -1,0 +1,4 @@
+do {
+    val func x (v) { print(v) }
+}
+x(:no)

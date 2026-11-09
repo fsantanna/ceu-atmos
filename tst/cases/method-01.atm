@@ -1,0 +1,15 @@
+val o = [v=1]
+func o::inc (n) {
+    set self.v = self.v + (n || 1)
+}
+o::inc()
+o::inc(10)
+print(o.v)
+val t = [x=[y=[]]]
+func t.x.y.f (a) { a * 2 }
+print(t.x.y.f(21))
+func t.x::g () { self == t.x }
+print(t.x::g(), t.x.g(t.x), t.x.g(1))
+val s = [name="s"]
+set s.get = \me { me.name }
+print(s::get())

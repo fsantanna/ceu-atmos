@@ -1,0 +1,29 @@
+val f = func (x) {
+    (func (y) {
+        (x + y)
+    })
+}
+print(f(10)(20))
+var i = 10
+func g () {
+    var j = 20
+    func gg () {
+        return(i + j)
+    }
+    print(gg())
+}
+g()
+do {
+    var a = 10
+    func h () {
+        do {
+            var b = 20
+            func hh () {
+                return(a + b)
+            }
+            return(hh)
+        }
+    }
+    var x = h()
+    print(x())
+}

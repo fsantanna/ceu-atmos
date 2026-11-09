@@ -1,0 +1,15 @@
+val f = func (x, y) {
+    (x + y)
+}
+print(f(10,20))
+val g = func (x, y) {
+    print(:1)
+    return <- (x, y)
+    print(:2)
+}
+print(g(10,20))
+val h = func (x, y) {
+    (x, y)
+}
+print(h(10,20))
+print(type(func () {}), (func () {})(), (func () { 1 })())

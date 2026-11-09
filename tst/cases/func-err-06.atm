@@ -1,0 +1,1 @@
+func f () { loop { (func () { break() })() } }

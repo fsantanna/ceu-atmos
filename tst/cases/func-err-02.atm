@@ -1,0 +1,4 @@
+val f = func (x) {
+    print(v)
+}
+val v = 10

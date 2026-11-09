@@ -1,0 +1,12 @@
+val fs = []
+loop i in 3 {
+    var k = i * 10
+    set fs@+ = func () { set k = k + 1 ; (i, k) }
+}
+print(fs@0(), fs@1(), fs@2())
+print(fs@0())
+val add = \x { \y { \z { x + (y + z) } } }
+print(add(1)(2)(3))
+val t = [10]
+val g = \{ set t@0 = t@0 + it ; t@0 }
+print(g(1), g(2))

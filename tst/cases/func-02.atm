@@ -1,0 +1,19 @@
+func f (v) {
+    if v == 0 {
+        (0)
+    } else {
+        v + f(v - 1)
+    }
+}
+print(f(4))
+var g, h
+set g = func (v) {
+    if v == 0 { 0 } else { (v + h(v - 1)) }
+}
+set h = func (v) {
+    if v == 0 { 0 } else { v + g(v - 1) }
+}
+print(g(4))
+func even (n) { if n == 0 => true => odd(n - 1) }
+func odd  (n) { if n == 0 => false => even(n - 1) }
+print(even(10), odd(7), even(3))

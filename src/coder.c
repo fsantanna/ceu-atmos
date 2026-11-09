@@ -47,6 +47,9 @@ static void buf_add (Buf* b, const char* s) {
 // One C function being generated.
 typedef struct Unit {
     Buf body;
+    // function being compiled, and its number of parameters
+    Proto* proto;
+    int npar;
     // number of slots in `L`
     int nslots;
     // number of count variables `n<i>`
@@ -345,18 +348,34 @@ static void store_pay (Unit* u, Dst d) {
 static void gen      (Unit* u, Expr* e, Dst d);
 static Opnd gen_expr (Unit* u, Expr* e);
 
-// C expression of the storage of a variable.
-static const char* var_c (Unit* u, Var* v) {
+// C expression of the raw storage of a variable: a static variable,
+// a slot of its function, or a capture of the current function.
+// For a boxed variable, this is the box.
+static const char* var_raw (Unit* u, Var* v) {
     if (v->csym != NULL) {
         return v->csym;
     } else if (v->global) {
         return xfmt("G%d_%s", v->id, v->tk.str);
-    } else {
+    } else if (v->proto == u->proto) {
         if (v->slot < 0) {
             v->slot = u->nslots++;
         }
         return xfmt("L[%d]", v->slot);
+    } else {
+        for (int i=0; i<u->proto->ncaps; i++) {
+            if (u->proto->caps[i] == v) {
+                return xfmt("self->caps[%d]", i);
+            }
+        }
+        err(v->tk, "internal error : capture not found");
+        return NULL;
     }
+}
+
+// C expression of the value of a variable.
+static const char* var_c (Unit* u, Var* v) {
+    const char* raw = var_raw(u, v);
+    return v->boxed ? xfmt("A_BOX_OF(%s)->v", raw) : raw;
 }
 
 // Appends the expressions in `src` to `dst`, splicing nested lists:
@@ -392,27 +411,28 @@ static int is_multi (Expr* e) {
 
 // Pushes the values of a list of expressions: one of each, except the
 // last, which gives all of its values. Sets the count in `n`.
-static void gen_args (Unit* u, List* es, const char* n) {
+// An optional operand `self` goes first (method calls).
+static void gen_args (Unit* u, List* es, const char* n, Opnd* self) {
     List args = { 0, NULL };
     flatten(&args, es);
     int k = args.n;
-    if (k == 0) {
-        out(u, "%s = 0;", n);
-        return;
-    }
 
-    int multi = is_multi(args.v[k-1]);
+    int multi = (k > 0) && is_multi(args.v[k-1]);
     int fix = multi ? k-1 : k;
-    Opnd* xs = xalloc(k * sizeof(Opnd));
+    Opnd* xs = xalloc((k+1) * sizeof(Opnd));
+    int nx = 0;
+    if (self != NULL) {
+        xs[nx++] = *self;
+    }
     for (int i=0; i<fix; i++) {
-        xs[i] = gen_expr(u, args.v[i]);
+        xs[nx++] = gen_expr(u, args.v[i]);
     }
 
     if (!multi) {
-        for (int i=0; i<k; i++) {
+        for (int i=0; i<nx; i++) {
             opnd_push(u, xs[i]);
         }
-        out(u, "%s = %d;", n, k);
+        out(u, "%s = %d;", n, nx);
         return;
     }
 
@@ -420,16 +440,16 @@ static void gen_args (Unit* u, List* es, const char* n) {
     // slots and are inserted below its values
     Dst d = { D_MULTI, NULL, n };
     gen(u, args.v[k-1], d);
-    if (fix > 0) {
-        out(u, "a_open(%s, %d);", n, fix);
-        for (int i=0; i<fix; i++) {
+    if (nx > 0) {
+        out(u, "a_open(%s, %d);", n, nx);
+        for (int i=0; i<nx; i++) {
             if (xs[i].tmp >= 0) {
-                out(u, "a_putm(a_top-%s-%d, &L[%d]);", n, fix-i, xs[i].tmp);
+                out(u, "a_putm(a_top-%s-%d, &L[%d]);", n, nx-i, xs[i].tmp);
             } else {
-                out(u, "a_putc(a_top-%s-%d, %s);", n, fix-i, xs[i].c);
+                out(u, "a_putc(a_top-%s-%d, %s);", n, nx-i, xs[i].c);
             }
         }
-        out(u, "%s += %d;", n, fix);
+        out(u, "%s += %d;", n, nx);
     }
 }
 
@@ -601,9 +621,18 @@ static Opnd gen_index (Unit* u, Expr* e) {
 // Sequence of expressions in a new block, whose value is the value of
 // the last expression.
 //
-// As the body of a loop, the block stops a break: the payload is
-// delivered to `brk`, and control goes to the end label `loop`.
-static void gen_block_x (Unit* u, List* es, Dst d, int loop, Dst brk) {
+// A block may stop an exit: its payload is delivered to a destination
+// and control goes to an end label.
+//  - break: the body of a loop
+//  - return: the body of a lambda expanded in place
+typedef struct Hnd {
+    int brk;
+    Dst brkd;
+    int ret;
+    Dst retd;
+} Hnd;
+
+static void gen_block_x (Unit* u, List* es, Dst d, Hnd h) {
     int up = u->cleanup;
     int lo = u->nslots;
     u->cleanup = ++u->nlabels;
@@ -622,13 +651,23 @@ static void gen_block_x (Unit* u, List* es, Dst d, int loop, Dst brk) {
     if (u->nslots > lo) {
         out(u, "a_clrs(&L[%d], %d);", lo, u->nslots-lo);
     }
-    if (loop > 0) {
+    if (h.brk > 0) {
         out(u, "if (st == A_BREAK) {");
         u->ind++;
         out(u, "st = A_OK;");
         out(u, "a_settop(base);");
-        store_pay(u, brk);
-        out(u, "goto LE_%d;", loop);
+        store_pay(u, h.brkd);
+        out(u, "goto LE_%d;", h.brk);
+        u->ind--;
+        out(u, "}");
+    }
+    if (h.ret > 0) {
+        out(u, "if (st == A_RETURN) {");
+        u->ind++;
+        out(u, "st = A_OK;");
+        out(u, "a_settop(base);");
+        store_pay(u, h.retd);
+        out(u, "goto LE_%d;", h.ret);
         u->ind--;
         out(u, "}");
     }
@@ -643,7 +682,8 @@ static void gen_block_x (Unit* u, List* es, Dst d, int loop, Dst brk) {
 }
 
 static void gen_block (Unit* u, List* es, Dst d) {
-    gen_block_x(u, es, d, 0, dst_none());
+    Hnd h = { 0, dst_none(), 0, dst_none() };
+    gen_block_x(u, es, d, h);
 }
 
 // e where { x = e1 ; y = e2 }
@@ -660,6 +700,16 @@ static void gen_where (Unit* u, Expr* e, Dst d) {
 // DECLARATIONS AND ASSIGNMENTS
 ///////////////////////////////////////////////////////////////////////////////
 
+// A captured mutable variable gets a fresh box every time its
+// declaration executes.
+static void gen_boxes (Unit* u, Expr* e) {
+    for (int i=0; i<e->u.dcl.n; i++) {
+        if (e->vars[i]->boxed) {
+            out(u, "a_set(&%s, a_box());", var_raw(u,e->vars[i]));
+        }
+    }
+}
+
 // val x = e  |  var x, y = e
 static void gen_dcl (Unit* u, Expr* e) {
     if (e->tk.str[0] == 'p') {
@@ -673,18 +723,23 @@ static void gen_dcl (Unit* u, Expr* e) {
         }
     } else if (k == 1) {
         Opnd o = gen_expr(u, e->u.dcl.set);
+        gen_boxes(u, e);
         opnd_mov(u, o, var_c(u,e->vars[0]));
+        return;
     } else {
         Dst m = dst_multi(u);
         gen(u, e->u.dcl.set, m);
         out(u, "a_adj(%s, %d);", m.n, k);
+        gen_boxes(u, e);
         for (int i=0; i<k; i++) {
             vs[i] = var_c(u, e->vars[i]);
         }
         for (int i=k-1; i>=0; i--) {
             out(u, "a_pop(&%s);", vs[i]);
         }
+        return;
     }
+    gen_boxes(u, e);
 }
 
 // A destination of a set, with its table and key already evaluated.
@@ -770,7 +825,11 @@ static void gen_inline (Unit* u, Expr* p, Opnd arg, Dst d) {
     } else {
         opnd_rel(u, arg);
     }
-    gen_block(u, &p->u.proto.blk->u.block.es, d);
+    // a return inside the lambda gives its value
+    int end = ++u->nlabels;
+    Hnd h = { 0, dst_none(), end, d };
+    gen_block_x(u, &p->u.proto.blk->u.block.es, d, h);
+    out0(u, "LE_%d: ;", end);
 }
 
 // if, ifs, match: a chain of tests. The body of the first case that
@@ -873,7 +932,8 @@ static void gen_loop (Unit* u, Expr* e, Dst d) {
         out_try(u, "a_next(%s, %s, &%s, &%s, &%s)", it.c, lim.c, pos.c, k, v);
         out(u, "if (%s.type == A_NIL) break;", k);
     }
-    gen_block_x(u, &e->u.loop.blk->u.block.es, dst_none(), end, d);
+    Hnd h = { end, d, 0, dst_none() };
+    gen_block_x(u, &e->u.loop.blk->u.block.es, dst_none(), h);
     u->ind--;
     out(u, "}");
     // the loop ends without a break
@@ -905,7 +965,7 @@ static void gen_break (Unit* u, Expr* e) {
         vals.v++;
     }
     Dst m = dst_multi(u);
-    gen_args(u, &vals, m.n);
+    gen_args(u, &vals, m.n, NULL);
 
     if (sp == SP_UNTIL) {
         // until(c, v, ...) breaks with `v, ...` if `v` holds, else `c`
@@ -944,7 +1004,7 @@ static void gen_call (Unit* u, Expr* e, Dst d) {
         case SP_DO: {
             // do(...): evaluates and discards
             Dst m = dst_multi(u);
-            gen_args(u, &e->u.call.es, m.n);
+            gen_args(u, &e->u.call.es, m.n, NULL);
             out(u, "a_settop(a_top - %s);", m.n);
             store_void(u, d);
             return;
@@ -955,13 +1015,34 @@ static void gen_call (Unit* u, Expr* e, Dst d) {
             gen_break(u, e);
             store_void(u, d);
             return;
+        case SP_RETURN: {
+            // the values travel in the payload up to the function
+            Dst m = dst_multi(u);
+            gen_args(u, &e->u.call.es, m.n, NULL);
+            out(u, "a_pay_pull(%s);", m.n);
+            out(u, "st = A_RETURN;");
+            out(u, "goto CL_%d;", u->cleanup);
+            store_void(u, d);
+            return;
+        }
         default:
             err(e->tk, "statement not implemented");
     }
 
-    Opnd f = gen_expr(u, e->u.call.f);
+    Opnd f;
     Dst  m = dst_multi(u);
-    gen_args(u, &e->u.call.es, m.n);
+    if (e->u.call.f->tag == E_MET) {
+        // o::m(...) is o.m(o, ...), with `o` evaluated once
+        Expr* met = e->u.call.f;
+        Opnd o = gen_expr(u, met->u.met.o);
+        f = opnd_tmp(u);
+        out_try(u, "a_index(&%s, %s, K[%d])", f.c, o.c,
+            konst(met->u.met.met.str, met->u.met.met.len));
+        gen_args(u, &e->u.call.es, m.n, &o);
+    } else {
+        f = gen_expr(u, e->u.call.f);
+        gen_args(u, &e->u.call.es, m.n, NULL);
+    }
 
     out(u, "{");
     u->ind++;
@@ -986,7 +1067,7 @@ static void gen_call (Unit* u, Expr* e, Dst d) {
 // (e1, e2, ...): all values of the list, or only the first one.
 static void gen_list (Unit* u, Expr* e, Dst d) {
     Dst m = (d.kind == D_MULTI) ? d : dst_multi(u);
-    gen_args(u, &e->u.list.es, m.n);
+    gen_args(u, &e->u.list.es, m.n, NULL);
     switch (d.kind) {
         case D_NONE:
             out(u, "a_settop(a_top - %s);", m.n);
@@ -995,6 +1076,96 @@ static void gen_list (Unit* u, Expr* e, Dst d) {
             out(u, "a_ret1(&%s, a_top - %s);", d.slot, m.n);
             break;
         case D_MULTI:
+            break;
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// FUNCTIONS
+///////////////////////////////////////////////////////////////////////////////
+
+// Declarations and definitions of the generated C functions.
+static Buf DECLS = { NULL, 0, 0 };
+static Buf FUNCS = { NULL, 0, 0 };
+
+// Appends the common prologue of a function, its body, and its
+// cleanup label.
+static void unit_emit (Unit* u, Buf* c) {
+    int n = (u->nslots > 0) ? u->nslots : 1;
+    buf_add(c, xfmt("    AVal L[%d];\n", n));
+    buf_add(c, xfmt("    a_nils(L, %d);\n", n));
+    buf_add(c, "    AStatus st = A_OK;\n");
+    buf_add(c, "    int base = a_top;\n");
+    for (int i=0; i<u->ncnts; i++) {
+        buf_add(c, xfmt("    int n%d = 0;\n", i));
+    }
+    buf_add(c, u->body.s ? u->body.s : "");
+    buf_add(c, "    goto CL_0;\n");
+    buf_add(c, "CL_0:\n");
+    buf_add(c, xfmt("    a_clrs(L, %d);\n", n));
+}
+
+// Compiles a prototype to a C function. Returns its name.
+//
+// The values of the body, or of a return, are left on the stack.
+static const char* gen_func (Expr* e) {
+    Unit u;
+    memset(&u, 0, sizeof(u));
+    u.proto = e->proto;
+    u.npar  = e->u.proto.n;
+
+    // parameters are immutable copies of the arguments
+    for (int i=0; i<e->u.proto.n; i++) {
+        out(&u, "if (argc > %d) a_cpy(&%s, argv[%d]);",
+            i, var_c(&u,e->vars[i]), i);
+    }
+    gen_block(&u, &e->u.proto.blk->u.block.es, dst_multi(&u));
+
+    const char* name = xfmt("F%d", e->proto->id);
+    const char* sig = xfmt(
+        "static AStatus %s (AFunc* self, int argc, AVal* argv)", name);
+    buf_add(&DECLS, xfmt("%s;\n", sig));
+
+    Buf* c = &FUNCS;
+    buf_add(c, xfmt("// line %d\n%s {\n", e->tk.lin, sig));
+    unit_emit(&u, c);
+    buf_add(c, "    if (st == A_RETURN) {\n");
+    buf_add(c, "        st = A_OK;\n");
+    buf_add(c, "        a_pay_push();\n");
+    buf_add(c, "    }\n");
+    buf_add(c, "    return st;\n");
+    buf_add(c, "}\n\n");
+    return name;
+}
+
+// func (...) {...}: a closure with copies of the captured variables
+// (or their boxes).
+static Opnd gen_proto (Unit* u, Expr* e) {
+    if (e->u.proto.task) {
+        err(e->tk, "task : not implemented");
+    }
+    const char* name = gen_func(e);
+    Proto* p = e->proto;
+    Opnd d = opnd_tmp(u);
+    out(u, "a_set(&%s, a_func(%s, %d));", d.c, name, p->ncaps);
+    for (int i=0; i<p->ncaps; i++) {
+        out(u, "a_cpy(&A_FUNC_OF(%s)->caps[%d], %s);",
+            d.c, i, var_raw(u,p->caps[i]));
+    }
+    return d;
+}
+
+// `...`: the extra arguments of the function.
+static void gen_dots (Unit* u, Dst d) {
+    switch (d.kind) {
+        case D_NONE:
+            break;
+        case D_SLOT:
+            out(u, "a_cpy(&%s, (argc > %d) ? argv[%d] : a_nil());",
+                d.slot, u->npar, u->npar);
+            break;
+        case D_MULTI:
+            out(u, "%s = a_dots(argc, argv, %d);", d.n, u->npar);
             break;
     }
 }
@@ -1040,6 +1211,8 @@ static Opnd gen_expr (Unit* u, Expr* e) {
             return gen_uno(u, e);
         case E_BIN:
             return gen_bin(u, e);
+        case E_PROTO:
+            return gen_proto(u, e);
         default: {
             // compound: evaluated into a temporary
             Opnd t = opnd_tmp(u);
@@ -1085,11 +1258,12 @@ static void gen (Unit* u, Expr* e, Dst d) {
             gen_where(u, e, d);
             break;
         case E_DOTS:
+            gen_dots(u, d);
+            break;
         case E_NAT:
         case E_MET:
         case E_DEFER:
         case E_CATCH:
-        case E_PROTO:
         case E_ME:
             err(e->tk, "expression not implemented");
             break;
@@ -1106,17 +1280,17 @@ static void gen (Unit* u, Expr* e, Dst d) {
 char* coder_main (Expr* prog, Var** globals, int nglobals) {
     Unit u;
     memset(&u, 0, sizeof(u));
+    u.proto = PROTO_MAIN;
 
     // the value of the main block is discarded
     gen_block(&u, &prog->u.block.es, dst_none());
 
-    int n = (u.nslots > 0) ? u.nslots : 1;
     Buf c = { NULL, 0, 0 };
     buf_add(&c, "#include \"atmos.h\"\n\n");
 
     // top-level variables
     for (int i=0; i<nglobals; i++) {
-        buf_add(&c, xfmt("static AVal %s;\n", var_c(&u,globals[i])));
+        buf_add(&c, xfmt("static AVal %s;\n", var_raw(&u,globals[i])));
     }
     buf_add(&c, "\n");
 
@@ -1129,21 +1303,21 @@ char* coder_main (Expr* prog, Var** globals, int nglobals) {
     }
     buf_add(&c, "}\n\n");
 
-    buf_add(&c, "AStatus atm_main (void) {\n");
-    buf_add(&c, xfmt("    AVal L[%d];\n", n));
-    buf_add(&c, xfmt("    a_nils(L, %d);\n", n));
-    buf_add(&c, "    AStatus st = A_OK;\n");
-    buf_add(&c, "    int base = a_top;\n");
-    for (int i=0; i<u.ncnts; i++) {
-        buf_add(&c, xfmt("    int n%d = 0;\n", i));
-    }
+    // functions
+    buf_add(&c, DECLS.s ? DECLS.s : "");
+    buf_add(&c, "\n");
+    buf_add(&c, FUNCS.s ? FUNCS.s : "");
+
+    // main chunk
+    buf_add(&c, "AStatus atm_main (int argc, AVal* argv) {\n");
     buf_add(&c, "    consts_init();\n");
-    buf_add(&c, u.body.s ? u.body.s : "");
-    buf_add(&c, "    goto CL_0;\n");
-    buf_add(&c, "CL_0:\n");
-    buf_add(&c, xfmt("    a_clrs(L, %d);\n", n));
+    unit_emit(&u, &c);
+    buf_add(&c, "    if (st == A_RETURN) {\n");
+    buf_add(&c, "        st = A_OK;\n");
+    buf_add(&c, "        a_pay_clear();\n");
+    buf_add(&c, "    }\n");
     for (int i=nglobals-1; i>=0; i--) {
-        buf_add(&c, xfmt("    a_clr(&%s);\n", var_c(&u,globals[i])));
+        buf_add(&c, xfmt("    a_clr(&%s);\n", var_raw(&u,globals[i])));
     }
     buf_add(&c, xfmt("    a_clrs(K, %d);\n", KN));
     buf_add(&c, "    return st;\n");

@@ -1,0 +1,4 @@
+func f () { nil + 1 }
+func g () { f() ; print(:no) }
+g()
+print(:no)

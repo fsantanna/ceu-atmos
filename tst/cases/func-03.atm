@@ -1,0 +1,24 @@
+func f (v) {
+    if v > 0 {
+        [f(v - 1)]
+    } else {
+        0
+    }
+}
+X.print(f(2))
+func g (v) {
+    if v > 0 {
+        val x = g(v - 1)
+        [x]
+    } else {
+        0
+    }
+}
+X.print(g(3))
+func h (v) {
+    if v != 0 {
+        print(v)
+        h(v - 1)
+    }
+}
+h(3)

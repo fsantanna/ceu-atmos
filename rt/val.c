@@ -99,6 +99,9 @@ void a_free (AObj* o) {
             }
             break;
         }
+        case A_BOX:
+            a_dec(((ABox*)o)->v);
+            break;
         default:
             break;
     }
@@ -126,17 +129,37 @@ AVal a_func (AFn fn, int ncap) {
     return a_obj(&f->hdr);
 }
 
+AVal a_box (void) {
+    ABox* b = malloc(sizeof(ABox));
+    b->hdr.rc     = 1;
+    b->hdr.type   = A_BOX;
+    b->hdr.pinned = 0;
+    b->hdr.depth  = 0;
+    b->v = a_nil();
+    return a_obj(&b->hdr);
+}
+
+// Nested calls in progress: bounded to protect the C stack.
+#define A_CALLS_MAX 5000
+static int CALLS = 0;
+
 AStatus a_call (AVal f, int base) {
     if (f.type != A_FUNC) {
         a_settop(base);
         return a_error("invalid call : expected function : got %s",
             a_typename(f));
     }
+    if (CALLS >= A_CALLS_MAX) {
+        a_settop(base);
+        return a_error("stack overflow");
+    }
 
     // the function must outlive its own call
     a_inc(f);
     int argc = a_top - base;
+    CALLS++;
     AStatus st = ((AFunc*)f.u.o)->fn((AFunc*)f.u.o, argc, &a_stk[base]);
+    CALLS--;
     a_dec(f);
 
     if (st != A_OK) {
@@ -172,6 +195,7 @@ const char* a_typename (AVal v) {
         case A_XTASK: return "xtask";
         case A_TASKS: return "tasks";
         case A_NAT:   return "native";
+        case A_BOX:   return "box";
     }
     return "?";
 }

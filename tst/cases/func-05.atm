@@ -1,0 +1,13 @@
+func f (a, b, c) {
+    print(a, b, c)
+}
+f(1)
+f(1, 2, 3, 4)
+f()
+func g () { }
+print(g(), g(1, 2))
+print((func (x) { return(x, x) ; 99 })(5))
+func r () { return() }
+print(r(), 1)
+val k = func (x) { val y = x * 2 ; do { return(y) } ; 99 }
+print(k(21))

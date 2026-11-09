@@ -1,0 +1,1 @@
+func-err-01.atm : line 4 : near 'x' : undeclared variable

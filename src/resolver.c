@@ -20,6 +20,11 @@ static int    N     = 0;
 // Number of enclosing loops in the current function.
 static int LOOPS = 0;
 
+// Current function.
+Proto* PROTO_MAIN = NULL;
+static Proto* PROTO = NULL;
+static int    NPROTOS = 0;
+
 // Top-level variables of the main chunk.
 static Var** GLOBALS  = NULL;
 static int   NGLOBALS = 0;
@@ -58,8 +63,9 @@ static Var* declare (Tk tk, VarKind kind) {
     Var* v = xalloc(sizeof(Var));
     v->tk   = tk;
     v->kind = kind;
-    v->id   = ++N;
-    v->slot = -1;
+    v->id    = ++N;
+    v->slot  = -1;
+    v->proto = PROTO;
     SCOPE->vars = realloc(SCOPE->vars, (SCOPE->n+1) * sizeof(Var*));
     SCOPE->vars[SCOPE->n++] = v;
 
@@ -83,6 +89,133 @@ static Var* lookup (const char* id) {
         }
     }
     return NULL;
+}
+
+// A variable of an enclosing function is captured by every function
+// from the current one up to its owner. Static variables are not.
+static void capture (Var* v) {
+    if (v->csym!=NULL || v->global) {
+        return;
+    }
+    for (Proto* p=PROTO; p!=v->proto; p=p->up) {
+        int has = 0;
+        for (int i=0; i<p->ncaps; i++) {
+            has = has || (p->caps[i] == v);
+        }
+        if (!has) {
+            p->caps = realloc(p->caps, (p->ncaps+1) * sizeof(Var*));
+            p->caps[p->ncaps++] = v;
+        }
+        // a captured mutable variable is shared through a box
+        if (v->kind == V_VAR) {
+            v->boxed = 1;
+        }
+    }
+}
+
+static Proto* proto_new (int dots) {
+    Proto* p = xalloc(sizeof(Proto));
+    p->id   = NPROTOS++;
+    p->up   = PROTO;
+    p->dots = dots;
+    return p;
+}
+
+// `func f () {...}` declares `f` at the top level if it is unknown
+// where it appears. All such names are declared ahead, so functions
+// may refer to each other regardless of their order.
+static void hoist (Expr* e);
+
+static void hoist_list (List* l) {
+    for (int i=0; i<l->n; i++) {
+        hoist(l->v[i]);
+    }
+}
+
+static void hoist (Expr* e) {
+    if (e == NULL) {
+        return;
+    }
+    switch (e->tag) {
+        case E_INDEX:
+            hoist(e->u.index.t);
+            hoist(e->u.index.idx);
+            break;
+        case E_TABLE:
+            hoist_list(&e->u.table.ks);
+            hoist_list(&e->u.table.vs);
+            break;
+        case E_TAGGED:
+            hoist(e->u.tagged.e);
+            break;
+        case E_UNO:
+            hoist(e->u.uno.e);
+            break;
+        case E_BIN:
+            hoist(e->u.bin.e1);
+            hoist(e->u.bin.e2);
+            break;
+        case E_CALL:
+            hoist(e->u.call.f);
+            hoist_list(&e->u.call.es);
+            break;
+        case E_MET:
+            hoist(e->u.met.o);
+            break;
+        case E_PARENS:
+            hoist(e->u.parens.e);
+            break;
+        case E_LIST:
+            hoist_list(&e->u.list.es);
+            break;
+        case E_WHERE:
+            hoist_list(&e->u.where.dcls);
+            hoist(e->u.where.e);
+            break;
+        case E_DCL:
+            hoist(e->u.dcl.set);
+            break;
+        case E_SET: {
+            Expr* dst = e->u.set.dsts.v[0];
+            if (e->u.set.proto && dst->tag==E_ACC &&
+                lookup(dst->tk.str)==NULL)
+            {
+                declare(dst->tk, V_VAR);
+            }
+            hoist_list(&e->u.set.dsts);
+            hoist(e->u.set.src);
+            break;
+        }
+        case E_BLOCK:
+            hoist_list(&e->u.block.es);
+            break;
+        case E_DO:
+            hoist(e->u.xdo.blk);
+            break;
+        case E_DEFER:
+            hoist(e->u.defer.blk);
+            break;
+        case E_IFS:
+            hoist(e->u.ifs.head);
+            for (int i=0; i<e->u.ifs.n; i++) {
+                hoist(e->u.ifs.cases[i].cnd);
+                hoist(e->u.ifs.cases[i].body);
+            }
+            break;
+        case E_LOOP:
+            hoist(e->u.loop.itr);
+            hoist(e->u.loop.blk);
+            break;
+        case E_CATCH:
+            hoist(e->u.xcatch.cnd);
+            hoist(e->u.xcatch.blk);
+            break;
+        case E_PROTO:
+            hoist(e->u.proto.blk);
+            break;
+        default:
+            break;
+    }
 }
 
 static Special special (Expr* e) {
@@ -123,8 +256,13 @@ static void res (Expr* e) {
         case E_TAG:
         case E_NAT:
         case E_CLK:
-        case E_DOTS:
         case E_ME:
+            break;
+
+        case E_DOTS:
+            if (!PROTO->dots) {
+                err(e->tk, "invalid '...' : expected variadic function");
+            }
             break;
 
         case E_ACC:
@@ -135,6 +273,7 @@ static void res (Expr* e) {
             if (e->var == NULL) {
                 err(e->tk, "undeclared variable");
             }
+            capture(e->var);
             break;
 
         case E_INDEX:
@@ -277,6 +416,8 @@ static void res (Expr* e) {
             int loops = LOOPS;
             if (!e->u.proto.inl) {
                 LOOPS = 0;
+                e->proto = proto_new(e->u.proto.dots);
+                PROTO = e->proto;
             }
             scope_push();
             e->vars = xalloc(e->u.proto.n * sizeof(Var*));
@@ -285,6 +426,9 @@ static void res (Expr* e) {
             }
             res_block(e->u.proto.blk);
             scope_pop();
+            if (!e->u.proto.inl) {
+                PROTO = PROTO->up;
+            }
             LOOPS = loops;
             break;
         }
@@ -303,7 +447,12 @@ Var** resolver_main (Expr* prog, int* n) {
     }
 
     // main block: its variables are static
-    res_block(prog);
+    PROTO_MAIN = proto_new(1);
+    PROTO = PROTO_MAIN;
+    scope_push();
+    hoist(prog);
+    res_list(&prog->u.block.es);
+    scope_pop();
     scope_pop();
 
     *n = NGLOBALS;

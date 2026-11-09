@@ -12,9 +12,11 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 // Types from A_STR on are heap objects with an AObj header.
+// A_BOX is internal: it never reaches a program as a value.
 typedef enum {
     A_NIL, A_BOOL, A_NUM,
-    A_STR, A_TAB, A_FUNC, A_TASK, A_XTASK, A_TASKS, A_NAT
+    A_STR, A_TAB, A_FUNC, A_TASK, A_XTASK, A_TASKS, A_NAT,
+    A_BOX
 } AType;
 
 typedef struct AObj {
@@ -384,7 +386,31 @@ typedef struct AFunc {
     AVal caps[];
 } AFunc;
 
+#define A_FUNC_OF(v) ((AFunc*)(v).u.o)
+
+// New function with `ncap` empty captures (owned).
 AVal a_func (AFn fn, int ncap);
+
+// A captured mutable variable lives in a box, shared by the function
+// that declares it and by the closures that capture it.
+typedef struct ABox {
+    AObj hdr;
+    AVal v;
+} ABox;
+
+#define A_BOX_OF(x) ((ABox*)(x).u.o)
+
+// New box holding nil (owned).
+AVal a_box (void);
+
+// Pushes the extra arguments of a variadic function: those from
+// position `npar` on. Returns how many.
+static inline int a_dots (int argc, AVal* argv, int npar) {
+    for (int i=npar; i<argc; i++) {
+        a_pushc(argv[i]);
+    }
+    return (argc > npar) ? argc-npar : 0;
+}
 
 // Calls `f` with the arguments at `[base,a_top)`.
 // On success, the results replace the arguments at `[base,a_top)`.
@@ -534,7 +560,7 @@ AVal a_xcopy (AVal v);
 void    atm_init (int argc, char** argv);
 void    atm_quit (void);
 
-// Generated: runs the main chunk.
-AStatus atm_main (void);
+// Generated: runs the main chunk, with the program arguments.
+AStatus atm_main (int argc, AVal* argv);
 
 #endif

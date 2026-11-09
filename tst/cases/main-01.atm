@@ -1,0 +1,3 @@
+print(:1)
+return(10)
+print(:2)

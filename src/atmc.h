@@ -92,8 +92,9 @@ typedef enum {
     E_ME,
 } ETag;
 
-typedef struct Expr Expr;
-typedef struct Var  Var;
+typedef struct Expr  Expr;
+typedef struct Var   Var;
+typedef struct Proto Proto;
 
 typedef struct List {
     int    n;
@@ -131,6 +132,8 @@ struct Expr {
     Var*  var;
     // resolver: variables of a declaration, loop, or prototype
     Var** vars;
+    // resolver: function of a prototype
+    Proto* proto;
     union {
         struct { Expr* t; IdxKind kind; Expr* idx; }    index;
         // positional entries have a NULL key
@@ -195,13 +198,33 @@ struct Var {
     const char* csym;
     // top-level variable of the main chunk: static C variable
     int     global;
+    // function that declares it
+    Proto*  proto;
+    // mutable and captured by a closure: lives in a shared box
+    int     boxed;
     // coder: slot in `L`
     int     slot;
+};
+
+// A function being compiled: the main chunk, or a prototype that is
+// not expanded in place.
+struct Proto {
+    int    id;
+    // enclosing function (NULL for the main chunk)
+    Proto* up;
+    // variables of enclosing functions used here, in capture order
+    Var**  caps;
+    int    ncaps;
+    // accepts `...`
+    int    dots;
 };
 
 // Binds every access to its declaration and checks assignments.
 // Returns the top-level variables of the main chunk.
 Var** resolver_main (Expr* prog, int* n);
+
+// Function of the main chunk.
+extern Proto* PROTO_MAIN;
 
 ///////////////////////////////////////////////////////////////////////////////
 // CODER
