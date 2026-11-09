@@ -1,0 +1,10 @@
+loop i,v in [10,20,30] {
+    print(i,v)
+}
+val t = [1, x=10, 2, y=20]
+loop k,v in t {
+    print(k, v)
+}
+loop k in [a=1] { print(k) }
+loop k,v,z in [5] { print(k,v,z) }
+loop in [1,2] { print(:x) }

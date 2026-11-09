@@ -1,0 +1,11 @@
+val t = [a=1, b=2, c=3]
+loop k,v in t {
+    set t@k = nil
+}
+X.print(t)
+val u = [1,2,3]
+var n = 0
+loop i,v in u {
+    set n = n + v
+}
+print(n)

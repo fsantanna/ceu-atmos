@@ -80,6 +80,11 @@ AStatus a_error (const char* fmt, ...);
 // Message of the pending error.
 const char* a_error_msg (void);
 
+// Payload of the pending exit: the values of a break, escape, return,
+// or throw, kept outside the value stack while blocks unwind.
+extern struct AVal* a_pay;
+extern int          a_pay_n;
+
 ///////////////////////////////////////////////////////////////////////////////
 // MEMORY
 ///////////////////////////////////////////////////////////////////////////////
@@ -196,6 +201,31 @@ static inline void a_ret1 (AVal* dst, int base) {
     }
     a_settop(base);
 }
+
+///////////////////////////////////////////////////////////////////////////////
+// PAYLOAD
+///////////////////////////////////////////////////////////////////////////////
+
+// Releases the payload.
+void a_pay_clear (void);
+
+// Appends an owned value.
+void a_pay_add (AVal v);
+
+// Appends a borrowed value.
+static inline void a_pay_addc (AVal v) {
+    a_inc(v);
+    a_pay_add(v);
+}
+
+// Appends the value of a slot, emptying it.
+static inline void a_pay_addm (AVal* src) {
+    a_pay_add(*src);
+    *src = a_nil();
+}
+
+// Moves value `i` of the payload (or nil) into a slot.
+void a_pay_take (AVal* dst, int i);
 
 ///////////////////////////////////////////////////////////////////////////////
 // STRINGS
@@ -399,6 +429,15 @@ static inline int a_deq (AVal a, AVal b) {
 
 // v ?> t (or v !> t, if `neg`)
 AStatus a_in (AVal* dst, AVal v, AVal t, int neg);
+
+// Advances an iteration, with the cursor in `pos` (initially nil):
+//  - table: its pairs, array part first
+//  - number n: 0..n-1
+//  - number a, with `lim` b: a..b
+//  - nil: 0, 1, ...
+//  - function: its results, until the first is nil
+// Sets `k` to nil at the end.
+AStatus a_next (AVal it, AVal lim, AVal* pos, AVal* k, AVal* v);
 
 // String representation, as `print` shows it (owned).
 AVal a_tostring (AVal v);

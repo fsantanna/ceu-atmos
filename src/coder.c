@@ -298,7 +298,9 @@ static Opnd gen_acc (Unit* u, Expr* e) {
 
 // Sequence of expressions in a new block. Its value is the value of
 // the last expression, moved out before the block is cleaned up.
-static Opnd gen_block (Unit* u, List* es) {
+// As the body of a loop, it stops a break: the payload becomes the
+// value in `brk`, and control goes to the end label `loop`.
+static Opnd gen_block_x (Unit* u, List* es, int loop, const char* brk) {
     Opnd d = opnd_tmp(u);
 
     int up = u->cleanup;
@@ -320,11 +322,131 @@ static Opnd gen_block (Unit* u, List* es) {
     if (u->nslots > lo) {
         out(u, "    a_clrs(&L[%d], %d);", lo, u->nslots-lo);
     }
+    if (loop > 0) {
+        out(u, "    if (st == A_BREAK) {");
+        out(u, "        st = A_OK;");
+        out(u, "        a_pay_take(&%s, 0);", brk);
+        out(u, "        a_pay_clear();");
+        out(u, "        goto LE_%d;", loop);
+        out(u, "    }");
+    }
     out(u, "    if (st != A_OK) goto CL_%d;", up);
     out(u, "}");
 
     u->cleanup = up;
     return d;
+}
+
+static Opnd gen_block (Unit* u, List* es) {
+    return gen_block_x(u, es, 0, NULL);
+}
+
+// loop {...}  |  loop i {...}  |  loop k,v in e {...}
+// Its value is nil, or the value of a break.
+static Opnd gen_loop (Unit* u, Expr* e) {
+    Opnd d = opnd_tmp(u);
+    int iter = (e->u.loop.n > 0) || (e->u.loop.itr != NULL);
+
+    // iterator, limit of a range, cursor
+    Opnd it  = opnd_c(NULL);
+    Opnd lim = opnd_c(NULL);
+    Opnd pos = opnd_c(NULL);
+    const char* k = NULL;
+    const char* v = NULL;
+    if (iter) {
+        it  = opnd_tmp(u);
+        lim = opnd_tmp(u);
+        pos = opnd_tmp(u);
+        Expr* itr = e->u.loop.itr;
+        if (itr!=NULL && itr->tag==E_LIST && itr->u.list.es.n==2) {
+            // loop i in (a,b)
+            opnd_mov(u, gen_expr(u,itr->u.list.es.v[0]), it.c);
+            opnd_mov(u, gen_expr(u,itr->u.list.es.v[1]), lim.c);
+        } else if (itr != NULL) {
+            opnd_mov(u, gen_expr(u,itr), it.c);
+        }
+        k = (e->u.loop.n > 0) ? var_c(u,e->vars[0]) : opnd_tmp(u).c;
+        v = (e->u.loop.n > 1) ? var_c(u,e->vars[1]) : opnd_tmp(u).c;
+    }
+
+    int end = ++u->nlabels;
+    out(u, "while (1) {");
+    u->ind++;
+    if (iter) {
+        out_try(u, "a_next(%s, %s, &%s, &%s, &%s)", it.c, lim.c, pos.c, k, v);
+        out(u, "if (%s.type == A_NIL) break;", k);
+    }
+    opnd_rel(u, gen_block_x(u, &e->u.loop.blk->u.block.es, end, d.c));
+    u->ind--;
+    out(u, "}");
+    out0(u, "LE_%d: ;", end);
+
+    if (iter) {
+        opnd_rel(u, it);
+        opnd_rel(u, lim);
+        opnd_rel(u, pos);
+    }
+    return d;
+}
+
+// break(...)  until(c,...)  while(c,...)
+static Opnd gen_break (Unit* u, Expr* e, List* args) {
+    Opnd* xs = xalloc((args->n + 1) * sizeof(Opnd));
+    for (int i=0; i<args->n; i++) {
+        xs[i] = gen_expr(u, args->v[i]);
+    }
+
+    // values of the break, from argument `fr` on
+    int fr = (e->u.call.sp == SP_BREAK) ? 0 : 1;
+    if (e->u.call.sp!=SP_BREAK && args->n==0) {
+        err(e->tk, "expected condition");
+    }
+
+    if (e->u.call.sp == SP_UNTIL) {
+        out(u, "if (a_truthy(%s)) {", xs[0].c);
+    } else if (e->u.call.sp == SP_WHILE) {
+        out(u, "if (!a_truthy(%s)) {", xs[0].c);
+    } else {
+        out(u, "{");
+    }
+    u->ind++;
+    out(u, "a_pay_clear();");
+    if (e->u.call.sp==SP_UNTIL && args->n>1) {
+        // until(c, v, ...) breaks with `v, ...` if `v` holds, else `c`
+        out(u, "if (!a_truthy(%s)) {", xs[1].c);
+        out(u, "    a_pay_addc(%s);", xs[0].c);
+        out(u, "} else {");
+        u->ind++;
+    }
+    if (e->u.call.sp==SP_UNTIL && args->n==1) {
+        out(u, "a_pay_addc(%s);", xs[0].c);
+    }
+    for (int i=fr; i<args->n; i++) {
+        out(u, "a_pay_addc(%s);", xs[i].c);
+    }
+    if (e->u.call.sp==SP_UNTIL && args->n>1) {
+        u->ind--;
+        out(u, "}");
+    }
+    out(u, "st = A_BREAK;");
+    out(u, "goto CL_%d;", u->cleanup);
+    u->ind--;
+    out(u, "}");
+
+    for (int i=0; i<args->n; i++) {
+        opnd_rel(u, xs[i]);
+    }
+    return opnd_c("a_nil()");
+}
+
+// e where { x = e1 ; y = e2 }
+static Opnd gen_where (Unit* u, Expr* e) {
+    List es = { 0, NULL };
+    for (int i=0; i<e->u.where.dcls.n; i++) {
+        list_add(&es, e->u.where.dcls.v[i]);
+    }
+    list_add(&es, e->u.where.e);
+    return gen_block(u, &es);
 }
 
 // Lambda expanded in place: binds its first parameter to `arg` and
@@ -617,6 +739,10 @@ static Opnd gen_call (Unit* u, Expr* e) {
             opnd_rel(u, gen_expr(u,args.v[i]));
         }
         return opnd_c("a_nil()");
+    } else if (e->u.call.sp==SP_BREAK || e->u.call.sp==SP_UNTIL ||
+               e->u.call.sp==SP_WHILE)
+    {
+        return gen_break(u, e, &args);
     } else if (e->u.call.sp != SP_NONE) {
         err(e->tk, "statement not implemented");
     }
@@ -651,6 +777,9 @@ static Opnd gen_expr (Unit* u, Expr* e) {
                 "a_bool(1)" : "a_bool(0)");
         case E_NUM:
             return opnd_c(xfmt("a_num(%.17g)", strtod(e->tk.str,NULL)));
+        case E_CLK:
+            // a clock is a number of microseconds
+            return opnd_c(xfmt("a_num(%.17g)", e->tk.clk));
         case E_STR: {
             // only quoted single-line literals have escapes
             int len = e->tk.len;
@@ -687,6 +816,10 @@ static Opnd gen_expr (Unit* u, Expr* e) {
             return gen_block(u, &e->u.block.es);
         case E_IFS:
             return gen_ifs(u, e);
+        case E_LOOP:
+            return gen_loop(u, e);
+        case E_WHERE:
+            return gen_where(u, e);
         case E_DO:
             if (e->u.xdo.esc) {
                 err(e->tk, "escape : not implemented");

@@ -17,6 +17,9 @@ typedef struct Scope {
 static Scope* SCOPE = NULL;
 static int    N     = 0;
 
+// Number of enclosing loops in the current function.
+static int LOOPS = 0;
+
 // Top-level variables of the main chunk.
 static Var** GLOBALS  = NULL;
 static int   NGLOBALS = 0;
@@ -161,8 +164,21 @@ static void res (Expr* e) {
 
         case E_CALL:
             e->u.call.sp = special(e->u.call.f);
-            if (e->u.call.sp == SP_NONE) {
-                res(e->u.call.f);
+            switch (e->u.call.sp) {
+                case SP_NONE:
+                    res(e->u.call.f);
+                    break;
+                case SP_BREAK:
+                case SP_UNTIL:
+                case SP_WHILE:
+                    if (LOOPS == 0) {
+                        err(e->u.call.f->tk,
+                            "invalid %s : expected enclosing loop",
+                            e->u.call.f->tk.str);
+                    }
+                    break;
+                default:
+                    break;
             }
             res_list(&e->u.call.es);
             break;
@@ -245,7 +261,9 @@ static void res (Expr* e) {
             for (int i=0; i<e->u.loop.n; i++) {
                 e->vars[i] = declare(e->u.loop.ids[i], V_VAL);
             }
+            LOOPS++;
             res_block(e->u.loop.blk);
+            LOOPS--;
             scope_pop();
             break;
 
@@ -254,7 +272,12 @@ static void res (Expr* e) {
             res_block(e->u.xcatch.blk);
             break;
 
-        case E_PROTO:
+        case E_PROTO: {
+            // a loop does not reach into a function
+            int loops = LOOPS;
+            if (!e->u.proto.inl) {
+                LOOPS = 0;
+            }
             scope_push();
             e->vars = xalloc(e->u.proto.n * sizeof(Var*));
             for (int i=0; i<e->u.proto.n; i++) {
@@ -262,7 +285,9 @@ static void res (Expr* e) {
             }
             res_block(e->u.proto.blk);
             scope_pop();
+            LOOPS = loops;
             break;
+        }
     }
 }
 

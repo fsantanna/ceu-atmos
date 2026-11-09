@@ -1,0 +1,17 @@
+val t = []
+loop i in 3 {
+    loop j in 3 {
+        if j > i { break() }
+        set t@+ = (i*10) + j
+    }
+}
+X.print(t)
+val r = loop i {
+    val s = "v" ++ i
+    do {
+        if i == 3 {
+            break(s)
+        }
+    }
+}
+print(r)

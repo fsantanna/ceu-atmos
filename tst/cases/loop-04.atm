@@ -1,0 +1,25 @@
+var i = 0
+val x = loop {
+    set i = i + 1
+    until(i == 5)
+}
+print(i, x)
+set i = 0
+val y = loop {
+    set i = i + 1
+    until(i == 5, :ok)
+}
+val z = loop {
+    set i = i + 1
+    until(i == 7, false)
+}
+print(y, z)
+val w = loop {
+    set i = i + 1
+    while(i < 10)
+}
+val v = loop {
+    set i = i + 1
+    while(i < 12, :done)
+}
+print(i, w, v)

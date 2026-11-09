@@ -1,0 +1,8 @@
+val x = (2 * z) where {
+    y = 10
+    z = y+1
+}
+print(x)
+print((a ++ b) where { a = "x" ; b = a ++ "y" })
+val v = 10
+print(v + w where { w = v })

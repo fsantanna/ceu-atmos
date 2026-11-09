@@ -1,0 +1,11 @@
+var i = 0
+loop {
+    set i = i + 1
+    if i == 3 {
+        break()
+    }
+}
+print(i)
+val x = loop { break(10) }
+val y = loop { break() }
+print(x, y)

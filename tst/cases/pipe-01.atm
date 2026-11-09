@@ -1,0 +1,10 @@
+10 -> print
+print <- 20
+print <-- "a" ++ "b"
+(1 + 2) --> print
+30 -> print(40)
+print(50) <- 60
+print <-- tostring <-- 70
+print <-- (1, 2)
+print <-- type <-- []
+[1,2] -> X.print

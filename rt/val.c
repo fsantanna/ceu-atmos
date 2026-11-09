@@ -11,6 +11,10 @@
 AVal* a_stk = NULL;
 int   a_top = 0;
 
+AVal* a_pay   = NULL;
+int   a_pay_n = 0;
+
+static int  PAY_CAP = 0;
 static char ERR[512];
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -27,6 +31,33 @@ AStatus a_error (const char* fmt, ...) {
 
 const char* a_error_msg (void) {
     return ERR;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// PAYLOAD
+///////////////////////////////////////////////////////////////////////////////
+
+void a_pay_clear (void) {
+    while (a_pay_n > 0) {
+        a_dec(a_pay[--a_pay_n]);
+    }
+}
+
+void a_pay_add (AVal v) {
+    if (a_pay_n == PAY_CAP) {
+        PAY_CAP = (PAY_CAP == 0) ? 8 : PAY_CAP*2;
+        a_pay = realloc(a_pay, PAY_CAP * sizeof(AVal));
+    }
+    a_pay[a_pay_n++] = v;
+}
+
+void a_pay_take (AVal* dst, int i) {
+    if (i < a_pay_n) {
+        a_set(dst, a_pay[i]);
+        a_pay[i] = a_nil();
+    } else {
+        a_clr(dst);
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -241,5 +272,9 @@ void atm_quit (void) {
     a_settop(0);
     free(a_stk);
     a_stk = NULL;
+    a_pay_clear();
+    free(a_pay);
+    a_pay = NULL;
+    PAY_CAP = 0;
     a_str_quit();
 }

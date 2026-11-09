@@ -129,3 +129,59 @@ AStatus a_cat (AVal* dst, AVal a, AVal b) {
     a_set(dst, ret);
     return A_OK;
 }
+
+AStatus a_next (AVal it, AVal lim, AVal* pos, AVal* k, AVal* v) {
+    double p = (pos->type == A_NUM) ? pos->u.n : 0;
+    switch (it.type) {
+        case A_TAB: {
+            uint32_t i = (uint32_t) p;
+            AVal x, y;
+            if (a_tab_next(A_TAB_OF(it), &i, &x, &y)) {
+                a_cpy(k, x);
+                a_cpy(v, y);
+            } else {
+                a_clr(k);
+                a_clr(v);
+            }
+            *pos = a_num(i);
+            return A_OK;
+        }
+        case A_NIL:
+            a_set(k, a_num(p));
+            *pos = a_num(p + 1);
+            return A_OK;
+        case A_NUM: {
+            int end;
+            double x;
+            if (lim.type == A_NUM) {
+                x   = it.u.n + p;
+                end = (x > lim.u.n);
+            } else if (lim.type == A_NIL) {
+                x   = p;
+                end = (p >= it.u.n);
+            } else {
+                return a_error("invalid loop : expected number : got %s",
+                    a_typename(lim));
+            }
+            a_set(k, end ? a_nil() : a_num(x));
+            *pos = a_num(p + 1);
+            return A_OK;
+        }
+        case A_FUNC: {
+            int base = a_top;
+            AStatus st = a_call(it, base);
+            if (st != A_OK) {
+                return st;
+            }
+            a_set(k, (a_top > base) ? a_stk[base] : a_nil());
+            a_set(v, (a_top > base+1) ? a_stk[base+1] : a_nil());
+            for (int i=base+2; i<a_top; i++) {
+                a_dec(a_stk[i]);
+            }
+            a_top = base;
+            return A_OK;
+        }
+        default:
+            return a_error("invalid loop : unexpected %s", a_typename(it));
+    }
+}
