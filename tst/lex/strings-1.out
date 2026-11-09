@@ -1,0 +1,7 @@
+1 1 str xx
+1 1 str zzz
+1 1 str 
+1 1 str \n\z10
+1 1 str \d
+1 1 str  s 
+strings-1.atm : line 1 : near ''' : unterminated string

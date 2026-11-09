@@ -1,0 +1,8 @@
+1 1 num 10
+1 1 num 0xF2
+1 1 num 1.5
+1 1 num 35
+1 1 num 0xff
+1 1 num 0xEaA
+1 1 num 3.0
+numbers-1.atm : line 1 : near '1.5F' : invalid number

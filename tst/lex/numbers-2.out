@@ -1,0 +1,8 @@
+1 1 num 3.1416
+1 1 num 3.6e-2
+1 1 num 0.4E1
+1 1 num 34e1
+1 1 num 0x0.1E
+1 1 num 0xA3p-4
+1 1 num 0X1.9F2D8P+1
+numbers-2.atm : line 1 : near '0b12' : invalid number

@@ -1,0 +1,7 @@
+1 1 id x
+1 1 op -
+1 1 id y
+2 4 key var
+4 10 key val
+6 16 op -
+7 17 eof <eof>
