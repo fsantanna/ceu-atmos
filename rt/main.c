@@ -15,6 +15,9 @@ int main (int argc, char** argv) {
     AStatus st = atm_main(a_top-base, &a_stk[base]);
     a_settop(base);
     fflush(stdout);
+    if (st == A_ESCAPE) {
+        st = a_escape_err();
+    }
     if (st != A_OK) {
         a_error_dump();
     }

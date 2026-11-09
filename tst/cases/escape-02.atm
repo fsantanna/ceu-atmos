@@ -1,0 +1,25 @@
+val x = do :X {
+    escape <- :X [10]
+}
+X.print(x)
+do :X.Z {
+    do :X.Y {
+        escape(:X.Z)
+        print(99)
+    }
+    print(99)
+}
+print(10)
+print(do :X { escape(:X) }, do :X { escape(:X.Y) })
+val v = do :X {
+    escape(:X [x=10])
+    print("never executes")
+}
+print(v.x)
+val p,q =
+    do :X {
+        do :Y {
+            escape(:X, "a", "b")
+        }
+    }
+print(p, q)

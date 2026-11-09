@@ -82,6 +82,20 @@ AStatus a_error (const char* fmt, ...);
 // Raises the payload as an error.
 AStatus a_throw (void);
 
+// Raises the payload as an escape: a tag (or tagged table) to match a
+// `do :X` block, then the values of the block.
+AStatus a_escape (void);
+
+// The pending escape matches the tag of a block.
+int a_escape_is (AVal tag);
+
+// Leaves only the values of the escape in the payload: all but the
+// tag, or the tag itself if it came alone.
+void a_escape_vals (void);
+
+// Turns an escape that no block matched into an error.
+AStatus a_escape_err (void);
+
 // First value of the pending error, as a string.
 const char* a_error_msg (void);
 

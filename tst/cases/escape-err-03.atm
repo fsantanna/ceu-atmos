@@ -1,0 +1,2 @@
+func f () { escape(:X) }
+f()

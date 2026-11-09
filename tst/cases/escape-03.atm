@@ -1,0 +1,21 @@
+func f () {
+    escape(:Out, :dyn)
+}
+print(do :Out { f() ; :no })
+val r = loop i {
+    do :X {
+        if i == 2 {
+            break(i)
+        }
+        escape(:X)
+    }
+}
+print(r)
+func g () {
+    do :A {
+        return(:ret)
+    }
+}
+print(g())
+print(catch true { do :X { throw(:E) } })
+print(do :X { catch true { escape(:X, :through) } ; :no })

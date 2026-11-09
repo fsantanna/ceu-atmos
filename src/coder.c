@@ -626,13 +626,23 @@ static Opnd gen_index (Unit* u, Expr* e) {
 //  - break: the body of a loop
 //  - return: the body of a lambda expanded in place
 //  - error: the body of a catch, which only diverts to its label
+//  - escape: a `do :X` block, if the tag matches constant `esck`
 typedef struct Hnd {
     int brk;
     Dst brkd;
     int ret;
     Dst retd;
     int err;
+    int esc;
+    int esck;
+    Dst escd;
 } Hnd;
+
+static Hnd hnd_none (void) {
+    Hnd h;
+    memset(&h, 0, sizeof(h));
+    return h;
+}
 
 static void gen_block_x (Unit* u, List* es, Dst d, Hnd h) {
     int up = u->cleanup;
@@ -664,6 +674,17 @@ static void gen_block_x (Unit* u, List* es, Dst d, Hnd h) {
         u->ind--;
         out(u, "}");
     }
+    if (h.esc > 0) {
+        out(u, "if (st==A_ESCAPE && a_escape_is(K[%d])) {", h.esck);
+        u->ind++;
+        out(u, "st = A_OK;");
+        out(u, "a_settop(base);");
+        out(u, "a_escape_vals();");
+        store_pay(u, h.escd);
+        out(u, "goto LE_%d;", h.esc);
+        u->ind--;
+        out(u, "}");
+    }
     if (h.ret > 0) {
         out(u, "if (st == A_RETURN) {");
         u->ind++;
@@ -688,8 +709,23 @@ static void gen_block_x (Unit* u, List* es, Dst d, Hnd h) {
 }
 
 static void gen_block (Unit* u, List* es, Dst d) {
-    Hnd h = { 0, dst_none(), 0, dst_none(), 0 };
+    gen_block_x(u, es, d, hnd_none());
+}
+
+// do :X {...}: stops a matching escape, whose values become the
+// values of the block.
+static void gen_do (Unit* u, Expr* e, Dst d) {
+    List* es = &e->u.xdo.blk->u.block.es;
+    if (!e->u.xdo.esc) {
+        gen_block(u, es, d);
+        return;
+    }
+    Hnd h = hnd_none();
+    h.esc  = ++u->nlabels;
+    h.esck = konst(e->tk.str+1, e->tk.len-1);
+    h.escd = d;
     gen_block_x(u, es, d, h);
+    out0(u, "LE_%d: ;", h.esc);
 }
 
 // e where { x = e1 ; y = e2 }
@@ -833,7 +869,9 @@ static void gen_inline (Unit* u, Expr* p, Opnd arg, Dst d) {
     }
     // a return inside the lambda gives its value
     int end = ++u->nlabels;
-    Hnd h = { 0, dst_none(), end, d, 0 };
+    Hnd h = hnd_none();
+    h.ret  = end;
+    h.retd = d;
     gen_block_x(u, &p->u.proto.blk->u.block.es, d, h);
     out0(u, "LE_%d: ;", end);
 }
@@ -938,7 +976,9 @@ static void gen_loop (Unit* u, Expr* e, Dst d) {
         out_try(u, "a_next(%s, %s, &%s, &%s, &%s)", it.c, lim.c, pos.c, k, v);
         out(u, "if (%s.type == A_NIL) break;", k);
     }
-    Hnd h = { end, d, 0, dst_none(), 0 };
+    Hnd h = hnd_none();
+    h.brk  = end;
+    h.brkd = d;
     gen_block_x(u, &e->u.loop.blk->u.block.es, dst_none(), h);
     u->ind--;
     out(u, "}");
@@ -1011,7 +1051,8 @@ static void gen_catch (Unit* u, Expr* e, Dst d) {
     int end = ++u->nlabels;
 
     Dst m = (d.kind == D_MULTI) ? dst_multi(u) : dst_none();
-    Hnd h = { 0, dst_none(), 0, dst_none(), lc };
+    Hnd h = hnd_none();
+    h.err = lc;
     gen_block_x(u, &e->u.xcatch.blk->u.block.es, m, h);
 
     // no error
@@ -1085,6 +1126,15 @@ static void gen_call (Unit* u, Expr* e, Dst d) {
             gen_args(u, &e->u.call.es, m.n, NULL);
             out(u, "a_pay_pull(%s);", m.n);
             out(u, "st = A_RETURN;");
+            out(u, "goto CL_%d;", u->cleanup);
+            store_void(u, d);
+            return;
+        }
+        case SP_ESCAPE: {
+            Dst m = dst_multi(u);
+            gen_args(u, &e->u.call.es, m.n, NULL);
+            out(u, "a_pay_pull(%s);", m.n);
+            out(u, "st = a_escape();");
             out(u, "goto CL_%d;", u->cleanup);
             store_void(u, d);
             return;
@@ -1317,10 +1367,7 @@ static void gen (Unit* u, Expr* e, Dst d) {
             gen_block(u, &e->u.block.es, d);
             break;
         case E_DO:
-            if (e->u.xdo.esc) {
-                err(e->tk, "escape : not implemented");
-            }
-            gen_block(u, &e->u.xdo.blk->u.block.es, d);
+            gen_do(u, e, d);
             break;
         case E_IFS:
             gen_ifs(u, e, d);

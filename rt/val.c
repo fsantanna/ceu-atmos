@@ -38,6 +38,37 @@ AStatus a_throw (void) {
     return A_ERROR;
 }
 
+AStatus a_escape (void) {
+    TRACE_THROW = a_lin;
+    TRACE_N = 0;
+    TRACE_MORE = 0;
+    return A_ESCAPE;
+}
+
+int a_escape_is (AVal tag) {
+    return a_is((a_pay_n > 0) ? a_pay[0] : a_nil(), tag);
+}
+
+void a_escape_vals (void) {
+    if (a_pay_n > 1) {
+        a_dec(a_pay[0]);
+        for (int i=1; i<a_pay_n; i++) {
+            a_pay[i-1] = a_pay[i];
+        }
+        a_pay_n--;
+    }
+}
+
+AStatus a_escape_err (void) {
+    // keeps the line of the escape
+    a_pay_add(a_nil());
+    for (int i=a_pay_n-1; i>0; i--) {
+        a_pay[i] = a_pay[i-1];
+    }
+    a_pay[0] = a_strz("invalid escape : no matching block");
+    return A_ERROR;
+}
+
 AStatus a_error (const char* fmt, ...) {
     va_list ap;
     va_start(ap, fmt);

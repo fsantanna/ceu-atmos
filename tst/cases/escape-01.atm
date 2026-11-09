@@ -1,0 +1,20 @@
+val x = do :X {
+    do :Y {
+        escape(:X,10)
+    }
+}
+X.print(x)
+val y = do :X {
+    var x
+    set x = [0]
+    escape(:X,x)
+}
+X.print(y)
+val a,b = do :X {
+    escape(:X,10,20)
+}
+print(a,b)
+val c,d = do :X {
+    (10,20)
+}
+print(c,d)
