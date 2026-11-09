@@ -1,0 +1,6 @@
+0
+2
+1
+==> ERROR:
+ v  defer-err-03.atm:2 (throw)
+==> invalid call : expected function : got nil

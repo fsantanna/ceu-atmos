@@ -1,0 +1,19 @@
+func f () {
+    catch :X {
+        catch :X.Z {
+            defer {
+                print "ok"
+            }
+            throw :X.Y
+        }
+    }
+}
+print(f())
+print(catch true {
+    defer { throw(:second) }
+    throw(:first)
+})
+print(catch true {
+    defer { throw(:only) }
+    :fine
+})

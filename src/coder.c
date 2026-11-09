@@ -60,7 +60,15 @@ typedef struct Unit {
     int cleanup;
     // extra indentation of the generated lines
     int ind;
+    // defers of the enclosing block: flag slot and body
+    struct Defer* defs;
+    int ndefs;
 } Unit;
+
+typedef struct Defer {
+    int   flag;
+    Expr* e;
+} Defer;
 
 // Appends one line at column zero (labels).
 static void out0 (Unit* u, const char* fmt, ...) {
@@ -345,8 +353,9 @@ static void store_pay (Unit* u, Dst d) {
 // EXPRESSIONS
 ///////////////////////////////////////////////////////////////////////////////
 
-static void gen      (Unit* u, Expr* e, Dst d);
-static Opnd gen_expr (Unit* u, Expr* e);
+static void gen       (Unit* u, Expr* e, Dst d);
+static Opnd gen_expr  (Unit* u, Expr* e);
+static void gen_block (Unit* u, List* es, Dst d);
 
 // C expression of the raw storage of a variable: a static variable,
 // a slot of its function, or a capture of the current function.
@@ -648,6 +657,12 @@ static void gen_block_x (Unit* u, List* es, Dst d, Hnd h) {
     int up = u->cleanup;
     int lo = u->nslots;
     u->cleanup = ++u->nlabels;
+    int cl = u->cleanup;
+
+    Defer* defs  = u->defs;
+    int    ndefs = u->ndefs;
+    u->defs  = NULL;
+    u->ndefs = 0;
 
     out(u, "{");
     u->ind++;
@@ -659,8 +674,44 @@ static void gen_block_x (Unit* u, List* es, Dst d, Hnd h) {
         store_void(u, d);
     }
     u->ind--;
-    out0(u, "CL_%d:", u->cleanup);
+    out0(u, "CL_%d:", cl);
     u->ind++;
+
+    // defers that were reached run in reverse order, whatever the
+    // exit. The pending exit is set aside meanwhile, and replaced if
+    // a defer exits itself.
+    Defer* mine = u->defs;
+    int   nmine = u->ndefs;
+    for (int i=nmine-1; i>=0; i--) {
+        int id = ++u->nlabels;
+        out(u, "if (a_truthy(L[%d])) {", mine[i].flag);
+        u->ind++;
+        out(u, "AStatus st_%d = st;", id);
+        out(u, "APay pay_%d;", id);
+        out(u, "a_pay_save(&pay_%d);", id);
+        out(u, "st = A_OK;");
+        out(u, "{");
+        u->ind++;
+        // values of the block may be pending on the stack
+        out(u, "int base = a_top;");
+        u->cleanup = id;
+        gen_block(u, &mine[i].e->u.defer.blk->u.block.es, dst_none());
+        u->ind--;
+        out0(u, "CL_%d: ;", id);
+        out(u, "}");
+        out(u, "if (st == A_OK) {");
+        out(u, "    st = st_%d;", id);
+        out(u, "    a_pay_restore(&pay_%d);", id);
+        out(u, "} else {");
+        out(u, "    a_pay_drop(&pay_%d);", id);
+        out(u, "}");
+        u->ind--;
+        out(u, "}");
+    }
+    u->cleanup = cl;
+    u->defs  = defs;
+    u->ndefs = ndefs;
+
     if (u->nslots > lo) {
         out(u, "a_clrs(&L[%d], %d);", lo, u->nslots-lo);
     }
@@ -726,6 +777,16 @@ static void gen_do (Unit* u, Expr* e, Dst d) {
     h.escd = d;
     gen_block_x(u, es, d, h);
     out0(u, "LE_%d: ;", h.esc);
+}
+
+// defer {...}: registers the body to run when the block exits.
+static void gen_defer (Unit* u, Expr* e) {
+    int flag = u->nslots++;
+    u->defs = realloc(u->defs, (u->ndefs+1) * sizeof(Defer));
+    u->defs[u->ndefs].flag = flag;
+    u->defs[u->ndefs].e    = e;
+    u->ndefs++;
+    out(u, "a_set(&L[%d], a_bool(1));", flag);
 }
 
 // e where { x = e1 ; y = e2 }
@@ -1384,9 +1445,12 @@ static void gen (Unit* u, Expr* e, Dst d) {
         case E_CATCH:
             gen_catch(u, e, d);
             break;
+        case E_DEFER:
+            gen_defer(u, e);
+            store_void(u, d);
+            break;
         case E_NAT:
         case E_MET:
-        case E_DEFER:
         case E_ME:
             err(e->tk, "expression not implemented");
             break;

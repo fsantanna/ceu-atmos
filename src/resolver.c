@@ -373,9 +373,14 @@ static void res (Expr* e) {
             res_block(e->u.xdo.blk);
             break;
 
-        case E_DEFER:
+        case E_DEFER: {
+            // a loop does not reach into a defer
+            int loops = LOOPS;
+            LOOPS = 0;
             res_block(e->u.defer.blk);
+            LOOPS = loops;
             break;
+        }
 
         case E_IFS:
             res(e->u.ifs.head);

@@ -1,0 +1,7 @@
+do {
+    defer {
+        print(10)
+    }
+    throw(:X)
+    print(99)
+}

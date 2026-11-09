@@ -1,0 +1,4 @@
+val x = nil
+defer { print(:1) ; x() ; print(:no) }
+defer { print(:2) }
+print(:0)

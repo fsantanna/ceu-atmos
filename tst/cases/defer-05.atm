@@ -1,0 +1,23 @@
+var n = 0
+do {
+    if false {
+        defer { print(:no) }
+    }
+    defer { set n = n + 1 }
+    do {
+        defer { set n = n + 10 }
+    }
+    print(n)
+}
+print(n)
+func g () {
+    val t = []
+    defer { set t@+ = :late }
+    set t@+ = :early
+    t
+}
+X.print(g())
+do {
+    return(1)
+    defer { print(:unreached) }
+}

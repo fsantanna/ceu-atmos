@@ -1,0 +1,23 @@
+func f (x) {
+    defer { print(:f, x) }
+    if x == 1 {
+        return(:one)
+    }
+    :other
+}
+print(f(1))
+print(f(2))
+loop i in 3 {
+    defer { print(:iter, i) }
+    if i == 1 {
+        break()
+    }
+}
+print(do :X {
+    defer { print(:esc) }
+    escape(:X, :done)
+})
+print(catch true {
+    defer { print(:thr) }
+    throw(:E)
+})
