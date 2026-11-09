@@ -72,8 +72,26 @@ typedef enum {
     E_WHERE,
     // val x, y = e
     E_DCL,
+    // set x, y = e
+    E_SET,
     // { e1 ; e2 }
     E_BLOCK,
+    // do :X {...}  test {...}
+    E_DO,
+    // defer {...}
+    E_DEFER,
+    // if  ifs  match
+    E_IFS,
+    // loop {...}  loop i {...}  loop k,v in e {...}
+    E_LOOP,
+    // catch e {...}
+    E_CATCH,
+    // func (...) {...}  task (...) {...}  \{...}
+    E_PROTO,
+    // return(...)
+    E_RETURN,
+    // task (the running task)
+    E_ME,
 } ETag;
 
 typedef struct Expr Expr;
@@ -87,6 +105,16 @@ typedef struct List {
 typedef enum {
     IDX_EXPR, IDX_LAST, IDX_NEXT
 } IdxKind;
+
+// One case of an if/ifs/match.
+typedef struct Case {
+    // condition, or NULL for `else`
+    Expr* cnd;
+    // match only: the condition is a lambda applied to the head
+    int   test;
+    // block, expression, or lambda that receives the tested value
+    Expr* body;
+} Case;
 
 struct Expr {
     ETag tag;
@@ -108,7 +136,18 @@ struct Expr {
         struct { List dcls; Expr* e; }                  where;
         // tk is val, var, or pin
         struct { int n; Tk* ids; Expr* set; }           dcl;
+        // proto: `func f () {}` declares `f` if it is unknown
+        struct { List dsts; Expr* src; int proto; }     set;
         struct { List es; }                             block;
+        // esc: has an escape tag (in tk)
+        struct { int esc; Expr* blk; }                  xdo;
+        struct { Expr* blk; }                           defer;
+        // head: match expression, or NULL
+        struct { Expr* head; int n; Case* cases; }      ifs;
+        struct { int n; Tk* ids; Expr* itr; Expr* blk; } loop;
+        struct { Expr* cnd; Expr* blk; }                xcatch;
+        struct { int task; int dots; int n; Tk* pars; Expr* blk; } proto;
+        struct { List es; }                             ret;
     } u;
 };
 
@@ -118,6 +157,9 @@ void list_ins (List* l, int i, Expr* e);
 ///////////////////////////////////////////////////////////////////////////////
 // PARSER
 ///////////////////////////////////////////////////////////////////////////////
+
+// Enables `test` blocks (-t).
+extern int OPT_TEST;
 
 // Parses the whole program into a block.
 Expr* parser_main (void);

@@ -1,0 +1,2 @@
+val func f (x) { x }
+val task T () { }

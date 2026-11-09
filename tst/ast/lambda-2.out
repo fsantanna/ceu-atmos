@@ -1,0 +1,7 @@
+(func (a b) { (+ a b) })
+(func (a b) { (- a b) })
+(func (a) { (! a) })
+(func (a) { (# a) })
+(func (a b) { (++ a b) })
+(call f (func (it) { it }))
+(call f (func (it) { it }))

@@ -1,0 +1,2 @@
+(ifs ((call f) => (func (it) { it })) (else => { 0 }))
+(ifs ((call f) => (func (v) { v })))

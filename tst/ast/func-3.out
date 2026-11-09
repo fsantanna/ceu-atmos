@@ -1,0 +1,1 @@
+(set f = (func () { (call return 10) (call return) (call return 1 2) }))

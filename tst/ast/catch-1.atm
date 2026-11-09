@@ -1,0 +1,1 @@
+catch :X { throw(:X) } ; catch true { } ; catch \{ true } { f() }

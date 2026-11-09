@@ -1,0 +1,6 @@
+match f() {
+    :table   => 1
+    "hello"  => { 2 }
+    \{it>10} => 3
+    else     => \{ it }
+}

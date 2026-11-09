@@ -1,0 +1,2 @@
+(ifs ((> x y) => { x }) ((< x y) => { y }) (else => { (call throw :error) }))
+(ifs (a => (func (it) { it })))

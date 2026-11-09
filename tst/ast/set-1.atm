@@ -1,0 +1,1 @@
+set x = 10 ; set x, y = (y, x) ; set t@1 = 2 ; set t.x.y = 3 ; set `z` = 10

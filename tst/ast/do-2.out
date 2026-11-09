@@ -1,0 +1,1 @@
+(val v = (do { (call print :ok) 1 }))

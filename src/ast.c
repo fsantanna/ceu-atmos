@@ -106,10 +106,92 @@ void ast_dump (Expr* e) {
             }
             printf(")");
             break;
+        case E_SET:
+            printf("(set");
+            dump_list(&e->u.set.dsts);
+            printf(" = ");
+            ast_dump(e->u.set.src);
+            printf(")");
+            break;
         case E_BLOCK:
             printf("{");
             dump_list(&e->u.block.es);
             printf(" }");
+            break;
+        case E_DO:
+            printf("(do ");
+            if (e->u.xdo.esc) {
+                printf("%s ", e->tk.str);
+            }
+            ast_dump(e->u.xdo.blk);
+            printf(")");
+            break;
+        case E_DEFER:
+            printf("(defer ");
+            ast_dump(e->u.defer.blk);
+            printf(")");
+            break;
+        case E_IFS:
+            printf("(%s", (e->u.ifs.head != NULL) ? "match " : "ifs");
+            if (e->u.ifs.head != NULL) {
+                ast_dump(e->u.ifs.head);
+            }
+            for (int i=0; i<e->u.ifs.n; i++) {
+                Case* c = &e->u.ifs.cases[i];
+                printf(" (");
+                if (c->cnd == NULL) {
+                    printf("else");
+                } else {
+                    if (c->test) {
+                        printf("test ");
+                    }
+                    ast_dump(c->cnd);
+                }
+                printf(" => ");
+                ast_dump(c->body);
+                printf(")");
+            }
+            printf(")");
+            break;
+        case E_LOOP:
+            printf("(loop");
+            for (int i=0; i<e->u.loop.n; i++) {
+                printf(" %s", e->u.loop.ids[i].str);
+            }
+            if (e->u.loop.itr != NULL) {
+                printf(" in ");
+                ast_dump(e->u.loop.itr);
+            }
+            printf(" ");
+            ast_dump(e->u.loop.blk);
+            printf(")");
+            break;
+        case E_CATCH:
+            printf("(catch ");
+            ast_dump(e->u.xcatch.cnd);
+            printf(" ");
+            ast_dump(e->u.xcatch.blk);
+            printf(")");
+            break;
+        case E_PROTO:
+            printf("(%s (", e->u.proto.task ? "task" : "func");
+            for (int i=0; i<e->u.proto.n; i++) {
+                printf("%s%s", (i > 0) ? " " : "", e->u.proto.pars[i].str);
+            }
+            if (e->u.proto.dots) {
+                printf("%s...", (e->u.proto.n > 0) ? " " : "");
+            }
+            printf(") ");
+            ast_dump(e->u.proto.blk);
+            printf(")");
+            break;
+        case E_RETURN:
+            printf("(return");
+            dump_list(&e->u.ret.es);
+            printf(")");
+            break;
+        case E_ME:
+            printf("(me)");
             break;
     }
 }

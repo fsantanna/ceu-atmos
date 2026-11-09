@@ -1,0 +1,4 @@
+val v = do {
+    print(:ok)
+    1
+}

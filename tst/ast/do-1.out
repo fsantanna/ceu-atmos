@@ -1,0 +1,5 @@
+(do { })
+(do { 1 2 })
+(do :X { (call escape :X 10) })
+(call do 10)
+(call do (call f) 2)

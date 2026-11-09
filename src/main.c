@@ -3,6 +3,7 @@
 //   atmos f.atm [args]     compiles, builds, and runs
 //   atmos -c f.atm         emits C only (to stdout)
 //   atmos -o out f.atm     builds only
+//   atmos -t f.atm         enables `test` blocks
 //
 // Environment:
 //   ATMOS_HOME     root with `rt/` and `build/` (default: build dir)
@@ -77,11 +78,12 @@ static int build (const char* c, const char* exe) {
 
 static void usage (void) {
     fprintf(stderr,
-        "Usage: atmos [-c] [-o <out>] <input> [<args>] ...\n"
+        "Usage: atmos [-c] [-o <out>] [-t] <input> [<args>] ...\n"
         "\n"
         "Options:\n"
         "   -c          Emit C only.\n"
         "   -o <out>    Build only.\n"
+        "   -t          Enable test blocks.\n"
     );
     exit(1);
 }
@@ -100,6 +102,8 @@ int main (int argc, char** argv) {
             ast = 1;
         } else if (!strcmp(argv[i], "-c")) {
             only = 1;
+        } else if (!strcmp(argv[i], "-t")) {
+            OPT_TEST = 1;
         } else if (!strcmp(argv[i], "-o") && i+1<argc) {
             exe = argv[++i];
         } else if (argv[i][0] == '-') {

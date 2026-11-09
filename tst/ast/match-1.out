@@ -1,0 +1,1 @@
+(match (call f) (:table => { 1 }) ("hello" => { 2 }) (test (func (it) { (> it 10) }) => { 3 }) (else => (func (it) { it })))

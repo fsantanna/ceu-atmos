@@ -1,0 +1,5 @@
+(set f = (func (x) { x }))
+(set (@ (@ t "x") "f") = (func () { }))
+(set (@ o "m") = (func (self a) { self }))
+(set T = (task (v) { }))
+(set (@ t "T") = (task () { }))

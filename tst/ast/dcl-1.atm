@@ -1,0 +1,1 @@
+val x ; var y = 10 ; val a, b, c = (1, 2, 3) ; pin t = f()

@@ -1,0 +1,3 @@
+(catch :X { (call throw :X) })
+(catch true { })
+(catch (func (it) { true }) { (call f) })

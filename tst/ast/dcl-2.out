@@ -1,0 +1,2 @@
+(val f = (func (x) { x }))
+(val T = (task () { }))

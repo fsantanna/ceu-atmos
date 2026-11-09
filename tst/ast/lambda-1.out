@@ -1,0 +1,5 @@
+(func (it) { (+ it 1) })
+(func (x) { x })
+(func (a b) { a })
+(func () { })
+(func (...) { })
