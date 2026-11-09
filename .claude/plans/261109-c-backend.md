@@ -4,8 +4,12 @@
 
 A from-scratch reimplementation of Atmos that compiles to C.
 No Lua: no VM, no interpreter, no Lua syntax, no Lua libraries.
-The current implementation (this repo + lua-atmos) is the reference for
-semantics, and its test suite becomes the spec (see Tests).
+The current implementation (atmos-lang/atmos + lua-atmos) is the
+reference for semantics, and its test suite becomes the spec (see Tests).
+
+Origin: `atmos-lang/atmos@5977b07`, `.claude/plans/261109-c-backend.md`.
+This copy lives in the new repo and carries the revisions agreed after
+that commit (see Revisions).
 
 Goal: the simplest dynamic language that still supports Atmos'
 structured, deterministic concurrency.
@@ -38,7 +42,9 @@ structured, deterministic concurrency.
       is pinned at the deepest of their depths.
     - Leaks are accepted for cycles made only of unpinned values.
 - **Inline frames for structured constructs.**
-    - `par`, `watching`, `loop on`, `toggle on` need no allocation.
+    - `par`, `watching`, `loop on`, `toggle on` keep their locals inline
+      in the owner's frame.
+    - v1 allocates one small header per transparent block (see Tasks).
     - No more lowering to lambdas or Lua closures.
 - **Non-local exits as status codes.**
     - Errors, `escape`, `break`, `return` all propagate as a returned
@@ -57,10 +63,16 @@ structured, deterministic concurrency.
 - **Numbers are a single `double`.**
     - `print`/`tostring` show integral values without decimals (`1`,
       not `1.0`), to keep current outputs.
-- **Multiple values and varargs are kept.**
+- **Multiple values and varargs are kept, exactly as in Lua 5.4.**
     - `catch`, `await`, `escape`, `par :all`, and `val a,b = ...` rely
       on them.
+    - Adjustment: the last expression of a list expands, the others
+      truncate to one value, and parentheses truncate.
+    - Loose arity: a missing argument is `nil`, an extra one is dropped.
+    - Only the anonymous `...`; no named lists.
+    - Native functions written in C may be variadic.
     - Implemented with a runtime value stack (see Calls).
+    - No tuple type (see Revisions).
 - **Static globals.**
     - No dynamic global table.
     - Top-level declarations become static C variables.
@@ -110,6 +122,17 @@ structured, deterministic concurrency.
 - Native blocks contain C, not Lua.
 - Globals are static (see Settled decisions).
 - Deep ordering drops the metatable rule (rule 2).
+- `catch` only catches `throw`.
+    - Today `catch true` also catches `escape`, `break`, and `return`,
+      because all of them are Lua throws.
+- `break`, `until`, and `while` require a lexically enclosing `loop` in
+  the same function or task body (transparent blocks may be crossed).
+    - Today they cross calls dynamically.
+    - `escape` stays dynamic.
+- `spawn { ... }` inside a `func` body is a compile error in v1.
+    - Its body may `await`, and a function frame lives on the C stack.
+- The last positional entry of a table constructor expands, as in Lua.
+    - Today `[f()]` keeps only the first value.
 
 ### Dropped
 
@@ -128,7 +151,7 @@ structured, deterministic concurrency.
 ```c
 typedef enum {
     A_NIL, A_BOOL, A_NUM, A_STR,
-    A_TAB, A_FUNC, A_TASK, A_TASKS, A_NAT
+    A_TAB, A_FUNC, A_TASK, A_XTASK, A_TASKS, A_NAT
 } AType;
 
 typedef struct {
@@ -375,9 +398,12 @@ typedef AStatus (*AResume) (ATask* t, AKind k, AVal evt);
   behaves as if it was raised at its current await point.
 - `R_ABORT`: the task jumps to the cleanup chain of its current `pc`.
 - **Transparent blocks** (`spawn {}`, `par` branches, `watching`,
-  `toggle on`) are task objects embedded inline in the owner's frame.
-    - No allocation.
-    - An `up` pointer gives access to the owner's locals.
+  `toggle on`) share the frame of their owner task.
+    - Their locals are slots of the owner's frame: no frame allocation.
+    - v1 allocates one refcounted header per transparent block.
+        - The termination of a task is emitted as a value, and another
+          task may keep that value.
+        - Embedding the header inline is a later optimization.
     - `return`/`break`/`throw`/`escape` cross to the owner with their
       values, matching `tst/throw.lua` (pre and pos cases).
     - They delegate `pub` and `emit` to the owner.
@@ -414,6 +440,8 @@ typedef AStatus (*AResume) (ATask* t, AKind k, AVal evt);
     5. the next sibling task.
 - **Emit targets.** `:task` (default), `:parent`, `:global`, a task, or
   a level number.
+- **Await birth.** A task only reacts to emits that started after its
+  current `await` was established (as in lua-atmos).
 - **Reentrancy.** A reaction may emit, or abort tasks not yet
   traversed.
     - The traversal holds a reference to the next task header and skips
@@ -428,12 +456,16 @@ typedef AStatus (*AResume) (ATask* t, AKind k, AVal evt);
   live inside the value's pin block (see Memory, Stores).
 - **Termination.** A finishing task stores `ret` and signals its owner,
   so `await t`, `await T()`, `:any ts`, `:all ts` match with `v,t[,ts]`.
+    - As in lua-atmos, the signal is an emit of the task itself to the
+      subtree of its owner, so a neighbor `await(true)` also awakes.
 - **Errors in reactions** propagate through `emit` to the emitter
   (`tst/tasks.lua` "catch 1").
 - **Toggle.** `toggled = 0` skips the subtree in traversal, except
   events matching the `with` patterns.
     - `toggle on :T` reacts to `emit(:T [bool])`.
 - **Abort.** Resume with `R_ABORT`, depth-first, defers in reverse.
+    - As in lua-atmos, the children of an aborted task are aborted
+      first, in spawn order.
 - **Clocks.** Replicate the current synchronous timers semantics
   (`.claude/plans/done/261019-timers.md`):
     - `await(dur)` returns `late`;
@@ -474,6 +506,9 @@ void    atm_quit  (void);
 
 - The default `main()` runs the main chunk, then sleeps until the next
   timer deadline and steps, until no task is pending.
+    - If the main chunk is suspended and no timer is pending, nothing
+      can awake it: the program aborts the main chunk and exits.
+      (lua-atmos loops forever.)
 - Environments (SDL, stdin, sockets) are separate C modules that call
   `atm_emit`/`atm_step` from their own loops.
 
@@ -573,9 +608,10 @@ CLEANUP:
 ## Tests
 
 - **Golden suite from the current repo.**
-    - Write a one-time extractor in this repo that dumps every
-      `atm_test(src)` case and its expected output from `tst/*.lua` into
-      `tst/cases/NNNN-name.atm` plus `.out`.
+    - Write a one-time extractor in the new repo that reads a checkout
+      of atmos-lang/atmos and dumps every `atm_test(src)` case and its
+      expected output from `tst/*.lua` into `tst/cases/NNNN-name.atm`
+      plus `.out`.
     - Tag each case with the features it uses, so cases using dropped
       features (Lua natives, metatables, streams, threads, deep await)
       are moved to `tst/dropped/` or rewritten.
@@ -627,6 +663,59 @@ exs/        examples
       transfer on exits, deferred abort of blocks on the C stack.
 - [ ] M9 natives and stdlib: C natives, `$x`, native box, stdlib v1, X.
 - [ ] M10 parity: golden suite green, `exs/` ported, manual rewritten.
+
+## Later (after M10)
+
+- **Table patterns in declarations.**
+    - `val [x,y] = f()`, when `f` returns `[a,b]`.
+    - Orthogonal to multiple values: `val [x,y], z = f()`.
+    - Should be valid wherever names are bound: `val`, `set`,
+      parameters, `loop ... in`, `loop ... on`, `await` results.
+    - Compiler only: lowers to index reads on a temporary.
+    - To define: mismatch (loose `nil` or error), positional vs field
+      patterns, tag check with `??`.
+
+## Revisions
+
+Agreed after `atmos-lang/atmos@5977b07`.
+
+### Accepted
+
+- Heap header for transparent blocks (Settled decisions, Tasks).
+- `spawn {}` inside `func` is a compile error in v1 (Language delta).
+- `catch` only catches `throw` (Language delta).
+- Lexical `break`/`until`/`while` (Language delta).
+- Table constructors expand their last positional entry (Language
+  delta).
+- Golden-suite extractor lives in the new repo (Tests).
+- Default driver exits when nothing can awake the main chunk (Driver).
+- lua-atmos behaviors kept as they are: termination emitted to the
+  owner's subtree, children aborted first in spawn order, await birth
+  (Scheduler).
+
+### Rejected
+
+- **Tuples as values**, with or without allocation.
+    - A view over stack or frame slots works in functions, but a tuple
+      of unknown arity held across an `await` needs the heap.
+    - First-class tuples conflict with Lua's implicit truncation.
+- **Named lists**, as in `val ...vs = f()` or a `...vs` parameter.
+- **Dropping varargs and multiple returns.**
+    - Considered and reverted: Lua's rules stay.
+- **Dropping variadic native functions.**
+    - The argument count is passed anyway, and `print(a, b)` is
+      everywhere.
+
+### Open
+
+- **`#t` with holes.** Lua leaves the border undefined when the array
+  part holds a `nil`. A deterministic runtime needs an exact rule.
+    - Proposal: assigning `nil` to the last element shrinks the array;
+      assigning `nil` in the middle leaves a hole and keeps `#t`.
+
+## Workflow
+
+- One commit and one push per change, in small grains.
 
 ## Risks
 
