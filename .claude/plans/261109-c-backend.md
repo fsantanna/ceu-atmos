@@ -81,7 +81,13 @@ structured, deterministic concurrency.
 - **All strings are interned in v1.**
     - Equality and table key hashing become pointer operations.
     - Revisit if concatenation-heavy code suffers.
-- **Indexes are 1-based**, as today (manual, tests, `@#`, `@+`).
+- **Indexes are 0-based.**
+    - `[10,20,30]@0` is `10`, and positional entries of a constructor
+      start at `0`.
+    - `t@#` is `t@(#t-1)` and `t@+` is `t@(#t)`.
+    - `loop i in n` ranges over `0..n-1`, and `loop i { }` starts at `0`.
+    - `loop i in (a,b)` still includes both ends.
+    - String positions (`sub`, `find`, `byte`) also start at `0`.
 - **No string patterns in v1.**
     - Plain `find`, `sub`, `split` only.
 - **No auto-pin of task arguments in v1.**
@@ -122,6 +128,8 @@ structured, deterministic concurrency.
 - Native blocks contain C, not Lua.
 - Globals are static (see Settled decisions).
 - Deep ordering drops the metatable rule (rule 2).
+- Indexes are 0-based (see Settled decisions).
+    - Today vectors, numeric loops, and strings start at `1`.
 - `catch` only catches `throw`.
     - Today `catch true` also catches `escape`, `break`, and `return`,
       because all of them are Lua throws.
@@ -298,12 +306,19 @@ carry a value `v` with depth `p` to a destination at depth `d`:
 
 ### Tables
 
-- Array part (`1..n`) plus insertion-ordered hash part.
+- Array part (`0..n-1`) plus insertion-ordered hash part.
 - Hash: open addressing index into a dense entry array.
 - Deletion leaves a tombstone, compacted on rehash.
-- `#t` is the array border, as in Lua.
+- `#t` is a border, exactly as in Lua, shifted to base `0`:
+  `t@(#t-1)` is not `nil` and `t@(#t)` is `nil`, or `#t` is `0` when
+  `t@0` is `nil`.
+    - With holes, any border may be returned, as in Lua.
+    - The search follows Lua: the array size if its last element is not
+      `nil`, else a binary search inside the array part.
 - Iteration: array part, then hash entries in insertion order.
 - `tag` field is an ordinary string key.
+- User types (`:Pos [x=10, y=20]`) are plain tables with a `tag` key.
+    - No type declarations and no fixed layouts.
 - Runtime helpers: `++` on tables, `?>`, `===`, `=>=`, `X.copy`,
   `X.tostring`.
 
@@ -519,6 +534,7 @@ void    atm_quit  (void);
   `random`, `randomseed`, `huge`, `pi`.
 - **string:** `sub`, `find` (plain), `split`, `byte`, `char`, `upper`,
   `lower`, `rep`, `format` (`%d %s %f %g %x %%`).
+    - Positions are 0-based, and `sub(s, i, j)` includes both ends.
 - **vector:** `insert`, `remove`, `sort` (with comparator), `join`.
 - **io:** `write`, `read` (line), `open`/`close`/`lines` as native box.
 - **os:** `time`, `clock`, `exit`, `getenv`.
@@ -627,6 +643,8 @@ CLEANUP:
 - **Behavior changes.** Golden cases that observe `dead` aliases or dead
   returns (pin and return cases in `tst/tasks.lua`) are rewritten to
   expect the new escape errors or transfers.
+    - Cases that index vectors, iterate numerically, or use string
+      positions are rewritten for base `0`.
 
 ## Repo layout
 
@@ -692,6 +710,10 @@ Agreed after `atmos-lang/atmos@5977b07`.
 - lua-atmos behaviors kept as they are: termination emitted to the
   owner's subtree, children aborted first in spawn order, await birth
   (Scheduler).
+- Indexes are 0-based, in vectors, numeric loops, and strings (Settled
+  decisions).
+- `#t` exactly as in Lua, shifted to base `0` (Tables).
+- User types stay plain tagged tables (Tables).
 
 ### Rejected
 
@@ -706,12 +728,7 @@ Agreed after `atmos-lang/atmos@5977b07`.
     - The argument count is passed anyway, and `print(a, b)` is
       everywhere.
 
-### Open
-
-- **`#t` with holes.** Lua leaves the border undefined when the array
-  part holds a `nil`. A deterministic runtime needs an exact rule.
-    - Proposal: assigning `nil` to the last element shrinks the array;
-      assigning `nil` in the middle leaves a hole and keeps `#t`.
+- **Declared user types** with fixed layouts.
 
 ## Workflow
 
