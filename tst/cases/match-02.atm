@@ -1,0 +1,8 @@
+val t = :T.A [v=10]
+print(match t { :X => 1 ; :T => \{ it.v } ; else => 3 })
+print(match 5 { 1 => :a ; 5 => :b ; else => :c })
+print(match "x.y" { :x => :sub ; else => :no })
+print(match nil { :nil => \{ it } ; else => :no })
+print(match false { \{ !it } => \{ it } })
+print(match 99 { 1 => 1 }, match 99 { else => \v { v + 1 } })
+print(match [] { :table => :T ; else => :no })

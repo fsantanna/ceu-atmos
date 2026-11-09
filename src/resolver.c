@@ -225,8 +225,16 @@ static void res (Expr* e) {
         case E_IFS:
             res(e->u.ifs.head);
             for (int i=0; i<e->u.ifs.n; i++) {
-                res(e->u.ifs.cases[i].cnd);
-                res(e->u.ifs.cases[i].body);
+                Case* c = &e->u.ifs.cases[i];
+                // lambdas in cases are expanded in place
+                if (c->test) {
+                    c->cnd->u.proto.inl = 1;
+                }
+                if (c->body->tag == E_PROTO) {
+                    c->body->u.proto.inl = 1;
+                }
+                res(c->cnd);
+                res(c->body);
             }
             break;
 

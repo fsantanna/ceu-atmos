@@ -1,0 +1,10 @@
+val x = 1
+val y = 2
+val m = ifs {
+    x > y => x
+    x < y => { y }
+    else  => :eq
+}
+print(m)
+print(ifs { false => 1 }, ifs { else => 3 }, ifs { })
+print(ifs { nil => 1 ; (x+y) => \{ it * 2 } ; else => 0 })

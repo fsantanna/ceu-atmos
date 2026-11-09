@@ -1,0 +1,9 @@
+val f = [v=10]
+if f.v => \{
+    print("f.v is " ++ it)
+} else {
+    print("no")
+}
+print(if f.x => \{ it } else { :none })
+print(if f.v => \v { v + 1 })
+print(if f => \() { :noarg })

@@ -1,0 +1,2 @@
+if 1 + nil { print(:no) }
+print(:no)

@@ -327,6 +327,80 @@ static Opnd gen_block (Unit* u, List* es) {
     return d;
 }
 
+// Lambda expanded in place: binds its first parameter to `arg` and
+// evaluates its body as a block.
+static Opnd gen_inline (Unit* u, Expr* p, Opnd arg) {
+    if (p->u.proto.n > 0) {
+        opnd_mov(u, arg, var_c(u,p->vars[0]));
+    } else {
+        opnd_rel(u, arg);
+    }
+    return gen_block(u, &p->u.proto.blk->u.block.es);
+}
+
+// if, ifs, match: a chain of tests. The body of the first case that
+// holds gives the value, and receives the tested value if it is a
+// lambda.
+static Opnd gen_ifs (Unit* u, Expr* e) {
+    Opnd d = opnd_tmp(u);
+    Opnd h = opnd_c(NULL);
+    if (e->u.ifs.head != NULL) {
+        h = gen_expr(u, e->u.ifs.head);
+    }
+
+    for (int i=0; i<e->u.ifs.n; i++) {
+        Case* cs = &e->u.ifs.cases[i];
+        Opnd c;
+        if (h.c == NULL) {
+            // ifs: the condition itself
+            c = (cs->cnd == NULL) ? opnd_c("a_bool(1)") :
+                                    gen_expr(u, cs->cnd);
+        } else if (cs->test) {
+            // match: lambda applied to the head
+            Opnd arg = opnd_tmp(u);
+            out(u, "a_cpy(&%s, %s);", arg.c, h.c);
+            c = gen_inline(u, cs->cnd, arg);
+        } else {
+            // match: the head, if it is the case value (or else)
+            c = opnd_tmp(u);
+            const char* v = xfmt("(a_truthy(%s) ? %s : a_bool(1))", h.c, h.c);
+            if (cs->cnd == NULL) {
+                out(u, "a_cpy(&%s, %s);", c.c, v);
+            } else {
+                Opnd x = gen_expr(u, cs->cnd);
+                out(u, "if (a_is(%s, %s)) {", h.c, x.c);
+                out(u, "    a_cpy(&%s, %s);", c.c, v);
+                out(u, "}");
+                opnd_rel(u, x);
+            }
+        }
+
+        out(u, "if (a_truthy(%s)) {", c.c);
+        u->ind++;
+        Opnd v;
+        if (cs->body->tag == E_PROTO) {
+            v = gen_inline(u, cs->body, c);
+        } else {
+            opnd_rel(u, c);
+            v = gen_block(u, &cs->body->u.block.es);
+        }
+        opnd_mov(u, v, d.c);
+        u->ind--;
+        out(u, "} else {");
+        u->ind++;
+        opnd_rel(u, c);
+    }
+    for (int i=0; i<e->u.ifs.n; i++) {
+        u->ind--;
+        out(u, "}");
+    }
+
+    if (h.c != NULL) {
+        opnd_rel(u, h);
+    }
+    return d;
+}
+
 // val x = e  |  var x = e
 static Opnd gen_dcl (Unit* u, Expr* e) {
     if (e->u.dcl.n > 1) {
@@ -611,6 +685,8 @@ static Opnd gen_expr (Unit* u, Expr* e) {
             return gen_set(u, e);
         case E_BLOCK:
             return gen_block(u, &e->u.block.es);
+        case E_IFS:
+            return gen_ifs(u, e);
         case E_DO:
             if (e->u.xdo.esc) {
                 err(e->tk, "escape : not implemented");

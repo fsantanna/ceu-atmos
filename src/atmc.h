@@ -156,7 +156,9 @@ struct Expr {
         struct { Expr* head; int n; Case* cases; }      ifs;
         struct { int n; Tk* ids; Expr* itr; Expr* blk; } loop;
         struct { Expr* cnd; Expr* blk; }                xcatch;
-        struct { int task; int dots; int n; Tk* pars; Expr* blk; } proto;
+        // inl: lambda of an if/ifs/match, expanded in place
+        struct { int task; int dots; int n; Tk* pars; Expr* blk; int inl; }
+                                                        proto;
     } u;
 };
 
