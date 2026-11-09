@@ -490,9 +490,29 @@ static Opnd gen_bin (Unit* u, Expr* e) {
     Opnd y = gen_expr(u, e->u.bin.e2);
     Opnd d = opnd_tmp(u);
 
-    if (!strcmp(op,"==") || !strcmp(op,"!=")) {
-        out(u, "a_set(&%s, a_bool(%sa_eq(%s, %s)));",
-            d.c, (op[0] == '!') ? "!" : "", x.c, y.c);
+    // operator, predicate, negated, swapped operands
+    static const char* PREDS[][4] = {
+        { "==",  "a_eq",  "",  ""  }, { "!=",  "a_eq",  "!", ""  },
+        { "??",  "a_is",  "",  ""  }, { "!?",  "a_is",  "!", ""  },
+        { "===", "a_deq", "",  ""  }, { "=!=", "a_deq", "!", ""  },
+        { "=>=", "a_gte", "",  ""  }, { "=<=", "a_gte", "",  "x" },
+        { NULL, NULL, NULL, NULL }
+    };
+    const char* pred = NULL;
+    for (int i=0; PREDS[i][0]!=NULL; i++) {
+        if (!strcmp(PREDS[i][0], op)) {
+            pred = PREDS[i][1];
+            int swap = (PREDS[i][3][0] != '\0');
+            out(u, "a_set(&%s, a_bool(%s%s(%s, %s)));",
+                d.c, PREDS[i][2], pred,
+                swap ? y.c : x.c, swap ? x.c : y.c);
+        }
+    }
+
+    if (pred != NULL) {
+        // done
+    } else if (!strcmp(op,"?>") || !strcmp(op,"!>")) {
+        out_try(u, "a_in(&%s, %s, %s, %d)", d.c, x.c, y.c, op[0]=='!');
     } else {
         const char* f = NULL;
         int swap = 0;

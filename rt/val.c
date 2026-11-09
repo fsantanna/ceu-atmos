@@ -212,28 +212,6 @@ AVal a_tostring (AVal v) {
     }
 }
 
-AStatus a_cat (AVal* dst, AVal a, AVal b) {
-    int ok_a = (a.type==A_STR || a.type==A_NUM);
-    int ok_b = (b.type==A_STR || b.type==A_NUM);
-    if (!ok_a || !ok_b) {
-        return a_error("invalid operation '++' : unexpected %s",
-            a_typename(ok_a ? b : a));
-    }
-    AVal x = a_tostring(a);
-    AVal y = a_tostring(b);
-    size_t nx = A_STR_OF(x)->len;
-    size_t ny = A_STR_OF(y)->len;
-    char* buf = malloc(nx + ny + 1);
-    memcpy(buf, A_STR_OF(x)->s, nx);
-    memcpy(buf+nx, A_STR_OF(y)->s, ny);
-    a_dec(x);
-    a_dec(y);
-    AVal ret = a_str(buf, nx+ny);
-    free(buf);
-    a_set(dst, ret);
-    return A_OK;
-}
-
 int a_num_fmt (char* buf, size_t n, double v) {
     if (v==floor(v) && fabs(v)<1e15) {
         return snprintf(buf, n, "%.0f", v);

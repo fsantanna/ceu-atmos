@@ -381,8 +381,24 @@ static inline AStatus a_le (AVal* dst, AVal a, AVal b) {
     return a_less(1, dst, a, b);
 }
 
-// a ++ b
+// a ++ b: strings and numbers concatenate; tables merge, with the
+// vector part of `b` appended and its other keys favored.
 AStatus a_cat (AVal* dst, AVal a, AVal b);
+
+// v ?? x: equal, or `x` names the type of `v`, or `x` is a dot prefix
+// of `v` or of its tag.
+int a_is (AVal v, AVal x);
+
+// a =>= b: `a` is structurally more general than `b`.
+int a_gte (AVal a, AVal b);
+
+// a === b
+static inline int a_deq (AVal a, AVal b) {
+    return a_gte(a, b) && a_gte(b, a);
+}
+
+// v ?> t (or v !> t, if `neg`)
+AStatus a_in (AVal* dst, AVal v, AVal t, int neg);
 
 // String representation, as `print` shows it (owned).
 AVal a_tostring (AVal v);
