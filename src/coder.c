@@ -667,6 +667,9 @@ static void gen_block_x (Unit* u, List* es, Dst d, Hnd h) {
     out(u, "{");
     u->ind++;
     for (int i=0; i<es->n; i++) {
+        // C diagnostics and debuggers point to the source line
+        out0(u, "#line %d %s", es->v[i]->tk.lin,
+            quote(FILENAME, strlen(FILENAME)));
         out(u, "a_lin = %d;", es->v[i]->tk.lin);
         gen(u, es->v[i], (i == es->n-1) ? d : dst_none());
     }
