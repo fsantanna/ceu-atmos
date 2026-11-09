@@ -1,0 +1,8 @@
+X.print([])
+X.print([1, 2, 3])
+X.print([@(:key)=:val])
+X.print(:X [10])
+X.print([10, x=1, [20, y=[]], :T.A [a=1]])
+X.print([b=1, a=2, @10=3, @2=4, 5])
+X.print(1, "a", nil, [true])
+print(X.tostring([1,[2]]) ++ "!")

@@ -1,0 +1,6 @@
+val t = []
+set t@(#t-1) = 10
+X.print(t)
+val u = [1, nil, 3]
+X.print(u)
+print(#u)

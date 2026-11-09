@@ -1,0 +1,5 @@
+print(type(nil), type(true), type(1), type("s"), type([]), type(print))
+print(type(:x) == :string, type())
+print(tostring(1) ++ tostring(nil) ++ tostring(true), tostring("s"))
+print(tonumber("10") + 1, tonumber("0x10"), tonumber(" 1.5 "), tonumber(5))
+print(tonumber("x"), tonumber("1x"), tonumber(""), tonumber(nil), tonumber([]))

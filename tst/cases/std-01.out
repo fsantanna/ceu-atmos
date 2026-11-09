@@ -1,0 +1,5 @@
+nil	boolean	number	string	table	function
+true	nil
+1niltrue	s
+11	16	1.5	5
+nil	nil	nil	nil	nil

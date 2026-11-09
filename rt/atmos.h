@@ -407,6 +407,18 @@ int a_num_fmt (char* buf, size_t n, double v);
 ///////////////////////////////////////////////////////////////////////////////
 
 extern AVal atm_g_print;
+extern AVal atm_g_type;
+extern AVal atm_g_tostring;
+extern AVal atm_g_tonumber;
+extern AVal atm_g_assert;
+extern AVal atm_g_X;
+
+// Deep string representation: tables as `:Tag [v, k=v]`, with sorted
+// keys (owned). Fails on keys that are neither numbers nor strings.
+AStatus a_xtostring (AVal* dst, AVal v);
+
+// Deep copy of tables (owned).
+AVal a_xcopy (AVal v);
 
 ///////////////////////////////////////////////////////////////////////////////
 // DRIVER

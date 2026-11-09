@@ -1,0 +1,7 @@
+val t = [1, [2, 3], x=[y=10]]
+val u = X.copy(t)
+set t@1@0 = 99
+set t.x.y = 99
+X.print(t)
+X.print(u)
+print(X.copy(10), X.copy("s"), X.copy(nil))

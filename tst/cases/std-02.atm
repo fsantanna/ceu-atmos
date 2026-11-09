@@ -1,0 +1,3 @@
+print(assert(10 == 10))
+print(assert(1, 2))
+assert(nil, "my message")
