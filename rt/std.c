@@ -23,6 +23,9 @@ static void print1 (AVal v) {
             a_num_fmt(buf, sizeof(buf), v.u.n);
             fputs(buf, stdout);
             break;
+        case A_STR:
+            fwrite(A_STR_OF(v)->s, 1, A_STR_OF(v)->len, stdout);
+            break;
         default:
             printf("%s: %p", a_typename(v), (void*)v.u.o);
             break;

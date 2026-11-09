@@ -191,6 +191,27 @@ static inline void a_ret1 (AVal* dst, int base) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+// STRINGS
+///////////////////////////////////////////////////////////////////////////////
+
+// Strings are immutable and interned: equal contents share one
+// object, so equality is a pointer comparison. Tags are strings.
+// Contents are NUL-terminated for C interop.
+
+typedef struct AStr {
+    AObj     hdr;
+    uint32_t hash;
+    uint32_t len;
+    char     s[];
+} AStr;
+
+#define A_STR_OF(v) ((AStr*)(v).u.o)
+
+// Interned string with the given contents (owned).
+AVal a_str  (const char* s, size_t len);
+AVal a_strz (const char* s);
+
+///////////////////////////////////////////////////////////////////////////////
 // FUNCTIONS
 ///////////////////////////////////////////////////////////////////////////////
 

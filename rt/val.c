@@ -32,8 +32,13 @@ const char* a_error_msg (void) {
 // MEMORY
 ///////////////////////////////////////////////////////////////////////////////
 
+void a_str_free (AStr* s);
+
 void a_free (AObj* o) {
     switch (o->type) {
+        case A_STR:
+            a_str_free((AStr*) o);
+            break;
         case A_FUNC: {
             AFunc* f = (AFunc*) o;
             for (int i=0; i<f->ncap; i++) {
@@ -175,6 +180,7 @@ int a_num_fmt (char* buf, size_t n, double v) {
 
 void atm_std_init (void);
 void atm_std_quit (void);
+void a_str_quit (void);
 
 void atm_init (int argc, char** argv) {
     (void) argc;
@@ -189,4 +195,5 @@ void atm_quit (void) {
     a_settop(0);
     free(a_stk);
     a_stk = NULL;
+    a_str_quit();
 }
