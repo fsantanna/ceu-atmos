@@ -185,11 +185,6 @@ void ast_dump (Expr* e) {
             ast_dump(e->u.proto.blk);
             printf(")");
             break;
-        case E_RETURN:
-            printf("(return");
-            dump_list(&e->u.ret.es);
-            printf(")");
-            break;
         case E_ME:
             printf("(me)");
             break;

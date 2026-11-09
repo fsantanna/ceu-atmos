@@ -88,8 +88,6 @@ typedef enum {
     E_CATCH,
     // func (...) {...}  task (...) {...}  \{...}
     E_PROTO,
-    // return(...)
-    E_RETURN,
     // task (the running task)
     E_ME,
 } ETag;
@@ -147,7 +145,6 @@ struct Expr {
         struct { int n; Tk* ids; Expr* itr; Expr* blk; } loop;
         struct { Expr* cnd; Expr* blk; }                xcatch;
         struct { int task; int dots; int n; Tk* pars; Expr* blk; } proto;
-        struct { List es; }                             ret;
     } u;
 };
 
