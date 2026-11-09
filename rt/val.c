@@ -152,6 +152,15 @@ AStatus a_arith (AArith op, AVal* dst, AVal a, AVal b) {
     return A_OK;
 }
 
+AStatus a_neg (AVal* dst, AVal a) {
+    if (a.type != A_NUM) {
+        return a_error("invalid operation '-' : expected number : got %s",
+            a_typename(a));
+    }
+    a_set(dst, a_num(-a.u.n));
+    return A_OK;
+}
+
 int a_num_fmt (char* buf, size_t n, double v) {
     if (v==floor(v) && fabs(v)<1e15) {
         return snprintf(buf, n, "%.0f", v);

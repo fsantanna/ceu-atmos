@@ -1,10 +1,26 @@
 // Atmos compiler: command line.
+//
+//   atmos f.atm [args]     compiles, builds, and runs
+//   atmos -c f.atm         emits C only (to stdout)
+//   atmos -o out f.atm     builds only
+//
+// Environment:
+//   ATMOS_HOME     root with `rt/` and `build/` (default: build dir)
+//   ATMOS_CC       C compiler (default: cc)
+//   ATMOS_CFLAGS   C flags (default: -O1)
+//   ATMOS_ASAN     if set, builds with the address sanitizer
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 #include "atmc.h"
+
+#ifndef ATMOS_HOME
+#define ATMOS_HOME "."
+#endif
 
 static char* slurp (const char* path, size_t* len) {
     FILE* f = fopen(path, "rb");
@@ -38,24 +54,58 @@ static void dump_lex (void) {
     }
 }
 
+static const char* env (const char* name, const char* def) {
+    const char* v = getenv(name);
+    return (v!=NULL && v[0]!='\0') ? v : def;
+}
+
+// Builds the C source into an executable. Returns 0 on success.
+static int build (const char* c, const char* exe) {
+    const char* home = env("ATMOS_HOME", ATMOS_HOME);
+    int asan = (getenv("ATMOS_ASAN") != NULL);
+    char* cmd = xfmt(
+        "%s %s %s -w -I%s/rt %s %s/build/libatmos%s.a -lm -o %s",
+        env("ATMOS_CC", "cc"),
+        env("ATMOS_CFLAGS", "-O1"),
+        asan ? "-fsanitize=address -fno-omit-frame-pointer -g" : "",
+        home, c, home,
+        asan ? "-asan" : "",
+        exe
+    );
+    return system(cmd);
+}
+
 static void usage (void) {
-    fprintf(stderr, "Usage: atmos [--lex|--ast] <input>\n");
+    fprintf(stderr,
+        "Usage: atmos [-c] [-o <out>] <input> [<args>] ...\n"
+        "\n"
+        "Options:\n"
+        "   -c          Emit C only.\n"
+        "   -o <out>    Build only.\n"
+    );
     exit(1);
 }
 
 int main (int argc, char** argv) {
-    int lex = 0;
-    int ast = 0;
+    int lex  = 0;
+    int ast  = 0;
+    int only = 0;
+    const char* exe = NULL;
     const char* inp = NULL;
-    for (int i=1; i<argc; i++) {
+    int i = 1;
+    for (; i<argc && inp==NULL; i++) {
         if (!strcmp(argv[i], "--lex")) {
             lex = 1;
         } else if (!strcmp(argv[i], "--ast")) {
             ast = 1;
-        } else if (inp == NULL) {
-            inp = argv[i];
-        } else {
+        } else if (!strcmp(argv[i], "-c")) {
+            only = 1;
+        } else if (!strcmp(argv[i], "-o") && i+1<argc) {
+            exe = argv[++i];
+        } else if (argv[i][0] == '-') {
             usage();
+        } else {
+            inp = argv[i];
         }
     }
     if (inp == NULL) {
@@ -74,13 +124,52 @@ int main (int argc, char** argv) {
     Expr* prog = parser_main();
 
     if (ast) {
-        for (int i=0; i<prog->u.block.es.n; i++) {
-            ast_dump(prog->u.block.es.v[i]);
+        for (int j=0; j<prog->u.block.es.n; j++) {
+            ast_dump(prog->u.block.es.v[j]);
             printf("\n");
         }
         return 0;
     }
 
-    usage();
-    return 0;
+    char* c = coder_main(prog);
+
+    if (only) {
+        fputs(c, stdout);
+        return 0;
+    }
+
+    // builds in a temporary directory, removed at the end
+    char dir[] = "/tmp/atmos-XXXXXX";
+    if (mkdtemp(dir) == NULL) {
+        fprintf(stderr, "atmos : cannot create temporary directory\n");
+        return 1;
+    }
+    char* cfile = xfmt("%s/main.c", dir);
+    char* xfile = (exe != NULL) ? (char*)exe : xfmt("%s/main", dir);
+
+    FILE* f = fopen(cfile, "w");
+    fputs(c, f);
+    fclose(f);
+
+    int ret = build(cfile, xfile);
+    if (ret != 0) {
+        fprintf(stderr, "atmos : C compilation failed\n");
+        ret = 1;
+    } else if (exe == NULL) {
+        // runs the program with the remaining arguments
+        pid_t pid = fork();
+        if (pid == 0) {
+            argv[i-1] = xfile;
+            execv(xfile, &argv[i-1]);
+            _exit(127);
+        }
+        int status = 0;
+        waitpid(pid, &status, 0);
+        ret = WIFEXITED(status) ? WEXITSTATUS(status) : 1;
+        unlink(xfile);
+    }
+
+    unlink(cfile);
+    rmdir(dir);
+    return ret;
 }

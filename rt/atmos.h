@@ -251,6 +251,14 @@ static inline AStatus a_pow (AVal* dst, AVal a, AVal b) {
     return a_arith(A_POW, dst, a, b);
 }
 
+// -a
+AStatus a_neg (AVal* dst, AVal a);
+
+// !a
+static inline void a_not (AVal* dst, AVal a) {
+    a_set(dst, a_bool(!a_truthy(a)));
+}
+
 // Name of the type of a value: "nil", "number", ...
 const char* a_typename (AVal v);
 

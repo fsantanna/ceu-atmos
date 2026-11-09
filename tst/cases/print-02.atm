@@ -1,0 +1,4 @@
+print()
+print(nil, true, false)
+print(1, (2, 3))
+print(10, 0xFF, 1.5, 3.0, 1e3)
