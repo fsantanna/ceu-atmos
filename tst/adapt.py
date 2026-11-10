@@ -116,16 +116,14 @@ OPS = {
     '===': 'X.eq(%s, %s)',
     '=!=': 'X.neq(%s, %s)',
     '=>=': 'X.gte(%s, %s)',
-    '=<=': 'X.gte(%s, %s)',
+    '=<=': 'X.lte(%s, %s)',
     '?>':  'X.xin(%s, %s)',
-    '!>':  '!X.xin(%s, %s)',
+    '!>':  'X.nin(%s, %s)',
 }
 
 def ops (src):
     def one (m):
         a, op, b = m.group(1), m.group(2), m.group(3)
-        if op == '=<=':
-            a, b = b, a
         return 'print(' + (OPS[op] % (a.strip(), b.strip())) + ')'
     pat = r'print\((.*?) (\*\*|===|=!=|=>=|=<=|\?>|!>) (.*)\)'
     return '\n'.join(re.sub(pat, one, l, count=1) for l in src.split('\n'))

@@ -1,7 +1,7 @@
-        print(X.gte(10, 10))
-        print(X.gte(20, 10))
-        print(X.gte(:x.y, :x))
-        print(X.gte(:x, :x.y))
-        print(X.gte([1,2,3], []))
-        print(X.gte([], [1,2,3]))
+        print(X.lte(10, 10))
+        print(X.lte(10, 20))
+        print(X.lte(:x, :x.y))
+        print(X.lte(:x.y, :x))
+        print(X.lte([], [1,2,3]))
+        print(X.lte([1,2,3], []))
     

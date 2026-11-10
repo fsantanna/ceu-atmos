@@ -486,6 +486,32 @@ static AStatus x_gte (AFunc* self, int argc, AVal* argv) {
     return A_OK;
 }
 
+// X.lte(a, b): `a` is structurally more specific than `b`
+static AStatus x_lte (AFunc* self, int argc, AVal* argv) {
+    (void) self;
+    a_push(a_bool(a_gte(arg(argc,argv,1), arg(argc,argv,0))));
+    return A_OK;
+}
+
+// X.gt(a, b): more general, and not equal. The order is partial, so
+// this is not the negation of X.lte.
+static AStatus x_gt (AFunc* self, int argc, AVal* argv) {
+    (void) self;
+    AVal a = arg(argc, argv, 0);
+    AVal b = arg(argc, argv, 1);
+    a_push(a_bool(a_gte(a,b) && !a_gte(b,a)));
+    return A_OK;
+}
+
+// X.lt(a, b): more specific, and not equal
+static AStatus x_lt (AFunc* self, int argc, AVal* argv) {
+    (void) self;
+    AVal a = arg(argc, argv, 0);
+    AVal b = arg(argc, argv, 1);
+    a_push(a_bool(a_gte(b,a) && !a_gte(a,b)));
+    return A_OK;
+}
+
 // X.xin(v, t): membership
 static AStatus x_xin (AFunc* self, int argc, AVal* argv) {
     (void) self;
@@ -493,6 +519,17 @@ static AStatus x_xin (AFunc* self, int argc, AVal* argv) {
     AStatus st = a_in(&ret, arg(argc,argv,0), arg(argc,argv,1));
     if (st == A_OK) {
         a_push(ret);
+    }
+    return st;
+}
+
+// X.nin(v, t): the negation of X.xin
+static AStatus x_nin (AFunc* self, int argc, AVal* argv) {
+    (void) self;
+    AVal ret = a_nil();
+    AStatus st = a_in(&ret, arg(argc,argv,0), arg(argc,argv,1));
+    if (st == A_OK) {
+        a_push(a_bool(!a_truthy(ret)));
     }
     return st;
 }
@@ -568,7 +605,11 @@ void atm_std_init (void) {
     field(atm_g_X, "eq",       x_eq);
     field(atm_g_X, "neq",      x_neq);
     field(atm_g_X, "gte",      x_gte);
+    field(atm_g_X, "lte",      x_lte);
+    field(atm_g_X, "gt",       x_gt);
+    field(atm_g_X, "lt",       x_lt);
     field(atm_g_X, "xin",      x_xin);
+    field(atm_g_X, "nin",      x_nin);
 
     atm_g_math = a_tab();
     field(atm_g_math, "floor",      math_floor);

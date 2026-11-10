@@ -1,0 +1,16 @@
+;; structural order: partial, so `lt` is not the negation of `gte`
+func row (a, b) {
+    print(X.eq(a,b), X.neq(a,b), X.gte(a,b), X.lte(a,b), X.gt(a,b), X.lt(a,b))
+}
+row(10, 10)
+row(10, 20)
+row(:x, :x.y)
+row(:x.y, :x)
+row([], [1,2,3])
+row([1,2,3], [])
+row([1,2,3], [1,2,3])
+row([x=1], [y=2])
+row([a=[1]], [a=[1,2], b=3])
+row(10, nil)
+print(X.xin(2, [1,2,3]), X.nin(2, [1,2,3]), X.xin(4, [1,2,3]), X.nin(4, [1,2,3]))
+print(X.xin(:x, [x=10]), X.nin(:x, [x=10]), X.nin(:z, [x=10]))

@@ -105,7 +105,8 @@ exs/    examples
       than comparisons;
     - compound assignment: `set x += 1`.
 - `**`, `?>`, `!>`, `=>=`, `=<=`, `===`, and `=!=` are functions:
-  `math.pow`, `X.xin`, `X.gte`, and `X.eq`.
+  `math.pow`, `X.xin`, `X.nin`, `X.gte`, `X.lte`, `X.eq`, and `X.neq`.
+  The strict `X.gt` and `X.lt` are new.
 - Native literals are C code, not Lua: `` `:int strlen("abc")` ``.
     - A leading tag converts the expression: `:int`, `:num`, `:bool`,
       `:str`, `:val`. With no tag, the code is a statement.

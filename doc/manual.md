@@ -2729,8 +2729,9 @@ tables recursively.
 - `X.tostring(v)`: deep string representation of `v`
 - `X.print(...)`: `print` using `X.tostring` on each argument
 - `X.copy(v)`: deep copy of `v`
-- `X.xin(v, t)`: membership ("in")
-- `X.gte(a, b)`: deep ordering ("sup")
+- `X.xin(v, t)`, `X.nin(v, t)`: membership ("in" and "not in")
+- `X.gte(a, b)`, `X.lte(a, b)`: deep ordering ("sup" and "sub")
+- `X.gt(a, b)`, `X.lt(a, b)`: strict deep ordering
 - `X.eq(a, b)`, `X.neq(a, b)`: deep equality
 
 ### Membership
@@ -2740,12 +2741,15 @@ resulting from an [iteration](#loop) over `b`.
 If `a` is equal to `v` or is equal to a non-numeric `k`, then the result is
 true.
 
+The function `X.nin` is the negation of `X.xin`.
+
 Examples:
 
 ```
 X.xin(10, [10,20,30])       ;; true
 X.xin( 1, [10,20,30])       ;; false
 X.xin(:x, [x=10,y=20])      ;; true
+X.nin( 1, [10,20,30])       ;; true
 ```
 
 ### Deep Ordering
@@ -2766,6 +2770,17 @@ To check the result of `X.gte(a, b)`, the following tests are made in order:
    in `a` satisfies `X.gte(va, b@(ka))`
 5. otherwise the result is `false` (e.g., `X.gte(10, 20)`)
 
+The function `X.lte` is the reverse of `X.gte`, i.e., `X.lte(a, b)` is
+equivalent to `X.gte(b, a)`.
+
+The functions `X.gt` and `X.lt` are the strict versions:
+`X.gt(a, b)` is true if `X.gte(a, b)` is true and `X.gte(b, a)` is false.
+
+Note that the order is partial:
+two values may be unrelated, such that `X.gte`, `X.lte`, `X.gt`, and `X.lt`
+are all false (e.g., for `10` and `20`).
+Therefore, `X.lt(a, b)` is not the negation of `X.gte(a, b)`.
+
 Examples:
 
 ```
@@ -2773,7 +2788,9 @@ X.gte(10, 10)           ;; --> true
 X.gte(10, 20)           ;; --> false (scalars compare by equality)
 X.gte(:x, :x.y)         ;; --> true  (:x supertypes :x.y)
 X.gte([], [1,2,3])      ;; --> true  (looser table supertypes richer)
-X.gte([1,2,3], [])      ;; --> false
+X.lte([1,2,3], [])      ;; --> true  (reverse of the above)
+X.gt([], [1,2,3])       ;; --> true  (and they are not equal)
+X.gt([1], [1])          ;; --> false (they are equal)
 ```
 
 ### Deep Equality

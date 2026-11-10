@@ -87,8 +87,9 @@ structured, deterministic concurrency.
     - Compound assignment: `set x += 1`, with `+=` `-=` `*=` `/=`
       `//=` `%=` `++=` `&=` `|=` `^=` `<<=` `>>=` `&&=` `||=`.
         - A single destination, evaluated once.
-    - Removed: `**` (use `math.pow`), `?>` `!>` (`X.xin`), `=>=`
-      `=<=` (`X.gte`), `===` `=!=` (`X.eq`, `X.neq`).
+    - Removed: `**` (use `math.pow`), `?>` `!>` (`X.xin`, `X.nin`),
+      `=>=` `=<=` (`X.gte`, `X.lte`), `===` `=!=` (`X.eq`, `X.neq`).
+    - New: the strict `X.gt` and `X.lt`.
     - `??` is the single matching operator, always as
       `value ?? pattern`. `a ?? b` holds if:
         - `a == b`; or
@@ -631,7 +632,8 @@ void    atm_quit  (void);
 - **vector:** `insert`, `remove`, `sort` (with comparator), `join`.
 - **io:** `write`, `read` (line), `open`/`close`/`lines` as native box.
 - **os:** `time`, `clock`, `exit`, `getenv`, `remove`.
-- **X:** `tostring`, `print`, `copy`, `eq`, `neq`, `gte`, `xin`.
+- **X:** `tostring`, `print`, `copy`, `eq`, `neq`, `gte`, `lte`, `gt`,
+  `lt`, `xin`, `nin`.
 - **atmos:** `status(t)`.
 
 ## Compiler

@@ -1,6 +1,6 @@
         val t = [1,2,3]
         print(X.xin(2, t))
         print(X.xin(4, t))
-        print(!X.xin(2, t))
-        print(!X.xin(4, t))
+        print(X.nin(2, t))
+        print(X.nin(4, t))
     
