@@ -1,0 +1,36 @@
+;; A task that nobody pinned ends with the outermost block of the task
+;; that spawned it, after its defers, and that task only terminates
+;; after it: also when the orphan is the one that is running.
+task O (id, late) {
+    defer { print(id, "defer orphan") }
+    await(:X)
+    if late { emit @:global (:Y) }
+    print(id, "never")
+    await(false)
+}
+func start (id, late) {
+    spawn O(id, late)
+}
+task U (id, late) {
+    defer { print(id, "defer U") }
+    start(id, late)
+    await(:Y)
+    print(id, "U ends")
+}
+print("-- orphan suspended")
+pin a = spawn U(:A, false)
+emit(:Y)
+print(atmos.status(a))
+print("-- orphan running")
+pin b = spawn U(:B, true)
+spawn {
+    await(b)
+    print("B terminated")
+}
+emit(:X)
+print(atmos.status(b))
+
+;; the main chunk too
+start(:M, false)
+defer { print("defer main") }
+print("-- end")

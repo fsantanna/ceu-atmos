@@ -78,6 +78,8 @@ typedef struct Unit {
     Expr* born;
     // inside the body of a defer, which never suspends
     int indefer;
+    // the next block is the outermost of a task: it ends its orphans
+    int orph;
 } Unit;
 
 // Finalizer of a block: a defer (flag slot and body), or a pin (the
@@ -88,6 +90,9 @@ typedef struct Defer {
     const char* pin;
     // pin written by the user: its value may leave the block
     int   user;
+    // the tasks of the unit that nobody pinned: they end with its
+    // outermost block, after everything else
+    int   orph;
 } Defer;
 
 // Appends one line at column zero (labels).
@@ -749,6 +754,17 @@ static Blk blk_open (Unit* u) {
     u->cleanup = b.cl;
     u->defs  = NULL;
     u->ndefs = 0;
+    if (u->orph) {
+        // the first finalizer: the last one to execute
+        u->orph = 0;
+        u->defs = realloc(u->defs, sizeof(Defer));
+        u->defs[0].flag = -1;
+        u->defs[0].e    = NULL;
+        u->defs[0].pin  = NULL;
+        u->defs[0].user = 0;
+        u->defs[0].orph = 1;
+        u->ndefs = 1;
+    }
     u->level++;
     out(u, "{");
     u->ind++;
@@ -804,6 +820,8 @@ static void blk_close (Unit* u, Blk b, Dst d, Hnd h) {
             for (int j=0; j<i; j++) {
                 if (mine[j].pin != NULL) {
                     out(u, "    a_pin_doom(&%s);", mine[j].pin);
+                } else if (mine[j].orph) {
+                    out(u, "    a_orph_doom(t);");
                 }
             }
             out(u, "    t->pc = %d;", pc);
@@ -822,6 +840,25 @@ static void blk_close (Unit* u, Blk b, Dst d, Hnd h) {
         }
         if (mine[i].pin != NULL) {
             out(u, "a_pin_end(NULL, &%s, &st, 0);", mine[i].pin);
+            continue;
+        }
+        if (mine[i].orph) {
+            // the tasks that nobody pinned, with the same wait
+            int pc = ++u->npcs;
+            out0(u, "LW_%d: ;", pc);
+            out(u, "if (a_orph_end(t, &st, base)) {");
+            out(u, "    t->pc = %d;", pc);
+            out(u, "    return A_AWAIT;");
+            out0(u, "AW_%d:", pc);
+            out(u, "    base = a_top;");
+            out(u, "    a_lin = %d;", u->lin);
+            out(u, "    a_depth = D + %d;", u->level);
+            out(u, "    st = a_pin_resumed(t);");
+            if (d.kind == D_MULTI) {
+                out(u, "    %s = a_top - base;", d.n);
+            }
+            out(u, "    goto LW_%d;", pc);
+            out(u, "}");
             continue;
         }
         int id = ++u->nlabels;
@@ -963,6 +1000,8 @@ static void gen_defer (Unit* u, Expr* e) {
     u->defs[u->ndefs].flag = flag;
     u->defs[u->ndefs].e    = e;
     u->defs[u->ndefs].pin  = NULL;
+    u->defs[u->ndefs].user = 0;
+    u->defs[u->ndefs].orph = 0;
     u->ndefs++;
     out(u, "a_set(&L[%d], a_bool(1));", flag);
 }
@@ -974,6 +1013,7 @@ static void gen_pin_end (Unit* u, const char* slot, int user) {
     u->defs[u->ndefs].e    = NULL;
     u->defs[u->ndefs].pin  = slot;
     u->defs[u->ndefs].user = user;
+    u->defs[u->ndefs].orph = 0;
     u->ndefs++;
 }
 
@@ -1663,6 +1703,7 @@ static const char* gen_task (Proto* p, Var** pars, int npar, List* body,
     if (p->dots) {
         u.nslots++;
     }
+    u.orph = 1;
     gen_block(&u, body, dst_slot("t->ret"));
 
     const char* name = xfmt("T%d", p->id);
@@ -1873,6 +1914,7 @@ static const char* gen_tra (Unit* up, List* body, ParMode mode, int key,
     u.root  = (up->root != NULL) ? up->root : up;
     // a transparent block is a nested block of its owner
     u.level = up->level;
+    u.orph  = 1;
 
     if (mode == PAR_ANY) {
         Dst m = dst_multi(&u);

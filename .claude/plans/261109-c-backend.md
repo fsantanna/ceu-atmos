@@ -323,7 +323,8 @@ Storing a pinned value `v` with depth `p`:
     - If nobody pins it (dropped, rejected by a `val`, refused by a
       transfer), it is aborted when the block at `p` ends.
     - A task with no pinned arguments that nobody pins lives with its
-      parent task, as today.
+      parent task, as today. It belongs to no block, so it ends with
+      the outermost block of the parent, after all its finalizers.
 - Depths only compare along one chain of blocks. `emit` is the lateral
   channel, so its target must also be in the subtree of the task that
   owns the pin block, attached inside that block.
@@ -561,6 +562,9 @@ typedef AStatus (*AResume) (ATask* t, AKind k, AVal evt);
       order of the C stack, not in the reverse order of declaration.
     - Only blocks of tasks wait. In a function the case cannot occur:
       a task that runs below a function cannot be pinned in it.
+    - The tasks that nobody pinned are a finalizer of the outermost
+      block of their parent: the first one, so the last to execute.
+      The same wait applies, so the parent only terminates after them.
 - **Pinned payloads.** `emit` of a pinned value requires the target to
   live inside the value's pin block (see Memory, Stores).
 - **Termination.** A finishing task stores `ret` and signals its owner,

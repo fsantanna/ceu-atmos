@@ -956,6 +956,11 @@ A [pin](#pin) assignment, which is mandatory for pools, explicitly
 attaches the reference to the declaration block.
 By default, an unassigned `spawn` attaches the new task to the enclosing block.
 
+A task that is not attached to any block, such as one that a function spawns
+and its caller ignores, lives as long as the task that spawned it.
+It is aborted when the outermost block of that task terminates, after all of
+its [defer](#defer) blocks.
+
 A transparent task has no own identity and is owned by its enclosing
 non-transparent task.
 In addition, it delegates [pub](#pub) and [emit](#emit) operations to its

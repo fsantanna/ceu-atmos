@@ -1,0 +1,14 @@
+-- orphan suspended
+A	U ends
+A	defer U
+A	defer orphan
+dead
+-- orphan running
+B	U ends
+B	defer U
+B	defer orphan
+B terminated
+dead
+-- end
+defer main
+M	defer orphan

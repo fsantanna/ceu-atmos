@@ -807,6 +807,13 @@ int a_pin_end (ATask* me, AVal* slot, AStatus* st, int base);
 // The task was resumed after the wait: restores the pending exit.
 AStatus a_pin_resumed (ATask* t);
 
+// End of the outermost block of a task: aborts the tasks and pools it
+// spawned that nobody pinned. They belong to no block, so they end
+// here, after all the finalizers of the task. It waits like
+// `a_pin_end`, and `a_orph_doom` is its `a_pin_doom`.
+int  a_orph_end (ATask* me, AStatus* st, int base);
+void a_orph_doom (ATask* me);
+
 // The block of the pin waits before it gets to abort this value. From
 // the moment the block is left, its tasks execute nothing but their
 // finalization: a suspended one no longer reacts to events, and one

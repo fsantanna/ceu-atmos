@@ -1620,6 +1620,59 @@ void a_pin_doom (AVal* slot) {
     node_stop(n);
 }
 
+// The task suspends the exit of a block until `late` ends. It keeps
+// the pending exit meanwhile.
+static void wait_for (ATask* me, ATask* late, AStatus st, int base) {
+    late->waiter = me;
+    me->waiting  = 1;
+    me->wst = st;
+    a_pay_save(&me->wpay);
+    me->wn   = a_top - base;
+    me->wstk = malloc((me->wn + 1) * sizeof(AVal));
+    memcpy(me->wstk, a_stk+base, me->wn * sizeof(AVal));
+    a_top = base;
+}
+
+int a_orph_end (ATask* me, AStatus* st, int base) {
+    for (int i=0; i<me->node.ndns; i++) {
+        ANode* n = me->node.dns[i];
+        if (n->dead) {
+            continue;
+        }
+        // the node may leave the tree when it dies
+        AVal ref = a_obj(&n->hdr);
+        a_inc(ref);
+        *st = blk_abort(n, *st);
+        ATask* late = late_of(n);
+        if (late != NULL) {
+            a_dec(ref);
+            wait_for(me, late, *st, base);
+            return 1;
+        }
+        if (n->hdr.type==A_TASKS && !n->dead) {
+            node_died(n);
+        }
+        int dead = n->dead;
+        a_dec(ref);
+        if (dead) {
+            // the abort may rearrange the tree: scan again
+            i = -1;
+        }
+    }
+    *st = chk_aborted(*st);
+    return 0;
+}
+
+void a_orph_doom (ATask* me) {
+    for (int i=0; i<me->node.ndns; i++) {
+        ANode* n = me->node.dns[i];
+        if (!n->dead && !n->hdr.pinned) {
+            n->doomed = 1;
+            node_stop(n);
+        }
+    }
+}
+
 int a_pin_end (ATask* me, AVal* slot, AStatus* st, int base) {
     AVal v = *slot;
     // only what is still pinned in this very block
@@ -1637,14 +1690,7 @@ int a_pin_end (ATask* me, AVal* slot, AStatus* st, int base) {
     // the block waits for what could not be aborted yet
     ATask* late = (me != NULL) ? late_of(n) : NULL;
     if (late != NULL) {
-        late->waiter = me;
-        me->waiting  = 1;
-        me->wst = *st;
-        a_pay_save(&me->wpay);
-        me->wn   = a_top - base;
-        me->wstk = malloc((me->wn + 1) * sizeof(AVal));
-        memcpy(me->wstk, a_stk+base, me->wn * sizeof(AVal));
-        a_top = base;
+        wait_for(me, late, *st, base);
         return 1;
     }
 
