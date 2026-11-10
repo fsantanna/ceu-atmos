@@ -84,6 +84,8 @@ typedef struct Defer {
     int   flag;
     Expr* e;
     const char* pin;
+    // pin written by the user: its value may leave the block
+    int   user;
 } Defer;
 
 // Appends one line at column zero (labels).
@@ -740,8 +742,9 @@ static Blk blk_open (Unit* u) {
 }
 
 // Closes a block: runs its finalizers, releases its slots, and then
-// handles or propagates a pending exit.
-static void blk_close (Unit* u, Blk b, Hnd h) {
+// handles or propagates a pending exit. The block gives its values
+// to `d` when it ends normally.
+static void blk_close (Unit* u, Blk b, Dst d, Hnd h) {
     u->ind--;
     out0(u, "CL_%d:", b.cl);
     u->ind++;
@@ -759,6 +762,26 @@ static void blk_close (Unit* u, Blk b, Hnd h) {
     // meanwhile, and replaced if a defer exits itself.
     Defer* mine = u->defs;
     int   nmine = u->ndefs;
+
+    // what leaves a block with pins is unpinned before they end
+    int user = 0;
+    for (int i=0; i<nmine; i++) {
+        user = user || (mine[i].pin!=NULL && mine[i].user);
+    }
+    if (user) {
+        switch (d.kind) {
+            case D_NONE:
+                out(u, "st = a_blk_xfer(st, NULL, 0);");
+                break;
+            case D_SLOT:
+                out(u, "st = a_blk_xfer(st, &%s, 1);", d.slot);
+                break;
+            case D_MULTI:
+                out(u, "st = a_blk_xfer(st, a_stk+a_top-%s, %s);", d.n, d.n);
+                break;
+        }
+    }
+
     for (int i=nmine-1; i>=0; i--) {
         if (mine[i].pin != NULL) {
             out(u, "st = a_pin_end(&%s, st);", mine[i].pin);
@@ -865,7 +888,7 @@ static void gen_block_x (Unit* u, List* es, Dst d, Hnd h) {
     if (es->n == 0) {
         store_void(u, d);
     }
-    blk_close(u, b, h);
+    blk_close(u, b, d, h);
 }
 
 static void gen_block (Unit* u, List* es, Dst d) {
@@ -900,11 +923,12 @@ static void gen_defer (Unit* u, Expr* e) {
 }
 
 // The enclosing block aborts the task or pool in `slot` on exit.
-static void gen_pin_end (Unit* u, const char* slot) {
+static void gen_pin_end (Unit* u, const char* slot, int user) {
     u->defs = realloc(u->defs, (u->ndefs+1) * sizeof(Defer));
     u->defs[u->ndefs].flag = -1;
     u->defs[u->ndefs].e    = NULL;
     u->defs[u->ndefs].pin  = slot;
+    u->defs[u->ndefs].user = user;
     u->ndefs++;
 }
 
@@ -912,7 +936,7 @@ static void gen_pin_end (Unit* u, const char* slot) {
 // aborts it on exit, if it is a task or a pool.
 static void gen_pin (Unit* u, const char* slot) {
     out_try(u, "a_pin(&%s)", slot);
-    gen_pin_end(u, slot);
+    gen_pin_end(u, slot, 1);
 }
 
 // e where { x = e1 ; y = e2 }
@@ -974,7 +998,7 @@ static void gen_dcl (Unit* u, Expr* e) {
         gen_boxes(u, e);
         opnd_mov(u, o, var_c(u,e->vars[0]));
         if (born) {
-            gen_pin_end(u, var_c(u,e->vars[0]));
+            gen_pin_end(u, var_c(u,e->vars[0]), 1);
         } else {
             gen_dcl_chk(u, e);
         }
@@ -1796,7 +1820,7 @@ static void gen_par (Unit* u, Expr* e, Dst d) {
         ts[i] = opnd_tmp(u).c;
     }
     for (int i=k-1; i>=0; i--) {
-        gen_pin_end(u, ts[i]);
+        gen_pin_end(u, ts[i], 0);
     }
     for (int i=0; i<k; i++) {
         gen_spawn_tra(u, e->u.par.blks.v[i], mode, h.joink, ts[i]);
@@ -1810,7 +1834,7 @@ static void gen_par (Unit* u, Expr* e, Dst d) {
         out(u, "st = a_await(t, a_pt_val(a_bool(0)));");
         gen_suspend(u, dst_none());
     }
-    blk_close(u, b, h);
+    blk_close(u, b, dst_none(), h);
 
     if (mode == PAR_ALL) {
         switch (d.kind) {
@@ -2011,7 +2035,7 @@ static void gen_toggle_on (Unit* u, Expr* e, Dst d) {
     Opnd r = opnd_tmp(u);
     Blk b = blk_open(u);
     const char* t = opnd_tmp(u).c;
-    gen_pin_end(u, t);
+    gen_pin_end(u, t, 0);
     gen_spawn_tra(u, e->u.toggle_on.blk, PAR_NONE, 0, t);
 
     int n;
@@ -2025,7 +2049,7 @@ static void gen_toggle_on (Unit* u, Expr* e, Dst d) {
 
     out(u, "st = a_await(t, a_pt_val(%s));", t);
     gen_suspend(u, dst_slot(r.c));
-    blk_close(u, b, hnd_none());
+    blk_close(u, b, dst_none(), hnd_none());
     store(u, r, d);
 }
 
@@ -2184,7 +2208,7 @@ static void gen (Unit* u, Expr* e, Dst d) {
         case E_SPAWN_BLK: {
             // pinned to the enclosing block
             const char* slot = opnd_tmp(u).c;
-            gen_pin_end(u, slot);
+            gen_pin_end(u, slot, 0);
             gen_spawn_tra(u, e->u.sblk.blk, PAR_NONE, 0, slot);
             store_void(u, d);
             break;

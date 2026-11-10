@@ -1,0 +1,21 @@
+1	2	3
+false	invalid assignment : expected pinned value
+1
+2
+awake	a
+dead	a
+awake	b
+dead	b
+3
+2
+dead	c
+dead	d
+4
+dead	1
+false	invalid escape : pinned value
+false	invalid escape : pinned value
+dead
+5
+dead	e
+1	dead
+6

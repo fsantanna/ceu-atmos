@@ -749,6 +749,13 @@ static inline AStatus a_chk_tab (ATab* t, AVal v) {
     return a_chk_store(v, t->hdr.pinned ? (int)t->hdr.depth : 0);
 }
 
+// A block with pins is being left, with status `st`. What it gives to
+// the outer block is transferred: values pinned in the block are
+// unpinned and flow out as fresh values, along with what they hold.
+// The values are `vs[0..n)` if the block ends normally, or else the
+// payload of the exit. Fails for a task that is confined to the block.
+AStatus a_blk_xfer (AStatus st, AVal* vs, int n);
+
 // Sets the pub of a task, or of the running task if NULL.
 AStatus a_pub_set (ATask* t, AVal v);
 

@@ -612,6 +612,9 @@ static ATask* task_of (ANode* n) {
 static int node_adepth (ANode* n) {
     if (n->hdr.type==A_XTASK && ((ATask*)n)->tra) {
         return ((ATask*)n)->bdepth - 1;
+    } else if (n->hdr.type==A_XTASK && ((ATask*)n)->pool!=NULL) {
+        // a task in a pool follows the pin of the pool
+        return node_adepth(&((ATask*)n)->pool->node);
     } else if (n->hdr.pinned) {
         return n->hdr.depth;
     } else if (n->hdr.type == A_XTASK) {
@@ -1277,8 +1280,19 @@ int a_pdepth (AVal v) {
         return 0;
     }
     int d = v.u.o->pinned ? (int)v.u.o->depth : 0;
-    if (v.type==A_XTASK && A_TASK_OF(v)->mindepth>d) {
-        d = A_TASK_OF(v)->mindepth;
+    if (v.type == A_XTASK) {
+        ATask* t = A_TASK_OF(v);
+        // a terminated task holds nothing and needs no owner
+        if (t->node.dead || t->status==T_DONE) {
+            return 0;
+        }
+        // a task in a pool follows the pin of the pool
+        if (t->pool != NULL) {
+            d = node_adepth(&t->pool->node);
+        }
+        if (t->mindepth > d) {
+            d = t->mindepth;
+        }
     }
     return d;
 }
@@ -1299,24 +1313,17 @@ AStatus a_pin (AVal* slot) {
                 return a_err_pinned();
             }
             break;
+        case A_TAB:
         case A_FUNC:
         case A_TASK:
-            // a fresh closure may already carry the scope of its
-            // captures: the pin only narrows it to this block
+        case A_NAT:
+            // The block must hold the only reference. A fresh value
+            // may already be confined by what it holds (a closure, or
+            // a value that left its block): the pin only narrows it.
             if (v.u.o->rc != 1) {
                 return a_error(v.u.o->pinned ?
                     "invalid assignment : unexpected pinned value" :
                     "invalid pin : shared value");
-            }
-            break;
-        case A_TAB:
-        case A_NAT:
-            if (v.u.o->pinned) {
-                return a_error("invalid assignment : unexpected pinned value");
-            }
-            // the block must hold the only reference
-            if (v.u.o->rc != 1) {
-                return a_error("invalid pin : shared value");
             }
             break;
         default:
@@ -1325,6 +1332,150 @@ AStatus a_pin (AVal* slot) {
     v.u.o->pinned = 1;
     v.u.o->depth  = a_depth;
     return A_OK;
+}
+
+// Transfer of `v` out of the blocks deeper than `d`. The pinned data
+// (tables, closures, natives) reachable from `v` that is pinned deeper
+// than `d` leaves with it. Only pinned objects are visited: unpinned
+// ones hold no pinned values. Tasks and pools held by the data do not
+// leave: they are aborted with their block.
+
+#define XFER UINT32_MAX     // depth of an object being transferred
+
+// Marks what leaves. Returns the deepest pin block among the values
+// that stay but are still held by what leaves.
+static int xfer_mark (AVal v, int d) {
+    if (v.type < A_TAB) {
+        return 0;
+    }
+    AObj* o = v.u.o;
+    if (v.type==A_XTASK || v.type==A_TASKS) {
+        int p = a_pdepth(v);
+        return (p <= d) ? p : 0;
+    }
+    if (!o->pinned || o->depth==XFER) {
+        return 0;
+    }
+    if ((int)o->depth <= d) {
+        return o->depth;
+    }
+    o->depth = XFER;
+    int m = 0;
+    if (v.type == A_TAB) {
+        uint32_t pos = 0;
+        AVal k, x;
+        while (a_tab_next(A_TAB_OF(v), &pos, &k, &x)) {
+            int mk = xfer_mark(k, d);
+            int mx = xfer_mark(x, d);
+            m = (mk > m) ? mk : m;
+            m = (mx > m) ? mx : m;
+        }
+    } else if (v.type==A_FUNC || v.type==A_TASK) {
+        AFunc* f = A_FUNC_OF(v);
+        for (int i=0; i<f->ncap; i++) {
+            int mc = xfer_mark(f->caps[i], d);
+            m = (mc > m) ? mc : m;
+        }
+    }
+    return m;
+}
+
+// What leaves becomes free, or confined to the block `m` of what it
+// still holds.
+static void xfer_set (AVal v, int m) {
+    if (v.type<A_TAB || !v.u.o->pinned || v.u.o->depth!=XFER) {
+        return;
+    }
+    AObj* o = v.u.o;
+    o->pinned = (m > 0);
+    o->depth  = m;
+    if (v.type == A_TAB) {
+        uint32_t pos = 0;
+        AVal k, x;
+        while (a_tab_next(A_TAB_OF(v), &pos, &k, &x)) {
+            xfer_set(k, m);
+            xfer_set(x, m);
+        }
+    } else if (v.type==A_FUNC || v.type==A_TASK) {
+        AFunc* f = A_FUNC_OF(v);
+        for (int i=0; i<f->ncap; i++) {
+            xfer_set(f->caps[i], m);
+        }
+    }
+}
+
+// Pinned arguments confine a task to their blocks: it cannot leave.
+static int xfer_chk (AVal v, int d) {
+    if (v.type == A_XTASK) {
+        ATask* t = A_TASK_OF(v);
+        int live = (!t->node.dead && t->status!=T_DONE);
+        return (t->pool!=NULL || !live || t->mindepth<=d);
+    } else if (v.type==A_TASKS && v.u.o->pinned && (int)v.u.o->depth>d) {
+        int pos = 0;
+        ATask* t;
+        while ((t = a_tasks_next(A_TASKS_OF(v),&pos)) != NULL) {
+            if (t->mindepth > d) {
+                return 0;
+            }
+        }
+    }
+    return 1;
+}
+
+static void xfer (AVal v, int d) {
+    if (v.type < A_TAB) {
+        return;
+    }
+    AObj* o = v.u.o;
+    int deep = (o->pinned && (int)o->depth>d);
+    switch (v.type) {
+        case A_XTASK: {
+            ATask* t = A_TASK_OF(v);
+            // a task in a pool stays with the pool
+            if (t->pool!=NULL || t->node.dead || t->status==T_DONE) {
+                return;
+            }
+            // the destination must pin it again
+            if (deep) {
+                o->pinned = 0;
+            }
+            xfer(t->pub, d);
+            break;
+        }
+        case A_TASKS: {
+            if (!deep) {
+                return;
+            }
+            int pos = 0;
+            ATask* t;
+            while ((t = a_tasks_next(A_TASKS_OF(v),&pos)) != NULL) {
+                xfer(t->pub, d);
+            }
+            o->pinned = 0;
+            break;
+        }
+        default:
+            xfer_set(v, xfer_mark(v,d));
+            break;
+    }
+}
+
+AStatus a_blk_xfer (AStatus st, AVal* vs, int n) {
+    int d = a_depth - 1;
+    if (st != A_OK) {
+        vs = a_pay;
+        n  = a_pay_n;
+    }
+    // all or nothing
+    for (int i=0; i<n; i++) {
+        if (!xfer_chk(vs[i],d)) {
+            return a_err_pinned();
+        }
+    }
+    for (int i=0; i<n; i++) {
+        xfer(vs[i], d);
+    }
+    return st;
 }
 
 AStatus a_chk_task (AVal v) {

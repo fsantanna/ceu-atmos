@@ -1,0 +1,84 @@
+;; transfer of tables on exits
+func mk (n) {
+    pin t = [n]
+    pin u = [t, x=t]
+    set t.up = u
+    u
+}
+func chk (v) {
+    print(v@0@0, v.x == v@0, v.x.up == v)
+}
+val a = mk(1)
+chk(a)
+;; free again: goes anywhere, and breaks its own cycle
+val box = [a]
+print(#box)
+set a.x.up = nil
+
+;; block value, and pinned again
+pin b = do {
+    pin t = [2]
+    t
+}
+print(b@0)
+print(catch true { set box@+ = b })
+
+;; return, break, escape
+func ret () {
+    do {
+        pin t = [3]
+        return(t)
+    }
+}
+val c = ret()
+set box@+ = c
+val d = loop {
+    pin t = [4]
+    break(t)
+}
+set box@+ = d
+val e = do :X {
+    do {
+        pin t = [5]
+        escape(:X, t)
+    }
+}
+set box@+ = e
+print(#box, box@1@0, box@2@0, box@3@0)
+
+;; multiple values
+func two () {
+    pin x = [6]
+    pin y = [7]
+    (x, y)
+}
+val p, q = two()
+set box@+ = p
+set box@+ = q
+print(#box, p@0, q@0)
+
+;; alias: pinned outside the block
+pin k = [8]
+val r = do {
+    pin z = [9]
+    set z.k = k
+    k
+}
+print(r == k, catch true { set box@+ = r })
+;; only what is pinned inside is unpinned
+val s = do {
+    pin z = [10]
+    set z.k = k
+    z
+}
+print(s@0, s.k == k, catch true { set box@+ = s })
+;; and it may be pinned again, in a block inside
+do {
+    pin w = do {
+        pin z = [11]
+        set z.k = k
+        z
+    }
+    print(w@0, w.k == k)
+}
+print(#k, #box)

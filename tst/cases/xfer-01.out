@@ -1,0 +1,10 @@
+1	true	true
+1
+2
+false	invalid escape : pinned value
+4	3	4	5
+6	6	7
+true	false	invalid escape : pinned value
+10	true	false	invalid escape : pinned value
+11	true
+1	6

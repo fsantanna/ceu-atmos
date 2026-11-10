@@ -1,0 +1,74 @@
+;; transfer of closures and tasks
+func counter () {
+    pin st = [n=0]
+    func () {
+        set st.n += 1
+        st.n
+    }
+}
+val f = counter()
+val fs = [f]
+print(f(), f(), fs@0())
+
+task T (v) {
+    defer { print(:dead, v) }
+    await(:X)
+    print(:awake, v)
+}
+func sp (v) {
+    pin t = spawn T(v)
+    t
+}
+print(catch true { val x = sp(:a) })
+print(:1)
+do {
+    pin x = sp(:b)
+    print(:2)
+    emit(:X)
+}
+print(:3)
+func pool () {
+    pin ts = tasks()
+    spawn @ts T(:c)
+    spawn @ts T(:d)
+    ts
+}
+do {
+    pin ts = pool()
+    print(#ts)
+}
+print(:4)
+;; a task is confined to its pinned arguments
+func bad () {
+    pin a = [1]
+    pin t = spawn T(a@0)
+    pin u = spawn (task (v) { await(false) }) (a)
+    (t, u)
+}
+print(catch true { pin t = bad() })
+func bad2 () {
+    pin a = [1]
+    val U = task () { await(false) ; a }
+    pin u = spawn U()
+    u
+}
+print(catch true { pin t = bad2() })
+;; unless it has terminated
+func done () {
+    pin a = [1]
+    val U = task () { a@0 }
+    spawn U()
+}
+pin dn = done()
+print(atmos.status(dn))
+print(:5)
+;; tasks held by data do not leave: they end with their block
+func held () {
+    pin t = spawn T(:e)
+    pin r = [t]
+    r
+}
+val h = held()
+print(#h, atmos.status(h@0))
+val hs = [h@0]
+print(:6)
