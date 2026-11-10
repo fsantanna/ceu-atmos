@@ -674,7 +674,7 @@ exs/        examples
       `abort`, `pub`, `status`.
 - [x] M5 structured: transparent blocks, `par`, `par :any`, `par :all`,
       `watching`, `loop on`, exit crossing, `await T()`, `await t`.
-- [ ] M6 pools and targets: `tasks(n)`, `spawn @ts`, `:any ts`,
+- [x] M6 pools and targets: `tasks(n)`, `spawn @ts`, `:any ts`,
       `:all ts`, emit targets, `toggle` (both forms, `with`).
 - [ ] M7 time: clock awaits, `:clock`, timers, default driver loop.
 - [ ] M8 memory: `pin` for all values, block depths, store checks,
