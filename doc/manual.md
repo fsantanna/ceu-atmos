@@ -1064,7 +1064,7 @@ Each expression in a sequence may be separated by an optional semicolon (`;`).
 A sequence of expressions evaluate to its last expression.
 
 A program collects all command-line arguments into the variadic symbol
-[`...`](#TODO).
+`...`.
 
 <!-- exs/exp-01-program.atm -->
 
@@ -1074,7 +1074,8 @@ print(...)              ;; --> a, b, c
 print(3)                ;; --> 3
 ```
 
-`TODO: program as a task`
+The main chunk of a program executes as a [task](#tasks).
+Hence, it may [await](#await) and it is the root of all tasks in the program.
 
 [lua-chunks]: https://www.lua.org/manual/5.4/manual.html#3.3.2
 
@@ -1084,7 +1085,7 @@ A block delimits a lexical scope for
 [local variable declarations](#local-variables).
 
 When a block aborts or terminates, all [defer statements](#defer) execute, and
-all [pin declarations](#local-variables) abort.
+all [pin declarations](#pin) abort.
 
 Blocks appear in compound statements, such as [if](#if), [loop](#loop), and
 many others.
@@ -1116,7 +1117,7 @@ do {
     val a = 1           ;; `a` is only visible in the block
     <...>
 }
-a                       ;; `a` is now a global
+a                       ;; ERROR: `a` is not declared
 
 do {
     pin t = spawn T()   ;; attaches task T to enclosing block
@@ -1175,9 +1176,8 @@ do :X {
 }
 ```
 
-- `TODO`
-    - may cross ... , but not function bodies
-    - bug as "dynamic scope" (also return, break/until/while)
+An `escape` matches blocks dynamically:
+it may cross function calls and reach a block in a caller.
 
 ### Defer
 
@@ -1210,7 +1210,7 @@ do {
 ### Test
 
 A `test` block behaves like a normal block, but is only included in the program
-when [executing](#execution) it with the flag `--test`:
+when [executing](#execution) it with the flag `-t`:
 
 ```
 Test : `test´ Block
@@ -1233,10 +1233,13 @@ test {
 
 ## Declarations and Assignments
 
-Atmos mimics the semantics of Lua [global][lua-globals] and [local][lua-locals]
-variables.
+Atmos mimics the semantics of Lua [local][lua-locals] variables.
 
-[lua-globals]: https://www.lua.org/manual/5.4/manual.html#2.2
+Unlike Lua, all variables are resolved when the program compiles:
+a name that is not declared is a compile error, and not a global variable.
+The variables declared in the main chunk, outside any block, are visible in
+the whole program.
+
 [lua-locals]: https://www.lua.org/manual/5.4/manual.html#3.3.7
 
 ### Local Variables
@@ -1250,8 +1253,8 @@ Local : (`val´ | `var` | `pin`) ID* [`=´ Expr]
 
 A declaration first specifies one of `val`, `var` or `pin` variable modifier.
 A `val` is immutable, while a `var` is mutable.
-A `pin` variable only applies to tasks or pools, which are automatically
-aborted when the enclosing block terminates or aborts.
+A [`pin`](#pin) is immutable and attaches its value to the enclosing block,
+which reclaims the value when it terminates or aborts.
 
 A declaration may specify a list of identifiers, which supports multiple
 declarations with the same modifier.
@@ -1278,7 +1281,7 @@ do {
     set x = 20
     print(x)            ;; --> 20
 }
-print(x)                ;; --> nil (`x` is global)
+print(x)                ;; ERROR: `x` is not declared
 
 do {
     pin t = spawn T()
@@ -1288,6 +1291,71 @@ do {
     val y = 10
     set y = 20          ;; ERROR: `y` is immutable
 }
+```
+
+#### Pin
+
+A `pin` declaration attaches its value to the enclosing block.
+It applies to all [reference types](#types--values): tasks, pools, tables,
+functions, and native values.
+Values of other types, such as numbers and strings, are not affected.
+
+When the block terminates or aborts, its pinned values are reclaimed:
+
+- First, tasks and pools are aborted, in the reverse order in which they were
+  declared, and interleaved with the [defer](#defer) blocks.
+- Then, tables and functions release what they hold, even if they are part of a
+  cycle, and native values release their resources.
+
+The value to pin must be new, with no other references to it.
+The exception is a task or a pool, since tasks may refer to themselves.
+Tasks and pools must always be pinned:
+it is an error to assign a running task to a `val` or `var` if it is not
+pinned somewhere else.
+An unassigned `spawn` is implicitly pinned in the enclosing block.
+
+A pinned value cannot escape its block, which would leave a dangling
+reference after the block reclaims it.
+The following operations raise the error `invalid escape : pinned value`:
+
+- to assign the value to a variable of an outer block, or to a variable that
+  is captured by a function;
+- to store the value in a table that is not pinned in the same block or in a
+  nested one, or in the `pub` of a task attached outside the block;
+- to pass the value in a `throw`, or to `emit` it to tasks that live outside
+  the block;
+- to spawn a task with the value in a pool that lives outside the block.
+
+A function that captures a pinned value is also restricted to the block of
+that value, and so is a task that receives it as an argument.
+
+Finally, a block may give away what it pins.
+If a pinned value is the final value of its block, or goes out through a
+`return`, `break`, or `escape`, then it leaves the block as a new unpinned
+value, along with the pinned values it holds.
+The destination may pin it again.
+A task or pool that leaves its block this way must be pinned again.
+
+Examples:
+
+```
+do {
+    pin t = [1, 2, 3]       ;; `t` is attached to the block
+    pin u = [t]             ;; OK: `u` is in the same block
+    val x = t               ;; OK: an alias in the same block
+}                           ;; `t` and `u` are reclaimed
+
+var out
+do {
+    pin t = [1, 2, 3]
+    set out = t             ;; ERROR: invalid escape : pinned value
+}
+
+func new () {
+    pin t = [1, 2, 3]
+    t                       ;; `t` leaves the block
+}
+val v = new()               ;; `v` is a regular table
 ```
 
 #### Where
@@ -1322,7 +1390,9 @@ Proto : [`val´] (`func´|`task`) ID `(´ ID* [`...´] `)´ Block
       | (`func´|`task`) ID {`.´ ID} [`::´ ID] `(´ ID* [`...´] `)´ Block
 ```
 
-The optional `val` modifier makes the declaration local only.
+The optional `val` modifier makes the declaration local to its block.
+Without it, the declaration is a variable of the main chunk, visible in the
+whole program, even if it appears inside a block.
 
 The first format supports functions and tasks:
 
@@ -1396,12 +1466,18 @@ expression in the right of `=`:
 
 ```
 Set : `set´ Expr* `=´ Expr
+    | `set´ Expr OP`=´ Expr
 ```
 
 The only valid locations are
-    [mutable `var` variables](#declarations),
-    [indexes](#indexing), and
-    [native expressions](#TODO).
+    [mutable `var` variables](#local-variables) and
+    [indexes](#indexing).
+
+The second format is a compound assignment, which updates a single location
+with a binary [operation](#operations): `set x OP= e` is equivalent to
+`set x = x OP (e)`, but evaluates the location only once.
+The valid operators are `+` `-` `*` `/` `//` `%` `++` `&` `|` `^` `<<` `>>`
+`&&` `||`.
 
 Examples:
 
@@ -1412,10 +1488,11 @@ var x
 set x = 20              ;; OK
 
 val y = [10]
-set y@1 = 20            ;; OK
+set y@0 = 20            ;; OK
 set y = 0               ;; ERROR: cannot reassign `y`
 
-set `z` = 10            ;; OK
+set x += 1              ;; x is 21
+set y@0 *= 2            ;; y@0 is 40
 ```
 
 ## Operations
