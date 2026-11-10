@@ -1,0 +1,25 @@
+;; pinned data outlives the tasks and defers of its block
+task T () {
+    defer { print(:defer, pub@0) }
+    await(:X)
+    print(:awake, pub@0)
+    await(false)
+}
+do {
+    pin x = spawn T()
+    pin b = [10]
+    set x.pub = b
+    emit(:X)
+}
+task U () {
+    defer { print(:evt, pub.v) }
+    set pub = await(:E)
+    await(false)
+}
+do {
+    pin y = spawn U()
+    pin e = :E [v=20]
+    emit @y (e)
+    defer { print(:blk, e.v) }
+}
+print(:ok)

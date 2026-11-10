@@ -812,6 +812,12 @@ static void blk_close (Unit* u, Blk b, Dst d, Hnd h) {
         u->ind--;
         out(u, "}");
     }
+    // pinned data is released after all code of the block has run
+    for (int i=nmine-1; i>=0; i--) {
+        if (mine[i].pin!=NULL && mine[i].user) {
+            out(u, "a_pin_clr(&%s);", mine[i].pin);
+        }
+    }
     u->cleanup = b.cl;
     u->defs  = b.defs;
     u->ndefs = b.ndefs;

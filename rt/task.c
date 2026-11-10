@@ -1490,6 +1490,19 @@ AStatus a_chk_task (AVal v) {
     return a_error("invalid assignment : expected pinned value");
 }
 
+void a_pin_clr (AVal* slot) {
+    AVal v = *slot;
+    // only what is still pinned in this very block
+    if (v.type<A_STR || !v.u.o->pinned || v.u.o->depth!=(uint32_t)a_depth) {
+        return;
+    }
+    if (v.type == A_TAB) {
+        a_tab_clear(A_TAB_OF(v));
+    } else if (v.type==A_FUNC || v.type==A_TASK) {
+        a_clrs(A_FUNC_OF(v)->caps, A_FUNC_OF(v)->ncap);
+    }
+}
+
 AStatus a_pin_end (AVal* slot, AStatus st) {
     AVal v = *slot;
     // only what is still pinned in this very block
@@ -1497,14 +1510,7 @@ AStatus a_pin_end (AVal* slot, AStatus st) {
         return st;
     }
 
-    if (v.type == A_TAB) {
-        a_tab_clear(A_TAB_OF(v));
-        return st;
-    }
-    if (v.type==A_FUNC || v.type==A_TASK) {
-        a_clrs(A_FUNC_OF(v)->caps, A_FUNC_OF(v)->ncap);
-        return st;
-    }
+    // data is released later, by `a_pin_clr`
     if (v.type!=A_XTASK && v.type!=A_TASKS) {
         return st;
     }

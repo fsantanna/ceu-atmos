@@ -702,8 +702,8 @@ AVal a_me (void);
 AStatus a_pub (AVal** ref);
 
 // pin x = v: the value becomes owned by the block being executed,
-// which frees it on exit. It must be unique (tasks and pools aside)
-// and not yet pinned. Numbers, strings, and the like are not pinned.
+// which frees it on exit. It must be unique (tasks and pools aside).
+// Numbers, strings, and the like are not pinned.
 AStatus a_pin (AVal* slot);
 
 // val x = v: a task or pool must be pinned somewhere.
@@ -716,12 +716,16 @@ static inline AStatus a_chk (AVal v) {
     return a_chk_task(v);
 }
 
-// End of the block of a pin, if the value is still pinned there:
-//  - task or pool: aborted
+// End of the block of a pin, if the value is still pinned there.
+// First, tasks and pools are aborted, along with the defers of the
+// block, in reverse order. Returns the status the block continues
+// with.
+AStatus a_pin_end (AVal* slot, AStatus st);
+
+// Then, data is released, so that no code ever sees it empty:
 //  - table: entries released
 //  - function: captures released
-// Returns the status the block continues with.
-AStatus a_pin_end (AVal* slot, AStatus st);
+void a_pin_clr (AVal* slot);
 
 // Releases all entries of a table.
 void a_tab_clear (ATab* t);
