@@ -42,6 +42,7 @@ static const char* BUILTINS[][2] = {
     { "tonumber", "atm_g_tonumber" },
     { "assert",   "atm_g_assert"   },
     { "X",        "atm_g_X"        },
+    { "string",   "atm_g_string"   },
     { NULL, NULL }
 };
 

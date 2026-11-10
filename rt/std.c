@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "atmos.h"
+#include "lib.h"
 
 AVal atm_g_print;
 AVal atm_g_type;
@@ -15,34 +16,6 @@ AVal atm_g_assert;
 AVal atm_g_X;
 AVal atm_g_atmos;
 AVal atm_g_math;
-
-///////////////////////////////////////////////////////////////////////////////
-// AUX
-///////////////////////////////////////////////////////////////////////////////
-
-// Growing byte buffer.
-typedef struct Buf {
-    char*  s;
-    size_t n;
-    size_t cap;
-} Buf;
-
-static void buf_add (Buf* b, const char* s, size_t n) {
-    if (b->n + n > b->cap) {
-        b->cap = (b->n + n) * 2;
-        b->s = realloc(b->s, b->cap);
-    }
-    memcpy(b->s + b->n, s, n);
-    b->n += n;
-}
-
-static void buf_str (Buf* b, AVal s) {
-    buf_add(b, A_STR_OF(s)->s, A_STR_OF(s)->len);
-}
-
-static AVal arg (int argc, AVal* argv, int i) {
-    return (i < argc) ? argv[i] : a_nil();
-}
 
 ///////////////////////////////////////////////////////////////////////////////
 // BASE
@@ -531,18 +504,29 @@ static AStatus atmos_next (AFunc* self, int argc, AVal* argv) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-static void field (AVal t, const char* name, AFn fn) {
-    AVal k = a_strz(name);
-    AVal f = a_func(fn, 0);
-    a_tab_set(A_TAB_OF(t), k, f);
-    a_dec(k);
-    a_dec(f);
+AStatus arg_str (int argc, AVal* argv, int i, const char* f, AStr** s) {
+    AVal v = arg(argc, argv, i);
+    if (v.type != A_STR) {
+        return a_error("invalid argument to '%s' : expected string : got %s",
+            f, a_typename(v));
+    }
+    *s = A_STR_OF(v);
+    return A_OK;
 }
 
-static void konst (AVal t, const char* name, AVal v) {
-    AVal k = a_strz(name);
-    a_tab_set(A_TAB_OF(t), k, v);
-    a_dec(k);
+AStatus arg_int (int argc, AVal* argv, int i, const char* f, int opt,
+    int64_t def, int64_t* n)
+{
+    AVal v = arg(argc, argv, i);
+    if (opt && v.type==A_NIL) {
+        *n = def;
+        return A_OK;
+    }
+    if (!a_toint(v, n)) {
+        return a_error("invalid argument to '%s' : expected integer : got %s",
+            f, a_isnum(v) ? "real" : a_typename(v));
+    }
+    return A_OK;
 }
 
 void atm_std_init (void) {
@@ -579,6 +563,8 @@ void atm_std_init (void) {
     atm_g_atmos = a_tab();
     field(atm_g_atmos, "status", atmos_status);
     field(atm_g_atmos, "next",   atmos_next);
+
+    atm_lib_string_init();
 }
 
 void atm_std_quit (void) {
@@ -590,4 +576,5 @@ void atm_std_quit (void) {
     a_clr(&atm_g_X);
     a_clr(&atm_g_atmos);
     a_clr(&atm_g_math);
+    atm_lib_string_quit();
 }

@@ -1,0 +1,28 @@
+11	0
+hello	world	world
+l	[]	hello world
+4	4
+7	7
+6	nil
+9	9
+0	nil
+[a, b, , c]
+[one, two, three]
+[a, b, ]
+[]
+65	66
+65	66	67
+Hi	true
+MIXED 1	mixed 1
+ababab	ab-ab-ab	true
+42    42|42   |00042
+ff FF 10 A
+3.14 0.5 1.500000e+03
+a 10 true        tag|
+100% 7
+false	invalid format : expected integer : got real
+false	invalid format : missing argument
+false	invalid format : unexpected conversion '%y'
+false	invalid argument to 'sub' : expected string : got number
+false	invalid argument to 'split' : empty separator
+false	invalid argument to 'char' : value out of range
