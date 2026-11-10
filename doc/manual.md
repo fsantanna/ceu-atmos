@@ -2000,14 +2000,10 @@ supported:
 - `(:number,:number)`:
     ranges from the first number up to the second number inclusive
 - `:number`:
-    equivalent to `(1,x)` where `x` is the given number
+    equivalent to `(0,x-1)` where `x` is the given number, which is the
+    number of iterations
 - `:nil`:
-    equivalent to `(1,math.maxinteger)`
-- `__call`:
-    the value contains a `__call` metamethod; behaves like `:function`
-- `__pairs`:
-    the value contains a `__pairs` metamethod;
-    ranges over calls to it, until it returns `nil`
+    ranges from `0` upwards, with no limit
 
 A loop evaluates to `nil` as a whole, unless a [break](#breaks) condition
 occurs.
@@ -2025,7 +2021,7 @@ loop {
 
 ```
 loop i {
-    print(i)        ;; --> 1, 2, ...
+    print(i)        ;; --> 0, 1, ...
 }
 ```
 
@@ -2037,8 +2033,14 @@ print(x)            ;; --> nil
 ```
 
 ```
+loop i in 3 {
+    print(i)        ;; --> 0, 1, 2
+}
+```
+
+```
 loop i,v in [10,20,30] {
-    print(i,v)      ;; --> (1,10), (2,20), (3,30)
+    print(i,v)      ;; --> (0,10), (1,20), (2,30)
 }
 ```
 
@@ -2095,6 +2097,11 @@ loop {                  ;; infinite loop
 -->
 
 The loop as a whole evaluates to the values passed to `break`.
+
+A break is lexical:
+it must appear inside the loop it escapes, in the same function or task body.
+It may cross nested blocks, such as the branches of a [par](#parallel), but
+not function calls.
 
 In addition to `break`, Atmos provides `until` and `while` clauses to escape
 loops on specific conditions:
@@ -2153,8 +2160,18 @@ A `catch` accepts the following exception matching expressions:
     returns `true`, replacing the throw values with additional arguments
 - otherwise: catches if the first throw value matches with `??`
 
-If a `throw` is not caught, the whole program aborts with a
-[stack trace](#TODO) debug message.
+A `catch` only deals with exceptions:
+a [`return`](#return), [`break`](#breaks), or [`escape`](#escape) crosses it
+with no interference.
+
+A [pinned value](#pin) cannot be thrown, since its block terminates before
+the `catch` receives it.
+
+Errors raised by the language, such as an invalid operation, are also
+exceptions, whose value is a string with the error message.
+
+If a `throw` is not caught, the whole program aborts with a stack trace with
+the source lines of the calls up to the `throw`.
 
 Examples:
 
