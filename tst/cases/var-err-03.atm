@@ -1,2 +1,2 @@
-print(val x = 1, x)
+print((val x = 1), x)
 set y = 1

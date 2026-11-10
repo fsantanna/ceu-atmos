@@ -362,6 +362,73 @@ static Expr* parser_spawn (void) {
 }
 
 // val x  |  var x, y = e  |  val func f () {...}
+// A token that may start an expression, in the same line as the
+// previous one. It tells if a keyword such as `return` has arguments.
+static int starts_expr (void) {
+    static const char* NO[] = {
+        "{", "}", ")", "]", ",", "=", "=>", ">", "else", "in", "on",
+        "where", "with", NULL
+    };
+    static const char* PRE[] = { "-", "!", "#", "~", NULL };
+    if (TK0.sep!=TK1.sep || check_tag(TK_EOF)) {
+        return 0;
+    }
+    if (is_lit(TK1.tag)) {
+        return 1;
+    }
+    if (check_tag(TK_OP)) {
+        return in(PRE, TK1.str);
+    }
+    return !in(NO, TK1.str);
+}
+
+// e1, e2, ...: a list with no parentheses, as the single expression
+// `(e1, e2, ...)`.
+static Expr* parser_exprs (void) {
+    Tk tk = TK1;
+    Expr* e = parser();
+    if (!check_str(",")) {
+        return e;
+    }
+    Expr* l = mk(E_LIST, tk);
+    list_add(&l->u.list.es, e);
+    while (accept_str(",")) {
+        list_add(&l->u.list.es, parser());
+    }
+    return l;
+}
+
+// Statements that look like calls take their arguments with or
+// without parentheses, up to the end of the expression:
+//      return              no values: nothing else in the line
+//      return e
+//      return e1, e2       same as return (e1, e2)
+static const char* EXITS[] = {
+    "return", "break", "escape", "throw", "abort", "until", "while", NULL
+};
+
+static Expr* parser_exit (Tk tk) {
+    Expr* call = mk(E_CALL, tk);
+    call->u.call.f = mk(E_ACC, tk);
+    if (starts_expr()) {
+        list_add(&call->u.call.es, parser());
+        while (accept_str(",")) {
+            list_add(&call->u.call.es, parser());
+        }
+    }
+    // return (e1, e2) is return e1, e2
+    List* es = &call->u.call.es;
+    if (es->n==1 && es->v[0]->tag==E_LIST) {
+        *es = es->v[0]->u.list.es;
+    }
+    return call;
+}
+
+static int is_exit (Expr* e) {
+    return e->tag==E_CALL && e->u.call.f->tag==E_ACC &&
+           in(EXITS, e->u.call.f->tk.str);
+}
+
 static Expr* parser_dcl (void) {
     Expr* dcl = mk(E_DCL, TK0);
 
@@ -401,7 +468,7 @@ static Expr* parser_dcl (void) {
             }
             dcl->u.dcl.set = spw;
         } else {
-            dcl->u.dcl.set = parser();
+            dcl->u.dcl.set = parser_exprs();
         }
     }
     return dcl;
@@ -434,6 +501,8 @@ static Expr* parser_set (void) {
         set->u.set.op = xstrndup(TK0.str, TK0.len-1);
     } else {
         accept_str_err("=");
+        set->u.set.src = parser_exprs();
+        return set;
     }
     set->u.set.src = parser();
     return set;
@@ -821,6 +890,11 @@ static Expr* parser_1_prim (void) {
     } else if (accept_tag(TK_CLK)) {
         return mk(E_CLK, TK0);
 
+    // return e  break e  escape e  throw e  abort e
+    } else if (check_tag(TK_ID) && in(EXITS,TK1.str)) {
+        next();
+        return parser_exit(TK0);
+
     // id: x, __v
     } else if (accept_tag(TK_ID)) {
         return mk(E_ACC, TK0);
@@ -946,6 +1020,20 @@ static Expr* parser_1_prim (void) {
         if (accept_str("@")) {
             e->u.emit.to = parser_at_err();
         }
+        // emit e  |  emit (e)
+        if (starts_expr()) {
+            Expr* evt = parser();
+            if (evt->tag == E_LIST) {
+                err(tk, "expected single argument");
+            }
+            // an event is a single value anyway
+            if (evt->tag == E_PARENS) {
+                evt = evt->u.parens.e;
+            }
+            e->u.emit.e = evt;
+            return e;
+        }
+        // emit <- e
         Expr* call = parser_2_suf(mk(E_ACC, tk));
         call = parser_6_pip(parser_5_bin(parser_3_met(call)));
         if (call->tag != E_CALL) {
@@ -1015,9 +1103,9 @@ static Expr* parser_1_prim (void) {
         list_add(&e->u.par.blks, parser_block());
         return e;
 
-    // until(...)  while(...)
+    // until c  while c
     } else if (accept_str("until") || accept_str("while")) {
-        return mk(E_ACC, TK0);
+        return parser_exit(TK0);
 
     } else {
         err(TK1, "expected expression");
@@ -1050,6 +1138,10 @@ static Expr* parser_2_suf (Expr* pre) {
     int no = check_str("emit") || check_str("spawn") ||
              check_str("toggle") || check_str("thread");
     Expr* e = pre ? pre : parser_1_prim();
+    if (pre==NULL && is_exit(e)) {
+        // it has taken the whole expression
+        return e;
+    }
 
     while (1) {
         int ok = !no && is_prefix(e) && (

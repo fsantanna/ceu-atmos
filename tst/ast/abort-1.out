@@ -1,4 +1,4 @@
-(call abort t)
+(call abort (parens t))
 pub
 (set pub = 10)
 (@ t "pub")

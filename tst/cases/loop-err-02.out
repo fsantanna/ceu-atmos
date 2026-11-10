@@ -1,1 +1,1 @@
-loop-err-02.atm : line 1 : near '(' : expected condition
+loop-err-02.atm : line 1 : near 'until' : expected condition

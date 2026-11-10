@@ -362,13 +362,11 @@ Atmos borrows much from Lua, and some differences are worth mentioning:
     - Atmos: the precedences and the arithmetic of C.
 
 - Statements `return` and `break`:
-    - Lua: `return 10`, `break` (no parenthesis)
-    - Atmos: `return (10)`, `break()` (parenthesis)
-        - Atmos uses the same call syntax with parenthesis in all expressions
-          that resemble statements or calls (`await`, `break`, `do`, `emit`,
-          `escape`, `return`, `tasks`, `throw`, `until`, and `while`).
-        - The reason is to enforce an uniform syntax across all expressions.
-        - Some workarounds: `return 'ok'`, `return <- 10`
+    - Lua: `return 10`, `break`, always the last statement of a block
+    - Atmos: `return 10`, `break`, anywhere, since they are expressions
+        - The same holds for `abort`, `emit`, `escape`, `throw`, `until`, and
+          `while`, which take their [arguments](#statement-arguments) with or
+          without parenthesis.
 - Method call:
     - Lua: `o:f()` (single colon)
     - Atmos: `o::f()` (double colon)
@@ -376,12 +374,13 @@ Atmos borrows much from Lua, and some differences are worth mentioning:
             - `f () :x ()` is `f():x()` or `f() ; :x()`?
 - List of expressions:
     - Lua: `e1,e2,...` (no parenthesis)
-    - Atmos: `(e1,e2,...)` (parenthesis)
-        - A list of expressions in Atmos is an expression.
-        - The reason is to simplify the grammar and to support lists in
-          contexts such as `f <-- (1,2)`.
-    - Nevertheless, Atmos does not use parenthesis for variables in the left of
-      declarations and assignments.
+    - Atmos: `e1,e2,...` or `(e1,e2,...)`
+        - A list with no parenthesis is valid, like in Lua, in the right of
+          declarations and assignments, and after statements such as `return`.
+        - A list enclosed by parenthesis is an expression, which is valid
+          anywhere, such as in `f <-- (1,2)`.
+        - Like in Lua, a single expression enclosed by parenthesis has a
+          single value: `(f())` is the first value of `f()`.
 - Table constructor:
     - Lua: `{ ... }` (braces)
     - Atmos: `[ ... ]` (brackets)
@@ -1133,7 +1132,7 @@ An `escape` immediately aborts the deepest enclosing block matching the given
 tag:
 
 ```
-Escape : `escape´ `(´ Expr* `)´
+Escape : `escape´ Expr+
 ```
 
 The first argument to escape is the [tag](#literals) or
@@ -1152,7 +1151,7 @@ Examples:
 
 ```
 val v = do :X {
-    escape(:X [x=10])
+    escape :X [x=10]
     print('never executes')
 }
 print(v.x)  ;; --> 10
@@ -1162,7 +1161,7 @@ print(v.x)  ;; --> 10
 val a,b =
     do :X {
         do :Y {
-            escape(:X, 'a', 'b')
+            escape :X, 'a', 'b'
         }
     }
 print(a, b) ;; --> a, b
@@ -1171,7 +1170,7 @@ print(a, b) ;; --> a, b
 ```
 do :X {
     do :Y {
-        escape(:Z)  ;; error: no matching :Z block
+        escape :Z   ;; error: no matching :Z block
     }
 }
 ```
@@ -1248,7 +1247,7 @@ Locals in Atmos must be declared before use, and are only visible inside the
 [block](#blocks) in which they are declared:
 
 ```
-Local : (`val´ | `var` | `pin`) ID* [`=´ Expr]
+Local : (`val´ | `var` | `pin`) ID* [`=´ Expr+]
 ```
 
 A declaration first specifies one of `val`, `var` or `pin` variable modifier.
@@ -1259,8 +1258,10 @@ which reclaims the value when it terminates or aborts.
 A declaration may specify a list of identifiers, which supports multiple
 declarations with the same modifier.
 
-The optional initialization expression, which may evaluate to multiple values,
-assigns an initial value to the variable(s).
+The optional initialization is a list of expressions, which assigns the
+initial values to the variable(s).
+Like in Lua, if the last expression of the list evaluates to multiple values,
+then all of them are considered.
 
 Note that the `val` immutable modifier rejects re-assignments to its name, but
 does not prevent assignments to fields of
@@ -1272,7 +1273,7 @@ Examples:
 
 ```
 do {
-    val a, b, c = (1, 2, 3)
+    val a, b, c = 1, 2, 3
     print(a, b, c)      ;; 1, 2, 3
 }
 
@@ -1450,11 +1451,12 @@ A `return` immediately terminates the enclosing function, aborting all active
 blocks:
 
 ```
-Return : `return´ `(´ Expr* `)´
+Return : `return´ Expr*
 ```
 
 The list of return expressions becomes the final result of the corresponding
 call.
+The list follows the rules for [statement arguments](#statement-arguments).
 
 Examples:
 
@@ -1463,10 +1465,24 @@ Examples:
 ```
 func f () {
     print(1)    ;; --> 1
-    return(2)
+    return 2
     print(3)    ;; never executes
 }
 print(f())      ;; --> 2
+```
+
+```
+func g () {
+    return 1, 2
+}
+func all () {
+    return g()      ;; all values of g
+}
+func one () {
+    return (g())    ;; only the first value of g
+}
+print(all())        ;; --> 1, 2
+print(one())        ;; --> 1
 ```
 
 ### Set
@@ -1475,7 +1491,7 @@ The `set` statement assigns, to the list of locations in the left of `=`, the
 expression in the right of `=`:
 
 ```
-Set : `set´ Expr* `=´ Expr
+Set : `set´ Expr* `=´ Expr+
     | `set´ Expr OP`=´ Expr
 ```
 
@@ -1503,6 +1519,9 @@ set y = 0               ;; ERROR: cannot reassign `y`
 
 set x += 1              ;; x is 21
 set y@0 *= 2            ;; y@0 is 40
+
+var a, b = 1, 2
+set a, b = b, a         ;; swaps a and b
 ```
 
 ## Operations
@@ -1731,9 +1750,26 @@ Like in [Lua calls][lua-call], if there is a single
 [constructor](#types--values) argument, then the parenthesis are optional.
 This is valid for strings, tags, tables, lambdas, clocks, and native literals.
 
-The many call formats are also valid for the statements as follows:
-`await`, `break`, `do`, `emit`, `escape`, `return`, `tasks`, `throw`, `until`,
-and `while`.
+The call formats are also valid for the statements `await`, `do`, and
+`tasks`.
+
+#### Statement Arguments
+
+The statements `abort`, `break`, `emit`, `escape`, `return`, `throw`, `until`,
+and `while` take their arguments with no parenthesis:
+
+- The arguments are a list of expressions separated by commas, which extends
+  as far as possible: `return x + 1, y` returns two values.
+- The arguments must start in the same line of the statement.
+  Otherwise, the statement has no arguments, which is only meaningful for
+  `return`, `break`, and `throw`.
+- Since a list enclosed by parenthesis is an expression, the parenthesis are
+  optional: `return (1, 2)` is the same as `return 1, 2`.
+- A single expression enclosed by parenthesis has a single value:
+  `return (f())` returns the first value of `f()`, while `return f()` returns
+  all of them.
+
+The statements `abort` and `emit` expect a single argument.
 
 Examples:
 
@@ -1936,7 +1972,7 @@ Examples:
 val max = ifs {     ;; exclusive max value between `x` and `y`
     x > y => x
     x < y => y
-    else  => throw(:error, "values are equal")
+    else  => throw :error, "values are equal"
 }
 ```
 
@@ -2087,9 +2123,9 @@ loop e on :X {      ;; <-- (`emit :X [v=10]`)
 An `break` immediately escapes the deepest enclosing loop:
 
 ```
-Break : `break´ `(´ Expr* `)´
-      | `until´ `(´ Expr+ `)´
-      | `while´ `(´ Expr+ `)´
+Break : `break´ Expr*
+      | `until´ Expr+
+      | `while´ Expr+
 ```
 
 <!--
@@ -2116,9 +2152,11 @@ not function calls.
 In addition to `break`, Atmos provides `until` and `while` clauses to escape
 loops on specific conditions:
 
-1. A `break(...)` escapes the loop with the values `...`.
-2. An `until(<cnd>,...)` is equivalent to `if <cnd> { break(... || <cnd>) }`.
-3. A `while(<cnd>,...)` is equivalent to `if not <cnd> { break(...) }`.
+1. A `break ...` escapes the loop with the values `...`.
+2. An `until <cnd>, ...` is equivalent to `if <cnd> { break (... || <cnd>) }`.
+3. A `while <cnd>, ...` is equivalent to `if not <cnd> { break ... }`.
+
+The values follow the rules for [statement arguments](#statement-arguments).
 
 Examples:
 
@@ -2130,7 +2168,7 @@ loop {
     set i = i + 1
     print(i)        ;; --> 1,2,...,10
     if i == 10 {
-        break()
+        break
     }
 }
 ```
@@ -2138,7 +2176,7 @@ loop {
 ```
 val x = loop {
     <...>
-    until(f())      ;; escapes when f()
+    until f()       ;; escapes when f()
     <...>
 }
 print(x)            ;; value of f()
@@ -2150,7 +2188,7 @@ An exception `throw` aborts all active enclosing blocks in the stack up to a
 matching `catch` clause:
 
 ```
-Throw : `throw´ `(´ Expr* `)´
+Throw : `throw´ Expr*
 Catch : `catch´ Expr Block
 ```
 
@@ -2196,7 +2234,7 @@ print(ok, v)        ;; --> true, 42
 
 ```
 val ok, x = catch :X {
-    throw(:X [v=10, msg="error"])
+    throw :X [v=10, msg="error"]
     print("unreachable")
 }
 print(ok, x.msg)    ;; --> false, error
@@ -2247,7 +2285,7 @@ An `abort` receives a [task](#tasks) or a [tasks](#tasks) value, and immediately
 aborts it:
 
 ```
-Abort : `abort´ `(´ Expr `)´
+Abort : `abort´ Expr
 ```
 
 All nested tasks are also aborted.
@@ -2266,7 +2304,7 @@ task T () {
 }
 do {
     pin t = spawn T()
-    abort(t)            ;; --> aborted
+    abort t             ;; --> aborted
 }
 ```
 
@@ -2399,7 +2437,7 @@ See [Ambiguities](#ambiguities):
 An `emit` broadcasts an event that can awake [awaiting](#await) tasks:
 
 ```
-Emit : `emit´ [At] `(´ Expr `)´
+Emit : `emit´ [At] Expr
 ```
 
 It takes the event to broadcast as its single argument, which is matched
@@ -2842,18 +2880,18 @@ Prog  : { Expr [`;´] }
 Block : `{´ Prog `}´
 Expr  : `do´[TAG]  Block                            ;; explicit block
       | `do´ `(´ Expr `)´                           ;; expression as statement
-      | `escape´ `(´ Expr* `)´                      ;; escape from block
+      | `escape´ Expr+                              ;; escape from block
       | `defer´ Block                               ;; defer statements
       | `test´ Block                                ;; test block
 
-      | (`val´ | `var` | `pin`) ID* [`=´ Expr]      ;; local declarations
+      | (`val´ | `var` | `pin`) ID* [`=´ Expr+]     ;; local declarations
       | Expr `where´ `{´ (ID* `=´ Expr)* `}´        ;; where clause
       | (`func´|`task´) ID {`.´ ID} [`::´ ID]       ;; declaration (`::´ func only)
                `(´ ID* [`...´] `)´
                Block
-      | `return´ `(´ Expr* `)´                      ;; return from function
+      | `return´ Expr*                              ;; return from function
 
-      | `set´ Expr* `=´ Expr                        ;; assignment
+      | `set´ Expr* `=´ Expr+                       ;; assignment
       | `set´ Expr OP`=´ Expr                       ;; compound assignment
 
       | `nil´ | `false´ | `true´                    ;; literals
@@ -2870,7 +2908,7 @@ Expr  : `do´[TAG]  Block                            ;; explicit block
 
       | `task´                                      ;; running task
       | `tasks´ `(´ [Expr] `)´                      ;; tasks pool
-      | `abort´ `(´ Expr `)´                        ;; abortion
+      | `abort´ Expr                                ;; abortion
 
       | OP Expr                                     ;; pre ops
       | Expr OP Expr                                ;; bin ops
@@ -2901,18 +2939,18 @@ Expr  : `do´[TAG]  Block                            ;; explicit block
       | `loop´ ID* `in´ Expr Block                  ;; iterator loop
       | `loop´ ID? `on´ Patt Block                  ;; event loop
 
-      | `break´ `(´ Expr* `)´                       ;; loop break
-      | `until´ `(´ Expr+ `)´
-      | `while´ `(´ Expr+ `)´
+      | `break´ Expr*                               ;; loop break
+      | `until´ Expr+
+      | `while´ Expr+
 
-      | `throw´ `(´ Expr* `)´                       ;; throw exception
+      | `throw´ Expr*                               ;; throw exception
       | `catch´ Expr Block                          ;; catch exception
 
       | `spawn` [At] Expr `(´ Expr* `)`             ;; spawn task
       | `spawn´ Block                               ;; spawn block
 
       | `await´ Patt                                ;; await pattern
-      | `emit´ [At] `(´ Expr* `)´                   ;; emit event
+      | `emit´ [At] Expr                            ;; emit event
 
       | `toggle´ Expr `(´ Expr `)´ [`with´ Patt {`,´ Patt}] ;; toggle task
       | `toggle´ `on´ TAG [`with´ Patt {`,´ Patt}] Block    ;; toggle block
@@ -2961,3 +2999,7 @@ may surprise a naive reading:
 | [tasks](#tasks)   | `task` ⏎ `(x)`        | `task ; (x)`            | `task(x)`                |
 | [toggle](#toggle) | `with :a until (c), :b` | `with :a (until (c), :b)` | `with <:a until (c)>, :b` |
 | [lambda](#lambda) | `\-`                  | `\(a,b){ a - b }`       | `\(a){ -a }`             |
+| [return](#statement-arguments) | `return` ⏎ `f()` | `return ; f()`         | `return f()`             |
+| [return](#statement-arguments) | `return (a+1)*2` | `return ((a+1)*2)`     | `(return (a+1)) * 2`     |
+| [return](#statement-arguments) | `[return a, b]`  | `[return (a, b)]`      | `[(return a), b]`        |
+| [locals](#local-variables) | `f(val x = 1, y)`   | `f(val x = (1, y))`     | `f((val x = 1), y)`      |

@@ -1,0 +1,73 @@
+;; exits take their values with no parentheses
+func two () { return 1, 2 }
+func all () { return two() }
+func one () { return (two()) }
+func sum (a, b) { return a + b }
+func mul (a) { return (a + 1) * 2 }
+func none () {
+    return
+    print(:never)
+}
+func lst () { return (1, 2) }
+print(two())
+print(all())
+print(one())
+print(sum(1, 2), mul(2))
+print(none())
+print(lst())
+
+;; declarations and assignments
+val a, b = 10, 20
+var x, y = a, b
+set x, y = y, x
+print(a, b, x, y)
+val p, q = two()
+val r, s = (two())
+print(p, q, r, s)
+
+;; loops
+var i = 0
+val v = loop {
+    set i += 1
+    until i == 3, :three
+}
+print(i, v)
+set i = 10
+loop {
+    while i < 13
+    set i += 1
+}
+print(i)
+print(loop { break })
+print(loop { break 1, 2 })
+print(loop { break :ok })
+val w = loop {
+    if i > 0 => break => nil
+}
+print(w)
+
+;; escape and throw
+print(do :X { escape :X, 1, 2 })
+print(do :X { escape :X })
+print(catch :E { throw :E, "msg" })
+print(catch true { throw })
+val e = :T [10]
+val ok, err = catch :T { throw e }
+print(ok, err@0)
+
+;; abort and emit
+task T (id) {
+    defer { print(:aborted, id) }
+    loop {
+        val evt = await(true)
+        print(id, evt)
+    }
+}
+pin t = spawn T(:t)
+val evt = :E
+emit evt
+emit @t evt
+emit @:global :G
+abort t
+emit evt
+print(:end)

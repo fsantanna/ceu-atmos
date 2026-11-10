@@ -107,6 +107,12 @@ exs/    examples
 - `**`, `?>`, `!>`, `=>=`, `=<=`, `===`, and `=!=` are functions:
   `math.pow`, `X.xin`, `X.nin`, `X.gte`, `X.lte`, `X.eq`, and `X.neq`.
   The strict `X.gt` and `X.lt` are new.
+- Statements take their arguments with no parentheses: `return x + 1`,
+  `break`, `until i == 10`, `throw :X, "msg"`, `abort t`, `emit e`.
+    - Lists need no parentheses either: `return 1, 2`,
+      `val a, b = 1, 2`, `set x, y = y, x`.
+    - `(a, b)` is still a list anywhere, and `(f())` has a single
+      value, as in Lua.
 - Native literals are C code, not Lua: `` `:int strlen("abc")` ``.
     - A leading tag converts the expression: `:int`, `:num`, `:bool`,
       `:str`, `:val`. With no tag, the code is a statement.

@@ -850,6 +850,18 @@ Agreed after `atmos-lang/atmos@5977b07`.
   that task to unwind (Scheduler, Late exit). This replaces the
   private copy of the frame, which kept the variables alive but let
   the outer defers run first.
+- Statements take their arguments with no parentheses: `return`,
+  `break`, `escape`, `throw`, `until`, `while`, `abort`, `emit`.
+    - The argument list extends over the commas, as far as possible,
+      and must start in the same line. Otherwise there are none.
+    - Declarations and assignments also take a bare list in the
+      right: `val a, b = 1, 2`.
+    - `(a, b)` remains a list expression, valid anywhere. A single
+      expression in parentheses has a single value, as in Lua:
+      `return (f())` truncates, `return f()` does not.
+    - Unchanged: `do(e)`, `tasks(n)`, `await`, `toggle`, and the
+      `until (c)` of await patterns, since a bare `>` would clash with
+      the pattern delimiters.
 - Memory refinements found while implementing M8 (Pin, Stores, Exits):
   pin at birth for constructors, two-phase block end, lateral check on
   `emit`, confinement after a transfer, abort of confined tasks that

@@ -1,4 +1,4 @@
 (val e = (await :X))
 (call print (await 10ms))
 (await :X)
-(call until c)
+(call until (parens c))
