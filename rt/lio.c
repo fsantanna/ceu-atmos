@@ -115,13 +115,32 @@ static void read_line (FILE* fp) {
 
 // io.read() / io.read(f): the next line of the standard input or of
 // file `f`, or nil at the end.
+// io.read(:all) / io.read(f, :all): all that remains, as one string.
 static AStatus io_read (AFunc* self, int argc, AVal* argv) {
     (void) self;
     FILE* fp = stdin;
-    if (argc>0 && arg_file(argc,argv,0,"read",&fp)!=A_OK) {
-        return A_ERROR;
+    int i = 0;
+    if (a_nat_is(arg(argc,argv,0), FILE_KIND)) {
+        if (arg_file(argc, argv, 0, "read", &fp) != A_OK) {
+            return A_ERROR;
+        }
+        i = 1;
     }
-    read_line(fp);
+    AVal mode = arg(argc, argv, i);
+    if (mode.type == A_NIL) {
+        read_line(fp);
+        return A_OK;
+    }
+    if (mode.type!=A_STR || strcmp(A_STR_OF(mode)->s,"all")!=0) {
+        return a_error("invalid argument to 'read' : expected file or :all");
+    }
+    Buf b = { NULL, 0, 0 };
+    char chunk[4096];
+    size_t n;
+    while ((n = fread(chunk, 1, sizeof(chunk), fp)) > 0) {
+        buf_add(&b, chunk, n);
+    }
+    a_push(buf_val(&b));
     return A_OK;
 }
 

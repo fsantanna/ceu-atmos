@@ -25,6 +25,5 @@ false	invalid load : line 1 : expected end of input
 false	invalid load : line 1 : unterminated comment
 false	invalid load : line 1 : expected value
 false	invalid argument to 'load' : expected string : got number
-false	invalid load : cannot read file : inc/nope.atm
 false	invalid load : line 1 : invalid key
 false	invalid load : line 1 : unexpected name : expected value

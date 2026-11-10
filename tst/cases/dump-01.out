@@ -1,0 +1,25 @@
+nil	true	10	-3	1.5	2.0	1e+100
+"a\tb\n\x22q\x22 \\ é"	"tag.x"	""
+[1, 2, 3]
+["a", :T [v=true], x=10, y=[1, [2]]]
+[@(10)="ten", @("s p")=1, @(1.5)=2, @(true)=3]
+:Pos [x=1, y=2]	[1, tag="not a tag!"]
+[1, @(2)=3]	["a", "b"]
+1e999	-1e999	5400000000
+true	true
+true	true
+true	true
+true	true
+true	true
+true	true
+3	1	rocks
+;; saved
+[score=[L=3, R=1], name="rocks"]
+
+true	nil
+false	invalid dump : unexpected function
+false	invalid dump : unexpected function
+false	invalid dump : unexpected cycle
+false	invalid dump : unexpected nan
+false	invalid argument to 'read' : expected file or :all
+[1, [2]]

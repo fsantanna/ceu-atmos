@@ -659,10 +659,12 @@ void    atm_quit  (void);
 - **io:** `write`, `read` (line), `open`/`close`/`lines` as native box.
 - **os:** `time`, `clock`, `exit`, `getenv`, `remove`.
 - **X:** `tostring`, `print`, `copy`, `eq`, `neq`, `gte`, `lte`, `gt`,
-  `lt`, `xin`, `nin`, `load`, `loadfile`.
+  `lt`, `xin`, `nin`, `load`, `dump`.
     - `load` reads data only: the constructors of the language, with
       comments. It is not the `load` of Lua: there is still no
       evaluation of source at runtime.
+    - `dump` writes what `load` reads. Files go through `io`, with
+      `io.read(f, :all)` for a whole file: there are no file versions.
 - **atmos:** `status(t)`.
 
 ## Compiler

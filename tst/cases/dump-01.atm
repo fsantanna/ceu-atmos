@@ -1,0 +1,51 @@
+;; X.dump writes what X.load reads
+print(X.dump(nil), X.dump(true), X.dump(10), X.dump(-3), X.dump(1.5), X.dump(2.0), X.dump(1e100))
+print(X.dump('a\tb\n"q" \\ é'), X.dump(:tag.x), X.dump(""))
+print(X.dump([1, 2, 3]))
+print(X.dump([x=10, y=[1,[2]], "a", :T [v=true]]))
+print(X.dump([@(10)="ten", @("s p")=1, @(1.5)=2, @(true)=3]))
+print(X.dump(:Pos [x=1, y=2]), X.dump([tag="not a tag!", 1]))
+print(X.dump([1, nil, 3]), X.dump([@(1)=:b, @(0)=:a]))
+print(X.dump(math.huge), X.dump(-math.huge), X.dump(1h30min))
+
+;; round trips
+func rt (v) {
+    val s = X.dump(v)
+    val w = X.load(s)
+    print(X.eq(v, w), X.dump(w) == s)
+}
+rt([1, 2.0, "three", :four, nil, false])
+rt(:Config [ title="Rocks", size=[640,480], keys=[l='A', r='D'], ratio=0.1 ])
+rt([@(10)="ten", @("s p")=1, @(-1)=[], x=[y=[z=[]]]])
+rt("multi\nline \x01 \\")
+rt(0.1 + 0.2)
+val big = [9223372036854775807, -9223372036854775807, 0xFF]
+rt(big)
+
+;; a file
+val path = "/tmp/atmos-tst-dump-01.atm"
+do {
+    val f = io.open(path, "w")
+    io.write(f, ";; saved\n", X.dump([score=[L=3, R=1], name="rocks"]), "\n")
+}
+val saved = X.load(io.read(io.open(path), :all))
+print(saved.score.L, saved.score.R, saved.name)
+do {
+    val f = io.open(path)
+    print(io.read(f))
+    print(io.read(f, :all))
+    print(io.read(f, :all) == "", io.read(f))
+}
+os.remove(path)
+
+;; errors
+print(catch true { X.dump(print) })
+print(catch true { X.dump([1, [func () {}]]) })
+val cyc = []
+set cyc.me = cyc
+print(catch true { X.dump(cyc) })
+set cyc.me = nil
+print(catch true { X.dump(0/0.0 * 0) })
+print(catch true { io.read(io.open("/dev/null"), :line) })
+pin p = [1, [2]]
+print(X.dump(p))

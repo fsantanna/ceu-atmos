@@ -2824,6 +2824,7 @@ referenced, or when its [pin](#pin) block terminates.
 - `io.write(f, ...)`: writes its arguments to the file `f`
 - `io.read([f])`: the next line of the standard input, or of the file `f`,
   with no line break; or `nil` at the end
+- `io.read([f,] :all)`: all that remains to read, as a single string
 - `io.lines(f)`: an iterator over the lines of a file, given as a file or as a
   path, for [loops](#loop)
 
@@ -2853,17 +2854,19 @@ tables recursively.
 - `X.tostring(v)`: deep string representation of `v`
 - `X.print(...)`: `print` using `X.tostring` on each argument
 - `X.copy(v)`: deep copy of `v`
-- `X.load(s)`, `X.loadfile(path)`: reads a value written as data
+- `X.load(s)`: reads a value written as data
+- `X.dump(v)`: writes a value as data
 - `X.xin(v, t)`, `X.nin(v, t)`: membership ("in" and "not in")
 - `X.gte(a, b)`, `X.lte(a, b)`: deep ordering ("sup" and "sub")
 - `X.gt(a, b)`, `X.lt(a, b)`: strict deep ordering
 - `X.eq(a, b)`, `X.neq(a, b)`: deep equality
 
-### Load
+### Load and Dump
 
 The function `X.load(s)` reads the value written in the string `s`, and
-`X.loadfile(path)` reads it from a file.
-They are meant for data, such as configuration files, in the way of JSON.
+`X.dump(v)` writes the value `v` as a string that `X.load` reads.
+They are meant for data, such as configuration files and saved states, in the
+way of JSON.
 
 The value is written with the constructors of the language only:
 
@@ -2887,6 +2890,17 @@ them is an error.
 The result is a regular value, with new tables that can be modified.
 An invalid text raises an error with the line of the problem.
 
+A dump is the reverse: `X.load(X.dump(v))` is [structurally equal](#deep-equality)
+to `v`.
+Only data can be written: `nil`, booleans, numbers, strings, and tables of
+them, with no cycles.
+Any other value, such as a function or a task, raises an error.
+A string is written as a string, even if it was created as a tag, except for
+the field `tag` of a table.
+
+To read and write files, combine them with the functions of
+[`io`](#input-and-output).
+
 Examples:
 
 ```
@@ -2900,9 +2914,16 @@ Examples:
 ```
 
 ```
-val c = X.loadfile("config.atm")
+val f = io.open("config.atm")
+val c = X.load(io.read(f, :all))
 print(c ?? :Config, c.title, c.size@0)      ;; --> true, Rocks, 640
 print(X.load("[1, [2, 3]]")@1@0)            ;; --> 2
+```
+
+```
+val s = X.dump(:Pos [x=10, y=20, "a"])
+print(s)                                    ;; --> :Pos ["a", x=10, y=20]
+io.write(io.open("pos.atm", "w"), s)        ;; saves it
 ```
 
 ### Membership
