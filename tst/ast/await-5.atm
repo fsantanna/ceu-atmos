@@ -1,0 +1,7 @@
+await <:X || :Y && :Z>
+await <:A && :B || :C && :D>
+await <!:X && :Y || :Z>
+await <:X || :Y until (c)>
+await <:X && <:Y || :Z>>
+await <:X until (a) while (b)>
+await <:A || :B || :C>

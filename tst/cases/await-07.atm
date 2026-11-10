@@ -1,0 +1,16 @@
+spawn {
+    await <:X || :Y && :Z>
+    print(:1)
+    await <:A && :B || :C>
+    print(:2)
+    val e = await <:P || :Q until (it.n > 1)>
+    print(e.tag, e.n)
+}
+emit(:Y)
+print(:a)
+emit(:Z)
+emit(:A)
+print(:b)
+emit(:C)
+emit(:P [n=1])
+emit(:Q [n=2])

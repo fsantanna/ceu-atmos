@@ -1,0 +1,7 @@
+(await (|| :X (&& :Y :Z)))
+(await (|| (&& :A :B) (&& :C :D)))
+(await (|| (&& (! :X) :Y) :Z))
+(await (until (|| :X :Y) (func (it) { c })))
+(await (&& :X (|| :Y :Z)))
+(await (while (until :X (func (it) { a })) (func (it) { b })))
+(await (|| (|| :A :B) :C))

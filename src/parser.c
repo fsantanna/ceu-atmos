@@ -559,7 +559,7 @@ static Expr* parser_loop (void) {
 //   pattern : await<PAT>   the combinators, with their own levels:
 //       1_prim : :any/:all, until (c), (E) value, <P> group, primary
 //       2_pre  : !p
-//       3_bin  : p&&p | p||p | p until (c) | p while (c)
+//       3_bin  : p&&p, then p||p, then p until (c) | p while (c)
 
 static Patt* parser_await_3_bin (void);
 
@@ -667,36 +667,32 @@ static Patt* parser_await_2_pre (void) {
     return parser_await_1_prim();
 }
 
-// Combinators chain with the same operator only.
-static Patt* parser_await_3_bin (void) {
-    Patt* p1 = parser_await_2_pre();
-    const char* op0 = NULL;
-    while (1) {
-        int bin = check_tag(TK_OP) &&
-                  (!strcmp(TK1.str,"&&") || !strcmp(TK1.str,"||"));
-        int suf = (TK0.sep == TK1.sep) &&
-                  (check_str("until") || check_str("while"));
-        if (!bin && !suf) {
-            return p1;
-        }
+// Combinators follow the precedence of the operators: `!`, then
+// `&&`, then `||`. The until/while suffix is the weakest: it takes the
+// whole pattern to its left.
+static Patt* parser_await_bin (int and) {
+    const char* op = and ? "&&" : "||";
+    Patt* p1 = and ? parser_await_2_pre() : parser_await_bin(1);
+    while (check_tag(TK_OP) && !strcmp(TK1.str,op)) {
         next();
-        Tk op = TK0;
-        if (op0!=NULL && strcmp(op0,op.str)) {
-            err(op, "operation error : use parentheses to disambiguate");
-        }
-        op0 = op.str;
-        Patt* p;
-        if (suf) {
-            p = mkp(!strcmp(op.str,"until") ? PT_UNTIL : PT_WHILE, op);
-            p->a = p1;
-            p->e = parser_pred();
-        } else {
-            p = mkp(!strcmp(op.str,"&&") ? PT_AND : PT_OR, op);
-            p->a = p1;
-            p->b = parser_await_2_pre();
-        }
+        Patt* p = mkp(and ? PT_AND : PT_OR, TK0);
+        p->a = p1;
+        p->b = and ? parser_await_2_pre() : parser_await_bin(1);
         p1 = p;
     }
+    return p1;
+}
+
+static Patt* parser_await_3_bin (void) {
+    Patt* p1 = parser_await_bin(0);
+    while (TK0.sep==TK1.sep && (check_str("until") || check_str("while"))) {
+        next();
+        Patt* p = mkp(!strcmp(TK0.str,"until") ? PT_UNTIL : PT_WHILE, TK0);
+        p->a = p1;
+        p->e = parser_pred();
+        p1 = p;
+    }
+    return p1;
 }
 
 static Patt* parser_await (void) {
