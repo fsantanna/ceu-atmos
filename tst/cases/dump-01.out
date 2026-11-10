@@ -21,5 +21,5 @@ false	invalid dump : unexpected function
 false	invalid dump : unexpected function
 false	invalid dump : unexpected cycle
 false	invalid dump : unexpected nan
-false	invalid argument to 'read' : expected file or :all
+false	invalid argument to 'read' : expected :all
 [1, [2]]

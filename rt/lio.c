@@ -131,8 +131,12 @@ static AStatus io_read (AFunc* self, int argc, AVal* argv) {
         read_line(fp);
         return A_OK;
     }
-    if (mode.type!=A_STR || strcmp(A_STR_OF(mode)->s,"all")!=0) {
-        return a_error("invalid argument to 'read' : expected file or :all");
+    if (mode.type != A_STR) {
+        return a_error("invalid argument to 'read' : expected %s : got %s",
+            (i == 0) ? "file" : ":all", a_typename(mode));
+    }
+    if (strcmp(A_STR_OF(mode)->s,"all") != 0) {
+        return a_error("invalid argument to 'read' : expected :all");
     }
     Buf b = { NULL, 0, 0 };
     char chunk[4096];
