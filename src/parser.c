@@ -670,12 +670,6 @@ static int accept_angle (const char* one) {
     return 0;
 }
 
-static void accept_angle_err (const char* one) {
-    if (!accept_angle(one)) {
-        err(TK1, "expected '%s'", one);
-    }
-}
-
 // Closes a pattern. If an operand follows in the same line, the `>`
 // was meant as the operator of a predicate: `<:X until a > b>`.
 static void accept_angle_close (void) {

@@ -1,1 +1,1 @@
-native-err-01.atm : line 1 : near ':foo 1' : invalid native : unknown type
+native-err-01.atm : line 1 : near ':int 1' : invalid native : unknown type

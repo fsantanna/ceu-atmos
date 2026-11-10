@@ -1772,7 +1772,7 @@ static void gen_nat (Unit* u, Expr* e, Dst d) {
     static const char* CONV[] = {
         NULL, NULL,
         "a_int((int64_t)(", "a_num((double)(", "a_bool(0 != (",
-        "a_strn((", "(("
+        "a_strn((", "((", "a_number(("
     };
     Opnd t = opnd_tmp(u);
     buf_add(&u->body, line);

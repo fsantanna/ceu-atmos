@@ -119,9 +119,9 @@ exs/    examples
 - A declaration, an assignment, or a `defer` is only valid as a
   statement of a block. Using one as a value, as in
   `print(val x = 1)`, is a compile error.
-- Native literals are C code, not Lua: `` `:int strlen("abc")` ``.
-    - A leading tag converts the expression: `:int`, `:num`, `:bool`,
-      `:str`, `:val`. With no tag, the code is a statement.
+- Native literals are C code, not Lua: `` `:number strlen("abc")` ``.
+    - A leading tag converts the expression: `:number`, `:boolean`,
+      `:string`, `:val`. With no tag, the code is a statement.
     - `` `:pre ...` `` declares at file scope, as in `#include`.
     - `$x` refers to the variable `x`.
 - The libraries are `string`, `vector`, `math`, `io`, and `os`, with

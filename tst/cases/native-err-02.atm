@@ -1,1 +1,1 @@
-val x = `:int $nope`
+val x = `:number $nope`

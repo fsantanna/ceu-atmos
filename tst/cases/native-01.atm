@@ -6,12 +6,12 @@ static int twice (int x) {
 }
 ```
 val x = 10
-val y = `:int twice($x.u.i) + 1`
+val y = `:number twice($x.u.i) + 1`
 print(y, type(y))
-print(`:num sqrt(a_dbl($y) + 4)`)
-print(`:bool $x.u.i > 5`, `:bool 0`)
+print(`:number sqrt(a_dbl($y) + 4)`)
+print(`:boolean $x.u.i > 5`, `:boolean 0`)
 val s = "hello"
-print(`:str A_STR_OF($s)->s + 1`, `:str NULL`)
+print(`:string A_STR_OF($s)->s + 1`, `:string NULL`)
 print(`:val a_strz("owned")`)
 
 ;; statements
@@ -29,17 +29,18 @@ func f (a) {
     var b = 1
     val g = func () {
         `$b = a_int($b.u.i + $a.u.i);`
-        `:int $b.u.i * 100`
+        `:number $b.u.i * 100`
     }
     print(g(), g(), b)
 }
 f(5)
 task T (v) {
-    val w = `:int $v.u.i + 1`
+    val w = `:number $v.u.i + 1`
     await(:X)
-    print(`:int $v.u.i + $w.u.i`)
+    print(`:number $v.u.i + $w.u.i`)
 }
 pin t = spawn T(20)
 emit(:X)
-val len = `:int strlen("four")` + 1
+val len = `:number strlen("four")` + 1
 print(len)
+print(`:number 7 / 2`, `:number 7 / 2.0`, `:number.float 7 / 2`, `:number.integer 7.9`)

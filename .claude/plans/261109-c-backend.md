@@ -589,11 +589,16 @@ typedef AStatus (*AResume) (ATask* t, AKind k, AVal evt);
 |----------------|-------------------------------------------------|
 | `` `stmts` ``      | C statements, evaluates to `nil`            |
 | `` `:pre decls` `` | C declarations at file scope (`#include`)   |
-| `` `:int e` ``     | C expression converted to an integer        |
-| `` `:num e` ``     | C expression converted to a real            |
-| `` `:bool e` ``    | C expression converted to a boolean         |
-| `` `:str e` ``     | C string copied, `NULL` gives `nil`         |
+| `` `:number e` ``  | C number: integer or real, by its C type    |
+| `` `:number.integer e` `` | C number, always as an integer       |
+| `` `:number.float e` ``   | C number, always as a real           |
+| `` `:boolean e` `` | C expression converted to a boolean         |
+| `` `:string e` ``  | C string copied, `NULL` gives `nil`         |
 | `` `:val e` ``     | C expression of type `AVal`, owned          |
+
+- The tags are the full names of the types, as in Lua. The subtypes
+  of a number use the dot of hierarchical tags, with the names of
+  `math.type` in Lua.
 
 - `$x` refers to an Atmos variable, as an `AVal` that may be read and
   assigned. It is captured like any other access.
@@ -804,14 +809,9 @@ exs/        examples
 
 ## Later (after M10)
 
-- **Table patterns in declarations.**
-    - `val [x,y] = f()`, when `f` returns `[a,b]`.
-    - Orthogonal to multiple values: `val [x,y], z = f()`.
-    - Should be valid wherever names are bound: `val`, `set`,
-      parameters, `loop ... in`, `loop ... on`, `await` results.
-    - Compiler only: lowers to index reads on a temporary.
-    - To define: mismatch (loose `nil` or error), positional vs field
-      patterns, tag check with `??`.
+- Error trace with the tree of tasks (lines of `emit` and `spawn`),
+  as in the reference. Skipped for now.
+- An SDL environment, to port the graphical examples. Waiting.
 
 ## Revisions
 
@@ -894,6 +894,7 @@ Agreed after `atmos-lang/atmos@5977b07`.
       everywhere.
 
 - **Declared user types** with fixed layouts.
+- **Table patterns in declarations**, as in `val [x,y] = f()`.
 
 ## Workflow
 

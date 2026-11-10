@@ -387,6 +387,11 @@ typedef struct AStr {
 AVal a_str  (const char* s, size_t len);
 AVal a_strz (const char* s);
 
+// A C number as an integer or as a real, according to its type.
+#define a_number(x) _Generic((x),                                   \
+    float: a_num, double: a_num, long double: a_num,                \
+    default: a_int)(x)
+
 // A C string that may be NULL, which gives nil (owned).
 static inline AVal a_strn (const char* s) {
     return (s == NULL) ? a_nil() : a_strz(s);

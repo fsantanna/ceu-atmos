@@ -49,8 +49,10 @@ void err (Tk tk, const char* fmt, ...) {
 }
 
 NatKind nat_kind (const char* s, const char** code) {
+    // in the order of `NatKind`
     static const char* TAGS[] = {
-        "", "pre", "int", "num", "bool", "str", "val", NULL
+        "", "pre", "number.integer", "number.float", "boolean", "string",
+        "val", "number", NULL
     };
     while (*s==' ' || *s=='\t' || *s=='\n') {
         s++;
@@ -59,7 +61,11 @@ NatKind nat_kind (const char* s, const char** code) {
     if (*s != ':') {
         return NAT_STMT;
     }
-    int n = nat_id(s+1);
+    // a tag may have dots: :number.float
+    int n = 0;
+    while (nat_id(s+1+n)>0 || (n>0 && s[1+n]=='.' && nat_id(s+2+n)>0)) {
+        n += (s[1+n] == '.') ? 1 : nat_id(s+1+n);
+    }
     for (int i=1; TAGS[i]!=NULL; i++) {
         if ((int)strlen(TAGS[i])==n && !strncmp(s+1,TAGS[i],n)) {
             *code = s + 1 + n;

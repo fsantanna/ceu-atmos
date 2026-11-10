@@ -339,7 +339,7 @@ Atmos compiles to C, and a program can embed C code in
 #include <math.h>
 ```
 val x = 9
-val y = `:num sqrt(a_dbl($x))`     ;; a C expression converted to a number
+val y = `:number sqrt(a_dbl($x))`  ;; a C expression converted to a number
 print(y)                            ;; --> 3.0
 ```
 
@@ -628,7 +628,7 @@ false               ;; boolean literal
 :X.Y                ;; tag literal
 """Hello!"""        ;; string literal
 1.25                ;; number literal
-`:int strlen("c")`  ;; native literal
+`:number strlen("c")`       ;; native literal
 ```
 
 [lua-lexical]: https://www.lua.org/manual/5.4/manual.html#3.1
@@ -642,12 +642,16 @@ A tag in the beginning of the literal gives its kind:
 ```
 `stmts`             ;; C statements, evaluates to nil
 `:pre decls`        ;; C declarations in the beginning of the file
-`:int e`            ;; C expression converted to an integer
-`:num e`            ;; C expression converted to a real
-`:bool e`           ;; C expression converted to a boolean
-`:str e`            ;; C string, which is copied (NULL becomes nil)
+`:number e`         ;; C expression converted to a number
+`:boolean e`        ;; C expression converted to a boolean
+`:string e`         ;; C string, which is copied (NULL becomes nil)
 `:val e`            ;; C expression that is already an Atmos value
 ```
+
+The tags are the names of the [types](#types--values).
+A `:number` becomes an integer or a real according to the type of the
+expression in C: `` `:number 7/2` `` is `3`, and `` `:number 7/2.0` `` is `3.5`.
+The tags `:number.integer` and `:number.float` force one of them.
 
 In the code, `$x` refers to the Atmos variable `x`, which is a value of type
 `AVal` that can be read and assigned.
@@ -662,7 +666,7 @@ Examples:
 #include <string.h>
 ```
 val s = "hello"
-val n = `:int strlen(A_STR_OF($s)->s)`  ;; 5
+val n = `:number strlen(A_STR_OF($s)->s)`       ;; 5
 var x = 1
 `$x = a_int($x.u.i + 1);`               ;; x becomes 2
 print(n, x)                             ;; --> 5, 2
