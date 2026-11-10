@@ -1,0 +1,31 @@
+match 100 {
+    \{(it==100) && 10} => \(...){print(...)}
+}
+val r = match 5 {
+    1 => \(...){ :no }
+    5 => \(...){ (..., :yes) }
+}
+print(r)
+print(ifs { false => 1 ; 7 => \(...){ ... } })
+task T (a, b, c) {
+    print(a, b, c)
+    :done
+}
+spawn {
+    print((await T(nil, 10, 20)))
+    print((await T(1, nil, nil)))
+    print((await T()))
+}
+task V (x, ...) {
+    await(:X)
+    print(x, ...)
+    val a, b, c = ...
+    print(a, b, c)
+}
+pin v = spawn V(1, nil, 3, nil)
+emit(:X)
+pin w = spawn (task () { await(:Y) ; (1, 2) }) ()
+print(w.ret, atmos.status(w))
+emit(:Y)
+print(w.ret, atmos.status(w))
+print(catch true { set w.ret = 1 })

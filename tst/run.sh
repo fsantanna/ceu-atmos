@@ -32,7 +32,12 @@ for suite in $suites; do
     cd $suite
     for atm in *.atm; do
         name=${atm%.atm}
-        out=$($ATMOS $flags $atm 2>&1)
+        # extra flags of the case
+        more=""
+        if [ -f $name.flags ]; then
+            more=$(cat $name.flags)
+        fi
+        out=$($ATMOS $flags $more $atm 2>&1)
         if [ "$out" == "$(cat $name.out)" ]; then
             pass=$((pass+1))
         else

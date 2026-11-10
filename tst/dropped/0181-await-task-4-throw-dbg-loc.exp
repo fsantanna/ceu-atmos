@@ -1,4 +1,0 @@
-==> ERROR:
-|  [C]:-1 (loop)
-v  [string "anon.atm"]:2 (throw) <- [string "anon.atm"]:4 (task) <- [C]:-1 (task)
-==> x

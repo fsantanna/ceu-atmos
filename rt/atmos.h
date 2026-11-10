@@ -464,11 +464,16 @@ AStatus a_setindex_next (AVal t, AVal v);
 AStatus a_tag (AVal t, AVal tag);
 
 // Moves the top `n` values of the stack into the keys `i, i+1, ...`.
-// If `chk`, fails on a pinned value that the table cannot hold.
-AStatus a_tab_fill (AVal t, int i, int n, int chk);
+// Fails on a pinned value that the table cannot hold.
+AStatus a_tab_fill (AVal t, int i, int n);
 
-// Pushes the values of the array part. Returns how many.
-int a_tab_unpack (AVal t);
+// Arguments that wait in a table: those of a task spawned by an
+// await, and the extra ones of a variadic task. The table keeps their
+// number, since they may be nil.
+//  - pack: moves the top `n` values of the stack into the table
+//  - unpack: pushes them back, and returns how many
+void a_args_pack (AVal t, int n);
+int  a_args_unpack (AVal t);
 
 ///////////////////////////////////////////////////////////////////////////////
 // FUNCTIONS

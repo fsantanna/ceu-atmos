@@ -478,7 +478,8 @@ static void res (Expr* e) {
                 if (c->test) {
                     c->cnd->u.proto.inl = 1;
                 }
-                if (c->body->tag == E_PROTO) {
+                // (a variadic one is called, to bind its `...`)
+                if (c->body->tag==E_PROTO && !c->body->u.proto.dots) {
                     c->body->u.proto.inl = 1;
                 }
                 res(c->cnd);

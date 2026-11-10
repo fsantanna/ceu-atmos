@@ -633,7 +633,7 @@ static Opnd gen_table (Unit* u, Expr* e) {
         if (key==NULL && i==last && is_multi(val)) {
             Dst m = dst_multi(u);
             gen(u, val, m);
-            out_try(u, "a_tab_fill(%s, %d, %s, 1)", d.c, n, m.n);
+            out_try(u, "a_tab_fill(%s, %d, %s)", d.c, n, m.n);
         } else if (key == NULL) {
             Opnd v = gen_expr(u, val);
             out_try(u, "a_setindex(%s, a_int(%d), %s)", d.c, n++, v.c);
@@ -1232,7 +1232,30 @@ static void gen_ifs (Unit* u, Expr* e, Dst d) {
 
         out(u, "if (a_truthy(%s)) {", c.c);
         u->ind++;
-        if (cs->body->tag == E_PROTO) {
+        if (cs->body->tag==E_PROTO && cs->body->u.proto.dots) {
+            // a variadic lambda is called with the tested value
+            Opnd f = gen_expr(u, cs->body);
+            out(u, "{");
+            u->ind++;
+            out(u, "int b = a_top;");
+            out(u, "a_pushc(%s);", c.c);
+            out_try(u, "a_call(%s, b)", f.c);
+            switch (d.kind) {
+                case D_NONE:
+                    out(u, "a_settop(b);");
+                    break;
+                case D_SLOT:
+                    out(u, "a_ret1(&%s, b);", d.slot);
+                    break;
+                case D_MULTI:
+                    out(u, "%s = a_top - b;", d.n);
+                    break;
+            }
+            u->ind--;
+            out(u, "}");
+            opnd_rel(u, f);
+            opnd_rel(u, c);
+        } else if (cs->body->tag == E_PROTO) {
             gen_inline(u, cs->body, c, d);
         } else {
             opnd_rel(u, c);
@@ -1745,7 +1768,7 @@ static void gen_dots (Unit* u, Dst d) {
                     d.slot, u->npar);
                 break;
             case D_MULTI:
-                out(u, "%s = a_tab_unpack(L[%d]);", d.n, u->npar);
+                out(u, "%s = a_args_unpack(L[%d]);", d.n, u->npar);
                 break;
         }
         return;
@@ -1951,7 +1974,7 @@ static void patt_eval (Unit* u, Patt* p, Opnd* os, int* n) {
             out(u, "a_set(&%s, a_tab());", t.c);
             Dst m = dst_multi(u);
             gen_args(u, &p->args, m.n, NULL);
-            out(u, "a_tab_fill(%s, 0, %s, 0);", t.c, m.n);
+            out(u, "a_args_pack(%s, %s);", t.c, m.n);
             os[(*n)++] = t;
             break;
         }

@@ -294,7 +294,7 @@ static AStatus patt_start (APatt* p, int* done) {
                 return a_error("invalid spawn : expected task prototype");
             }
             int base = a_top;
-            a_tab_unpack(p->args);
+            a_args_unpack(p->args);
             AVal t = a_nil();
             st = a_spawn(&t, p->v, a_nil(), base);
             a_set(&p->v, t);
@@ -1087,11 +1087,13 @@ static ATask* task_new (AFunc* f, ANode* up, int base) {
         a_cpy(&t->L[i], a_stk[base+i]);
     }
     if (p->dots) {
+        // the extra arguments wait in a table
+        int n = (argc > p->npar) ? argc-p->npar : 0;
         t->L[p->npar] = a_tab();
-        for (int i=p->npar; i<argc; i++) {
-            a_tab_set(A_TAB_OF(t->L[p->npar]), a_int(i - p->npar),
-                a_stk[base+i]);
+        for (int i=0; i<n; i++) {
+            a_pushc(a_stk[base+p->npar+i]);
         }
+        a_args_pack(t->L[p->npar], n);
     }
     // a task that receives pinned arguments cannot leave their blocks
     for (int i=0; i<argc; i++) {

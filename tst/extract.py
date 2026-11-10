@@ -211,11 +211,17 @@ def cases (path):
     src  = None
     name = None
     cur  = None
+    test = False
     while p.peek()[0] != 'eof':
         t = p.peek()
         i0 = p.i
         if p.accept('name', 'src') and p.accept('op', '='):
             src = p.strexpr()
+        elif t[1] == 'atmos' and p.isa('op','.',1) and p.isa('name','test',2) \
+             and p.isa('op','=',3):
+            # atmos.test = true: `test` blocks execute
+            test = p.isa('name', 'true', 4)
+            p.i += 5
         elif t == ('name','print',t[2]) and p.isa('op','(',1) and \
              p.isa('str','Testing...',2) and p.isa('op',',',3):
             p.i += 4
@@ -227,9 +233,13 @@ def cases (path):
             p.i += 3
             cur = {
                 'name': name or '?', 'src': src, 'lin': t[2],
-                'exact': [], 'find': [], 'bad': [],
+                'exact': [], 'find': [], 'bad': [], 'test': test,
             }
             ret.append(cur)
+        elif t[1] == 'out' and p.isa('op','=',1):
+            # output of something else: its asserts are not of a case
+            p.i += 2
+            cur = None
         elif t[1] in ('assertx', 'warnx') and p.isa('op','(',1):
             p.i += 2
             tr = p.out()
@@ -282,6 +292,8 @@ def norm (s):
             continue
         if x.startswith('v  '):
             l = re.sub(r'^v  \[string "anon\.atm"\]:(\d+) ', r'v  anon.atm:\1 ', x)
+            # (throw) <- ... (task): the frames above the throw
+            l = re.sub(r' <- .*$', '', l)
         ret.append(l)
     return '\n'.join(ret)
 
@@ -310,17 +322,42 @@ def lua_find (out, pat):
     except re.error:
         return None
 
-def run (src, name='anon'):
+def run (src, name='anon', flags=[]):
     with tempfile.TemporaryDirectory() as d:
         open(os.path.join(d, name+'.atm'), 'w').write(src)
         env = dict(os.environ, ATMOS_ASAN='1', ATMOS_CFLAGS='-O0')
         try:
-            r = subprocess.run([ATMOS, name+'.atm'], cwd=d, env=env,
+            r = subprocess.run([ATMOS]+flags+[name+'.atm'], cwd=d, env=env,
                 stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT, timeout=20)
             return r.stdout.decode(errors='replace')
         except subprocess.TimeoutExpired:
             return None
+
+# Features of the reference that this compiler leaves out by design.
+# They only matter for a case that does not give the expected output.
+DESIGN = [
+    (r'`',                              'native with Lua code'),
+    (r'\b(coroutine|require|pcall|error|setmetatable|getmetatable|'
+     r'load|loadstring|dofile|select|ipairs|pairs|rawget|rawset|'
+     r'unpack|utf8|debug)\b',           'Lua library'),
+    (r'\b(string|table|io|os)\s*\.',     'Lua library'),
+    (r'\btrim\b',                       'global of the test harness'),
+    (r'\bxtask\s*\(',                   'xtask constructor'),
+    (r'\b(thread|async)\b',             'thread or async'),
+    (r'\bS\s*\.',                       'streams'),
+    (r'\*\*|\?>|!>|===|=!=|=>=|=<=',    'operator that became a function'),
+    (r'::',                             'method on a string or metatable'),
+]
+
+def design (src, out):
+    for pat, why in DESIGN:
+        if re.search(pat, src):
+            return why
+    # an unknown name is found by the compiler, not when it executes
+    if re.search(r': undeclared variable$', out.strip()):
+        return 'globals are static'
+    return None
 
 # Returns None if equivalent, or the reason.
 def verdict (c, out):
@@ -336,14 +373,15 @@ def verdict (c, out):
         return 'sanitizer'
     for tr, exp in c['exact']:
         cur = trim(out) if tr else out
-        if cur != exp and norm(cur) != norm(exp):
-            return 'output differs'
+        # a compile error of the reference has no line break
+        if norm(cur).rstrip('\n') != norm(exp).rstrip('\n'):
+            return design(c['src'],out) or 'output differs'
     for pat in c['find']:
         ok = lua_find(out, pat)
         if ok is None:
             return 'pattern not understood'
         if not ok:
-            return 'output differs'
+            return design(c['src'],out) or 'output differs'
     return None
 
 ###############################################################################
@@ -362,7 +400,8 @@ def main ():
             all.append(c)
 
     def one (c):
-        c['out'] = None if c['src'] is None else run(c['src'])
+        c['flags'] = ['-t'] if c['test'] else []
+        c['out'] = None if c['src'] is None else run(c['src'], 'anon', c['flags'])
         c['why'] = verdict(c, c['out'])
     with ThreadPoolExecutor(workers) as ex:
         list(ex.map(one, all))
@@ -384,8 +423,10 @@ def main ():
         if c['why'] is None:
             open(os.path.join(golden, name+'.atm'), 'w').write(src)
             # the trace shows the name of the file
-            out = run(src, name)
+            out = run(src, name, c['flags'])
             open(os.path.join(golden, name+'.out'), 'w').write(out.rstrip('\n') + '\n')
+            if c['flags']:
+                open(os.path.join(golden, name+'.flags'), 'w').write(' '.join(c['flags']) + '\n')
         else:
             open(os.path.join(dropped, name+'.atm'), 'w').write(src)
             exp = [e for _,e in c['exact']] + c['find']

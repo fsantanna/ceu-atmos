@@ -272,7 +272,7 @@ int a_tab_after (ATab* t, AVal k, uint32_t* pos) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-// A task only has the field `pub`.
+// A task has the fields `pub` and `ret`: only `pub` may be assigned.
 static int is_pub (AVal t, AVal k) {
     return t.type==A_XTASK && k.type==A_STR && !strcmp(A_STR_OF(k)->s,"pub");
 }
@@ -280,6 +280,11 @@ static int is_pub (AVal t, AVal k) {
 AStatus a_index (AVal* dst, AVal t, AVal k) {
     if (is_pub(t, k)) {
         a_cpy(dst, A_TASK_OF(t)->pub);
+        return A_OK;
+    }
+    // the value a task terminated with
+    if (t.type==A_XTASK && k.type==A_STR && !strcmp(A_STR_OF(k)->s,"ret")) {
+        a_cpy(dst, A_TASK_OF(t)->ret);
         return A_OK;
     }
     if (t.type != A_TAB) {
@@ -366,13 +371,11 @@ AStatus a_tag (AVal t, AVal tag) {
     return A_OK;
 }
 
-AStatus a_tab_fill (AVal t, int i, int n, int chk) {
+AStatus a_tab_fill (AVal t, int i, int n) {
     AStatus st = A_OK;
     for (int j=0; j<n && st==A_OK; j++) {
         AVal v = a_stk[a_top-n+j];
-        if (chk) {
-            st = a_chk_tab(A_TAB_OF(t), v);
-        }
+        st = a_chk_tab(A_TAB_OF(t), v);
         if (st == A_OK) {
             a_tab_set(A_TAB_OF(t), a_int(i+j), v);
         }
@@ -381,10 +384,22 @@ AStatus a_tab_fill (AVal t, int i, int n, int chk) {
     return st;
 }
 
-int a_tab_unpack (AVal t) {
-    ATab* x = A_TAB_OF(t);
-    for (uint32_t i=0; i<x->an; i++) {
-        a_pushc(x->arr[i]);
+void a_args_pack (AVal t, int n) {
+    AVal k = a_strz("n");
+    for (int j=0; j<n; j++) {
+        a_tab_set(A_TAB_OF(t), a_int(j), a_stk[a_top-n+j]);
     }
-    return x->an;
+    a_tab_set(A_TAB_OF(t), k, a_int(n));
+    a_dec(k);
+    a_settop(a_top - n);
+}
+
+int a_args_unpack (AVal t) {
+    AVal k = a_strz("n");
+    int n = (int) a_tab_get(A_TAB_OF(t), k).u.i;
+    a_dec(k);
+    for (int i=0; i<n; i++) {
+        a_pushc(a_tab_get(A_TAB_OF(t), a_int(i)));
+    }
+    return n;
 }
