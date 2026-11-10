@@ -4,8 +4,8 @@
     * Structured Deterministic Concurrency
     * Event Signaling Mechanisms
     * Hierarchical Tags
-    * Integration with Lua
-    * Complementary Concurrency Models
+    * Lexical Memory Management
+    * Integration with C
 * EXECUTION
     * Environments
 * LEXICON
@@ -14,16 +14,16 @@
     * Operators
         - `==` `!=` `??` `!?`
         - `>` `<` `>=` `<=`
-        - `+` `-` `*` `/` `%` `**`
+        - `+` `-` `*` `/` `//` `%`
         - `!` `||` `&&`
-        - `#` `++` `?>` `!>`
-        - `===` `=!=` `=>=` `=<=`
+        - `&` `|` `^` `~` `<<` `>>`
+        - `#` `++`
     * Identifiers
         - `[A-Za-z_][A-Za-z0-9_]*`
     * Literals
         - `nil` `true` `false`
         - `:X` `10` `"hello"`
-        - `2h30min` `` `lua` ``
+        - `2h30min` `` `c` ``
     * Comments
         - `;; *` `;;; * ;;;`
 * TYPES & VALUES
@@ -32,20 +32,20 @@
     * Function
         - `func` `\{}`
     * Tasks
-        - `task` `xtask` `tasks` `pub`
+        - `task` `tasks` `pub`
+    * Native
 * EXPRESSIONS
     * Chunks
         - `;` `do` `escape` `defer` `test`
     * Declarations and Assignments
         - `val` `var` `pin` `where`
         - `func` `return`
-        - `set`
+        - `set` `+=`
     * Operations
         - `??` `!?`
         - `#` `++`
-        - `?>` `!>`
     * Indexing
-        - `t.x` `t@1` `t@i` `t@#` `t@+`
+        - `t.x` `t@0` `t@i` `t@#` `t@+`
     * Calls
         - `f(*)` `-->` `->` `<-` `<--`
     * Conditionals
@@ -57,11 +57,8 @@
     * Task Operations
         - `spawn` `await` `emit` `toggle`
         - `par` `watching`
-    * Asynchronous Execution
-        - `async` `thread`
 * STANDARD LIBRARIES
-    * Lua Standard Libraries
-    * Atmos Standard Libraries
+    - `math` `string` `vector` `io` `os` `X` `atmos`
 * SYNTAX
     * Ambiguities
 
@@ -85,24 +82,10 @@ programming with two main functionalities:
 - Event Signaling Mechanisms:
     - An `await` primitive suspends a task and waits for events.
     - An `emit` primitive signals events and awakes awaiting tasks.
-
-Atmos also complements its core synchronous concurrency model with
-    *[Functional Streams][streams]* (à la [ReactiveX][rx]) and
-    [Multithreading Parallelism][threads] (via [LuaLanes][lanes]):
-
-- Functional Streams:
-    - Interoperability with tasks & events.
-    - Safe finalization of stateful streams.
-- Asynchronous Parallelism:
-    - A `thread` primitive offloads computations to isolated OS threads.
-    - Safe abortion and finalization for threads.
-
-<!--
-- Lexical Memory Management *(experimental)*:
+- Lexical Memory Management:
     - A lexical policy to manage dynamic allocation automatically.
     - A set of strict escaping rules to preserve structured reasoning.
     - A reference-counter collector for deterministic reclamation.
--->
 
 Atmos is inspired by [synchronous programming languages][sync] like [Céu][ceu]
 and [Esterel][esterel].
@@ -114,33 +97,27 @@ Follows an extended list of functionalities in Atmos:
 - Dynamic collections (tables)
 - Deferred statements for finalization
 - Exception handling (throw & catch)
-- Seamless integration with Lua
+- Seamless integration with C
 
-Atmos is tightly connected with [Lua][lua]:
+Atmos is inspired by [Lua][lua]:
 It mimics most of the semantics of Lua with respect to values, types,
 declarations, and expressions.
-In addition, it compiles to [Lua][lua] and relies on [lua-atmos][lua-atmos]
-for its concurrency runtime.
+Nevertheless, this implementation does not depend on Lua: it compiles to C,
+which links with a small runtime with no virtual machine and no garbage
+collector.
 
 Atmos is in **experimental stage**.
 
 In the rest of this section, we introduce key aspects of Atmos:
 *Structured Deterministic Concurrency*, *Event Signaling Mechanisms*,
-*Hierarchical Tags*, *Integration with Lua*, and
-*Complementary Concurrency Models* (*Functional Streams* and
-*Asynchronous Parallelism*).
+*Hierarchical Tags*, *Lexical Memory Management*, and *Integration with C*.
 
 [sc]:           https://en.wikipedia.org/wiki/Structured_concurrency
 [events]:       https://en.wikipedia.org/wiki/Event-driven_programming
-[streams]:      https://en.wikipedia.org/wiki/Stream_(abstract_data_type)
-[rx]:           https://en.wikipedia.org/wiki/ReactiveX
 [sync]:         https://fsantanna.github.io/sc.html
 [ceu]:          http://www.ceu-lang.org/
 [esterel]:      https://en.wikipedia.org/wiki/Esterel
 [lua]:          https://www.lua.org/
-[threads]:      https://en.wikipedia.org/wiki/Thread_(computing)
-[lanes]:        https://lualanes.github.io/lanes/
-[lua-atmos]:    https://github.com/lua-atmos/atmos/
 [syms]:         https://en.wikipedia.org/wiki/Symbol_(programming)
 
 ## Structured Deterministic Concurrency
@@ -318,18 +295,71 @@ val t = :T.A [ a=10 ]      ;; [ tag=:T.A, a=10 ]
 print(t ?? :T)              ;; --> true
 ```
 
-## Integration with Lua
+## Lexical Memory Management
 
-`TODO`
+Atmos has no garbage collector.
+Dynamic values, such as tables and functions, are reclaimed by counting
+references, as soon as the last reference to them goes away.
 
-- all types, libraries, coroutines, meta mechanisms
-- except syntax for statements
-- mix code, think of alternative syntax with available quotes
+Reference counting alone has two limitations:
+it does not reclaim cycles, and it does not tell when a value is reclaimed.
+A [`pin` declaration](#pin) addresses both by attaching a value to its
+enclosing block:
+
+- The value is reclaimed when the block terminates, even if it is part of a
+  cycle.
+- The value cannot escape the block, which is verified when the program
+  executes.
+
+The next example builds a cycle that is reclaimed when the block terminates:
+
+```
+do {
+    pin a = [10]
+    pin b = [20]
+    set a.other = b         ;; a <-> b
+    set b.other = a
+    print(a.other@0)        ;; --> 20
+}                           ;; a and b are reclaimed here
+```
+
+The rules for tasks are the same:
+a pinned task is aborted when its block terminates, and cannot be referred
+from outside.
+Therefore, a task, the data it uses, and the block that holds them all live
+and die together.
+
+## Integration with C
+
+Atmos compiles to C, and a program can embed C code in
+[native literals](#native-literals), which are enclosed by backquotes:
+
+```
+```:pre
+#include <math.h>
+```
+val x = 9
+val y = `:num sqrt(a_dbl($x))`     ;; a C expression converted to a number
+print(y)                            ;; --> 3.0
+```
+
+A tag in the beginning of the literal tells how to convert the C expression to
+an Atmos value, and `$x` refers to the Atmos variable `x`.
+A native literal with no tag is a sequence of C statements.
+
+The same C interface is available to write [environments](#environments),
+which connect a program to the outside world.
 
 ### Lua vs Atmos Subtleties
 
-While most differences between Lua and Atmos are clear, some subtleties are
-worth mentioning:
+Atmos borrows much from Lua, and some differences are worth mentioning:
+
+- Indexes:
+    - Lua: vectors, numeric loops, and string positions start at `1`.
+    - Atmos: they all start at `0`.
+- Operators:
+    - Lua: its own precedences, `%` and `//` round towards minus infinity.
+    - Atmos: the precedences and the arithmetic of C.
 
 - Statements `return` and `break`:
     - Lua: `return 10`, `break` (no parenthesis)
@@ -357,28 +387,19 @@ worth mentioning:
     - Atmos: `[ ... ]` (brackets)
         - The reason is to avoid ambiguity with blocks:
             - `if f { ... }` is `if f{...} ...` or `if (f) { ... }`?
-- Operators:
+- Operator symbols:
     - Lua: `~=` `and` `or` `not` `..` `^`
-    - Atmos: `!=` `&&` `||` `!` `++` `**`
+    - Atmos: `!=` `&&` `||` `!` `++` `math.pow`
         - The reason is to avoid identifiers as operators and to use familiar
           and consistent alternatives.
-
-## Complementary Concurrency Models
-
-`TODO`
-
-### Functional Streams
-
-`TODO`
-
-### Asynchronous Parallelism
-
-`TODO`
+- Globals:
+    - Lua: an unknown name is a global variable with value `nil`.
+    - Atmos: an unknown name is a compile error.
 
 # EXECUTION
 
 To execute Atmos, simply pass the program filename and arguments to the
-interpreter, e.g.:
+compiler, which builds and runs the program, e.g.:
 
 ```
 $ atmos hello.atm 1000
@@ -386,33 +407,57 @@ $ atmos hello.atm 1000
 
 The arguments are passed to the [program main chunk](#chunks).
 
-The `--help` flag shows all execution options:
+The compiler accepts the following options:
 
 ```
-$ atmos --help
+$ atmos
 
-Usage: atmos [-h] [-t] [-v] <input> [<args>] ...
-
-The Programming Language Atmos.
-
-Arguments:
-   input                 Input program.
-   args                  Program arguments.
+Usage: atmos [-c] [-o <out>] [-t] <input> [<args>] ...
 
 Options:
-   -h, --help            Show this help message and exit.
-   -t, --test            Enable test blocks.
-   -v, --version         Show version.
-
-For more information, please visit our website:
-
-    https://github.com/atmos-lang/atmos/
-
+   -c          Emit C only.
+   -o <out>    Build only.
+   -t          Enable test blocks.
 ```
+
+The compiler translates the program to a single C file, and then calls the C
+compiler to build it and link it with the Atmos runtime.
+The following environment variables affect the build:
+
+- `ATMOS_CC`: the C compiler (default `cc`).
+- `ATMOS_CFLAGS`: the flags for the C compiler (default `-O1`).
+- `ATMOS_ASAN`: if set, builds the program with the address sanitizer, which
+  also reports memory leaks when the program terminates.
 
 ## Environments
 
-`TODO`
+An environment connects a program with the outside world:
+it waits for external input, and delivers it to the program as events.
+
+The default environment only deals with time.
+After the main chunk executes, it sleeps until the nearest
+[timer](#await) expires, and then lets the time pass in the program.
+It terminates the program when the main chunk terminates, or when there are no
+more timers to awake it.
+
+Other environments are written in C, over the interface of the runtime:
+
+```
+atm_init(argc, argv);
+AStatus st = atm_main();            // executes the main chunk
+while (st==A_OK && atm_alive()) {
+    <waits for input>
+    st = atm_emit(evt);             // emits an event to the program
+}
+if (st == A_OK) {
+    st = atm_stop();                // aborts the main chunk
+}
+atm_quit();
+```
+
+An environment may be part of the program itself, in a
+[native literal](#native-literals) with the tag `:pre`.
+The example `exs/stdin.atm` emits each line of the standard input as an event.
 
 # LEXICON
 
