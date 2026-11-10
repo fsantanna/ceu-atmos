@@ -1,0 +1,7 @@
+;; the statements of an included file take the place of the include
+include "inc/geo.atm"
+include "inc/base.atm"      ;; already included: nothing happens
+
+print(area(2, 3), area(4, 5))
+print(calls)
+boom()

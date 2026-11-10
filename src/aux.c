@@ -8,6 +8,9 @@
 #include "atmc.h"
 
 const char* FILENAME = "?";
+const char* FILES[FILES_MAX];
+int NFILES   = 0;
+int FILE_CUR = 0;
 
 void* xalloc (size_t n) {
     void* p = calloc(1, n ? n : 1);
@@ -40,7 +43,8 @@ char* xfmt (const char* fmt, ...) {
 void err (Tk tk, const char* fmt, ...) {
     va_list ap;
     fflush(stdout);
-    fprintf(stderr, "%s : line %d : near '%s' : ", FILENAME, tk.lin, tk.str);
+    const char* file = (tk.file < NFILES) ? FILES[tk.file] : FILENAME;
+    fprintf(stderr, "%s : line %d : near '%s' : ", file, tk.lin, tk.str);
     va_start(ap, fmt);
     vfprintf(stderr, fmt, ap);
     va_end(ap);
@@ -83,4 +87,23 @@ int nat_id (const char* s) {
         n++;
     }
     return n;
+}
+
+char* file_read (const char* path, size_t* len) {
+    FILE* f = fopen(path, "rb");
+    if (f == NULL) {
+        return NULL;
+    }
+    fseek(f, 0, SEEK_END);
+    long n = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    char* s = xalloc(n + 1);
+    if (fread(s, 1, n, f) != (size_t)n) {
+        fclose(f);
+        return NULL;
+    }
+    fclose(f);
+    s[n] = '\0';
+    *len = n;
+    return s;
 }

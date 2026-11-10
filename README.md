@@ -121,6 +121,8 @@ exs/    examples
 - A declaration, an assignment, or a `defer` is only valid as a
   statement of a block. Using one as a value, as in
   `print(val x = 1)`, is a compile error.
+- `include "file.atm"` joins files at compile time: the statements of
+  the file take the place of the include. There is no `require`.
 - Native literals are C code, not Lua: `` `:number strlen("abc")` ``.
     - A leading tag converts the expression: `:number`, `:boolean`,
       `:string`, `:value`. With no tag, the code is a statement.

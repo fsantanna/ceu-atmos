@@ -36,7 +36,7 @@
     * Native
 * EXPRESSIONS
     * Chunks
-        - `;` `do` `escape` `defer` `test`
+        - `;` `include` `do` `escape` `defer` `test`
     * Declarations and Assignments
         - `val` `var` `pin` `where`
         - `func` `return`
@@ -480,6 +480,7 @@ The following keywords are reserved in Atmos:
     if                  ;; if block
     ifs                 ;; ifs block
     in                  ;; in iterator
+    include             ;; include file
     it                  ;; implicit parameter
     loop                ;; loop block
     match               ;; match block
@@ -1095,6 +1096,41 @@ The main chunk of a program executes as a [task](#tasks).
 Hence, it may [await](#await) and it is the root of all tasks in the program.
 
 [lua-chunks]: https://www.lua.org/manual/5.4/manual.html#3.3.2
+
+### Include
+
+A program may be split in multiple files, which are joined with `include`:
+
+```
+Include : `include´ STR
+```
+
+The statements of the given file take the place of the `include`, as if they
+were written there.
+Therefore, the declarations of the file are visible in the rest of the
+program.
+
+An `include` is only valid in the main chunk of a file, outside any block.
+The file name is relative to the file with the `include`.
+A file is only included once: other occurrences have no effect.
+
+All files are compiled together, as a single program.
+There is no separate compilation, and no loading of files during execution.
+
+Examples:
+
+```
+;; geometry.atm
+func area (w, h) {
+    w * h
+}
+```
+
+```
+;; main.atm
+include "geometry.atm"
+print(area(2, 3))       ;; --> 6
+```
 
 ### Blocks
 
@@ -2918,6 +2954,7 @@ Expr  : `do´[TAG]  Block                            ;; explicit block
       | `escape´ Expr+                              ;; escape from block
       | `defer´ Block                               ;; defer statements
       | `test´ Block                                ;; test block
+      | `include´ STR                               ;; include file
 
       | (`val´ | `var` | `pin`) ID* [`=´ Expr+]     ;; local declarations
       | Expr `where´ `{´ (ID* `=´ Expr)* `}´        ;; where clause

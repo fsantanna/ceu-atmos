@@ -109,9 +109,11 @@ void a_error_dump (void) {
         fprintf(stderr, " |  ...\n");
     }
     for (int i=TRACE_N-1; i>=0; i--) {
-        fprintf(stderr, " |  %s:%d (call)\n", atm_file, TRACE_CALLS[i]);
+        fprintf(stderr, " |  %s:%d (call)\n",
+            atm_files[A_LIN_FILE(TRACE_CALLS[i])], A_LIN_LINE(TRACE_CALLS[i]));
     }
-    fprintf(stderr, " v  %s:%d (throw)\n", atm_file, TRACE_THROW);
+    fprintf(stderr, " v  %s:%d (throw)\n",
+        atm_files[A_LIN_FILE(TRACE_THROW)], A_LIN_LINE(TRACE_THROW));
     fprintf(stderr, "==> ");
     for (int i=0; i<a_pay_n; i++) {
         AVal s = a_tostring(a_pay[i]);

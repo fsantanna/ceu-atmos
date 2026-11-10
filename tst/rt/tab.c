@@ -6,7 +6,7 @@
 
 #include "atmos.h"
 
-const char* atm_file = "test";
+const char* atm_files[] = { "test" };
 
 void atm_free (void) {
 }

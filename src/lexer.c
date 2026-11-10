@@ -3,6 +3,7 @@
 // Symbols, operators, tags, keywords, identifiers, numbers, clocks,
 // strings, natives, and comments.
 
+#include <stdio.h>
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
@@ -39,7 +40,7 @@ static const char* OPS[] = {
 
 static const char* KEYS[] = {
     "await", "catch", "defer", "do", "else", "emit", "false", "func", "if",
-    "ifs", "in", "loop", "match", "nil", "on", "par", "pin", "set", "spawn",
+    "ifs", "in", "include", "loop", "match", "nil", "on", "par", "pin", "set", "spawn",
     "task", "tasks", "test", "thread", "toggle", "true", "until", "val",
     "var", "watching", "where", "with", "while",
     NULL
@@ -125,6 +126,7 @@ static Tk mk (TkTag tag, const char* str, int len, int lin, int sep) {
     tk.len = len;
     tk.lin = lin;
     tk.sep = sep;
+    tk.file = FILE_CUR;
     return tk;
 }
 
@@ -247,8 +249,30 @@ static Tk quoted (int c) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
+Lex lexer_save (void) {
+    Lex l = { FILENAME, FILE_CUR, SRC, LEN, I, LIN, SEP, END };
+    return l;
+}
+
+void lexer_restore (Lex l) {
+    FILENAME = l.file;
+    FILE_CUR = l.idx;
+    SRC = l.src;
+    LEN = l.len;
+    I   = l.i;
+    LIN = l.lin;
+    SEP = l.sep;
+    END = l.end;
+}
+
 void lexer_init (const char* file, const char* src, size_t len) {
+    if (NFILES == FILES_MAX) {
+        fprintf(stderr, "atmos : too many source files\n");
+        exit(1);
+    }
     FILENAME = file;
+    FILE_CUR = NFILES;
+    FILES[NFILES++] = file;
     SRC = src;
     LEN = len;
     I   = 0;

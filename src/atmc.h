@@ -14,6 +14,9 @@ void* xalloc (size_t n);
 char* xstrndup (const char* s, size_t n);
 char* xfmt (const char* fmt, ...);
 
+// Contents of a file, or NULL if it cannot be read.
+char* file_read (const char* path, size_t* len);
+
 // Kinds of native literals, given by a leading tag:
 //      `stmts`         C statements, evaluates to nil
 //      `:prelude decls`    C declarations at file scope
@@ -51,6 +54,8 @@ typedef struct Tk {
     // line, and separator counter (newlines and semicolons)
     int         lin;
     int         sep;
+    // source file, as an index in `FILES`
+    int         file;
     // strings: delimiter and multi-line flag
     char        chr;
     int         multi;
@@ -59,6 +64,30 @@ typedef struct Tk {
 } Tk;
 
 extern const char* FILENAME;
+
+// Source files of the program: the main one, then the included ones.
+#define FILES_MAX 256
+extern const char* FILES[FILES_MAX];
+extern int NFILES;
+
+// File being read by the lexer.
+extern int FILE_CUR;
+
+// State of the lexer, to read an included file in the middle of
+// another.
+typedef struct Lex {
+    const char* file;
+    int         idx;
+    const char* src;
+    size_t      len;
+    size_t      i;
+    int         lin;
+    int         sep;
+    int         end;
+} Lex;
+
+Lex  lexer_save (void);
+void lexer_restore (Lex l);
 
 // Reports "FILE : line N : near 'STR' : MSG" and exits.
 void err (Tk tk, const char* fmt, ...);

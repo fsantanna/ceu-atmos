@@ -125,6 +125,19 @@ static void out_try (Unit* u, const char* fmt, ...) {
     out(u, "if ((st = %s) != A_OK) goto CL_%d;", call, u->cleanup);
 }
 
+static char* quote (const char* s, int len);
+
+// A line with its file, as the runtime keeps it in `a_lin`.
+static int lin_of (Tk tk) {
+    return (tk.file << 20) | tk.lin;
+}
+
+// Quoted name of the file of a token.
+static const char* file_q (Tk tk) {
+    const char* f = FILES[tk.file];
+    return quote(f, strlen(f));
+}
+
 // Slot counter of a unit.
 static int* nslots (Unit* u) {
     return (u->root != NULL) ? &u->root->nslots : &u->nslots;
@@ -911,10 +924,10 @@ static void gen_block_x (Unit* u, List* es, Dst d, Hnd h) {
     Blk b = blk_open(u);
     for (int i=0; i<es->n; i++) {
         // C diagnostics and debuggers point to the source line
-        out0(u, "#line %d %s", es->v[i]->tk.lin,
-            quote(FILENAME, strlen(FILENAME)));
-        out(u, "a_lin = %d;", es->v[i]->tk.lin);
-        u->lin = es->v[i]->tk.lin;
+        Tk tk = es->v[i]->tk;
+        out0(u, "#line %d %s", tk.lin, file_q(tk));
+        out(u, "a_lin = %d;", lin_of(tk));
+        u->lin = lin_of(tk);
         gen(u, es->v[i], (i == es->n-1) ? d : dst_none());
     }
     if (es->n == 0) {
@@ -1503,7 +1516,7 @@ static void gen_call (Unit* u, Expr* e, Dst d) {
                 err(e->tk, "invalid abort : expected single argument");
             }
             Opnd x = gen_expr(u, args.v[0]);
-            out(u, "a_lin = %d;", e->tk.lin);
+            out(u, "a_lin = %d;", lin_of(e->tk));
             out_try(u, "a_abort(%s)", x.c);
             opnd_rel(u, x);
             store_void(u, d);
@@ -1549,7 +1562,7 @@ static void gen_call (Unit* u, Expr* e, Dst d) {
     out(u, "{");
     u->ind++;
     out(u, "int b = a_top - %s;", m.n);
-    out(u, "a_lin = %d;", e->tk.lin);
+    out(u, "a_lin = %d;", lin_of(e->tk));
     out_try(u, "a_call(%s, b)", f.c);
     switch (d.kind) {
         case D_NONE:
@@ -1751,8 +1764,7 @@ static void gen_nat (Unit* u, Expr* e, Dst d) {
             buf_add(&code, c);
         }
     }
-    const char* line = xfmt("#line %d %s\n", e->tk.lin,
-        quote(FILENAME, strlen(FILENAME)));
+    const char* line = xfmt("#line %d %s\n", e->tk.lin, file_q(e->tk));
 
     if (kind == NAT_PRE) {
         buf_add(&PRES, line);
@@ -1829,7 +1841,7 @@ static void gen_spawn (Unit* u, Expr* e, Dst d) {
     gen_args(u, &e->u.spawn.args, m.n, NULL);
 
     Opnd t = opnd_tmp(u);
-    out(u, "a_lin = %d;", e->tk.lin);
+    out(u, "a_lin = %d;", lin_of(e->tk));
     out_try(u, "a_spawn(&%s, %s, %s, a_top-%s)", t.c, f.c, pool.c, m.n);
     opnd_rel(u, f);
     opnd_rel(u, pool);
@@ -1893,7 +1905,7 @@ static void gen_spawn_tra (Unit* u, Expr* blk, ParMode mode, int key,
                            const char* slot)
 {
     const char* p = gen_tra(u, &blk->u.block.es, mode, key, blk->tk.lin);
-    out(u, "a_lin = %d;", blk->tk.lin);
+    out(u, "a_lin = %d;", lin_of(blk->tk));
     out_try(u, "a_spawn_tra(&%s, t, &%s)", slot, p);
     out_try(u, "a_pin(&%s)", slot);
 }
@@ -2126,7 +2138,7 @@ static void gen_toggle (Unit* u, Expr* e) {
     Opnd on = gen_expr(u, args.v[0]);
     int n;
     Opnd* os = gen_filters(u, e->u.toggle.fs, e->u.toggle.nf, &n);
-    out(u, "    a_lin = %d;", e->tk.lin);
+    out(u, "    a_lin = %d;", lin_of(e->tk));
     out(u, "    st = a_toggle(%s, %s, fs, %d);", t.c, on.c, e->u.toggle.nf);
     out(u, "}");
     out(u, "if (st != A_OK) goto CL_%d;", u->cleanup);
@@ -2163,7 +2175,7 @@ static void gen_toggle_on (Unit* u, Expr* e, Dst d) {
 
 // await P
 static void gen_await (Unit* u, Expr* e, Dst d) {
-    gen_await_patt(u, e->u.await.p, e->tk.lin, d);
+    gen_await_patt(u, e->u.await.p, lin_of(e->tk), d);
 }
 
 // emit @to (e)
@@ -2173,7 +2185,7 @@ static void gen_emit (Unit* u, Expr* e) {
         to = gen_expr(u, e->u.emit.to);
     }
     Opnd v = gen_expr(u, e->u.emit.e);
-    out(u, "a_lin = %d;", e->tk.lin);
+    out(u, "a_lin = %d;", lin_of(e->tk));
     out_try(u, "a_emit(%s, %s)", to.c, v.c);
     opnd_rel(u, to);
     opnd_rel(u, v);
@@ -2359,8 +2371,11 @@ char* coder_main (Expr* prog, Var** globals, int nglobals) {
     buf_add(&c, "#include \"atmos.h\"\n\n");
     buf_add(&c, PRES.s ? PRES.s : "");
     buf_add(&c, "\n");
-    buf_add(&c, xfmt("const char* atm_file = %s;\n\n",
-        quote(FILENAME, strlen(FILENAME))));
+    buf_add(&c, "const char* atm_files[] = {\n");
+    for (int i=0; i<NFILES; i++) {
+        buf_add(&c, xfmt("    %s,\n", quote(FILES[i], strlen(FILES[i]))));
+    }
+    buf_add(&c, "};\n\n");
 
     // top-level variables
     for (int i=0; i<nglobals; i++) {

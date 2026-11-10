@@ -1,0 +1,7 @@
+;; included by geo.atm, and again by include-01.atm
+var calls = 0
+
+func count () {
+    set calls += 1
+}
+print("base loaded")

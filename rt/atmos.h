@@ -131,8 +131,11 @@ const char* a_error_msg (void);
 // records it, and so does every call it propagates through.
 extern int a_lin;
 
-// Source file of the program, set by the generated code.
-extern const char* atm_file;
+// Source files of the program, set by the generated code. A line in
+// `a_lin` carries the index of its file in the upper bits.
+extern const char* atm_files[];
+#define A_LIN_FILE(n) ((n) >> 20)
+#define A_LIN_LINE(n) ((n) & 0xFFFFF)
 
 // Depth of the block being executed, set by the generated code.
 //  - a block is one deeper than its parent block

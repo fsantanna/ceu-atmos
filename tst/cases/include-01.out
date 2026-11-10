@@ -1,0 +1,7 @@
+base loaded
+6	20
+2
+==> ERROR:
+ |  include-01.atm:7 (call)
+ v  inc/geo.atm:10 (throw)
+==> Boom

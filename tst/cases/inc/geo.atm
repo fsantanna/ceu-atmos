@@ -1,0 +1,11 @@
+;; included by include-01.atm
+include "base.atm"
+
+func area (w, h) {
+    count()
+    w * h
+}
+
+func boom () {
+    throw :Boom
+}

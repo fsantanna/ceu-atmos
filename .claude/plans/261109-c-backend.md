@@ -875,6 +875,13 @@ Agreed after `atmos-lang/atmos@5977b07`.
       Lua, so the error comes from Lua.
     - Exits (`return`, `break`, `escape`, `throw`, `until`, `while`)
       remain valid in any position: `val v = f() || throw :X`.
+- Modules, first step: `include "file.atm"` splices the statements of
+  a file in the main chunk, once per file, with the path relative to
+  the including file.
+    - Tokens carry their file, and so do the lines in `a_lin`, so that
+      errors and traces name the right file.
+    - A module as a value (`val m = import "m"`) is left for later.
+- `ATMOS_LDFLAGS` gives the linker flags, after the program.
 - Memory refinements found while implementing M8 (Pin, Stores, Exits):
   pin at birth for constructors, two-phase block end, lateral check on
   `emit`, confinement after a transfer, abort of confined tasks that

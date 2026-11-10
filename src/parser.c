@@ -159,13 +159,76 @@ static List parser_list (const char* clo) {
 }
 
 // Sequence of expressions up to (not including) `clo`.
+static List parser_stmts (const char* clo);
+
+// include "file.atm": the statements of the file take the place of
+// the include, as if they were written there. The path is relative to
+// the file with the include. A file is only included once.
+static void parser_include (List* l) {
+    static char* done[FILES_MAX];
+    static int   ndone = 0;
+
+    Tk tk = TK0;
+    if (!accept_tag(TK_STR)) {
+        err(TK1, "expected file name");
+    }
+
+    // relative to the including file
+    const char* cur = FILES[tk.file];
+    const char* sla = strrchr(cur, '/');
+    const char* path = TK0.str;
+    if (path[0]!='/' && sla!=NULL) {
+        path = xfmt("%.*s/%s", (int)(sla-cur), cur, TK0.str);
+    }
+
+    char* real = realpath(path, NULL);
+    size_t len = 0;
+    char* src = (real == NULL) ? NULL : file_read(real, &len);
+    if (src == NULL) {
+        err(TK0, "invalid include : cannot read file");
+    }
+    for (int i=0; i<ndone; i++) {
+        if (!strcmp(done[i], real)) {
+            return;
+        }
+    }
+    if (ndone == FILES_MAX) {
+        err(tk, "invalid include : too many files");
+    }
+    done[ndone++] = real;
+
+    // reads the file in the middle of the current one
+    Lex lex = lexer_save();
+    Tk  tk0 = TK0;
+    Tk  tk1 = TK1;
+    lexer_init(path, src, len);
+    lexer_token(&TK1);
+    TK0 = TK1;
+    List inc = parser_stmts("<eof>");
+    for (int i=0; i<inc.n; i++) {
+        list_add(l, inc.v[i]);
+    }
+    lexer_restore(lex);
+    TK0 = tk0;
+    TK1 = tk1;
+}
+
 static List parser_stmts (const char* clo) {
     List l = { 0, NULL };
     int angle = ANGLE;
     ANGLE = 0;
+    int top = !strcmp(clo, "<eof>");
     while (!check_str(clo)) {
         if (l.n>0 && TK0.sep==TK1.sep) {
             err(TK1, "sequence error : expected ';' or new line");
+        }
+        if (check_str("include")) {
+            if (!top) {
+                err(TK1, "invalid include : expected top-level statement");
+            }
+            next();
+            parser_include(&l);
+            continue;
         }
         list_add(&l, parser());
     }
