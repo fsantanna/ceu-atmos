@@ -140,7 +140,7 @@ static AStatus argn (int argc, AVal* argv, int i, const char* f, double* n) {
 #define MATH1(name, expr)                                               \
     static AStatus math_##name (AFunc* self, int argc, AVal* argv) {    \
         (void) self;                                                    \
-        double x;                                                       \
+        double x = 0;                                                   \
         if (argn(argc, argv, 0, #name, &x) != A_OK) {                   \
             return A_ERROR;                                             \
         }                                                               \
@@ -158,7 +158,8 @@ MATH1(cos,   cos(x))
 // math.pow(x, y)
 static AStatus math_pow (AFunc* self, int argc, AVal* argv) {
     (void) self;
-    double x, y;
+    double x = 0;
+    double y = 0;
     if (argn(argc,argv,0,"pow",&x)!=A_OK || argn(argc,argv,1,"pow",&y)!=A_OK) {
         return A_ERROR;
     }
@@ -174,7 +175,7 @@ static AStatus math_minmax (int max, int argc, AVal* argv) {
         return A_ERROR;
     }
     for (int i=1; i<argc; i++) {
-        double x;
+        double x = 0;
         if (argn(argc, argv, i, f, &x) != A_OK) {
             return A_ERROR;
         }
@@ -207,7 +208,7 @@ static AStatus math_random (AFunc* self, int argc, AVal* argv) {
         return A_OK;
     }
     double a = 0;
-    double b;
+    double b = 0;
     if (argn(argc, argv, 0, "random", &b) != A_OK) {
         return A_ERROR;
     }
@@ -228,7 +229,7 @@ static AStatus math_random (AFunc* self, int argc, AVal* argv) {
 // math.randomseed(n)
 static AStatus math_randomseed (AFunc* self, int argc, AVal* argv) {
     (void) self;
-    double n;
+    double n = 0;
     if (argn(argc, argv, 0, "randomseed", &n) != A_OK) {
         return A_ERROR;
     }

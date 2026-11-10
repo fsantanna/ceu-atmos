@@ -1,8 +1,4 @@
-/usr/bin/ld: /tmp/cclLQJlT.o: warning: relocation against `atm_g_math' in read-only section `.text'
-/usr/bin/ld: /tmp/cclLQJlT.o: in function `T0':
-/home/user/ceu-atmos/tst/cases/math-err-01.atm:2:(.text+0xacc): undefined reference to `atm_g_math'
-/usr/bin/ld: /home/user/ceu-atmos/tst/cases/math-err-01.atm:2:(.text+0xafd): undefined reference to `atm_g_math'
-/usr/bin/ld: /home/user/ceu-atmos/tst/cases/math-err-01.atm:2:(.text+0xb04): undefined reference to `atm_g_math'
-/usr/bin/ld: warning: creating DT_TEXTREL in a PIE
-collect2: error: ld returned 1 exit status
-atmos : C compilation failed
+==> ERROR:
+ |  math-err-01.atm:1 (call)
+ v  math-err-01.atm:1 (throw)
+==> invalid argument to 'floor' : expected number : got string
