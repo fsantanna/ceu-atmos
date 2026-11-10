@@ -538,15 +538,18 @@ The following operators are supported in Atmos:
 ```
     ==   !=  ??   !?                ;; equivalence
     >    <    >=   <=               ;; relational
-    +    -    *    /    %    **     ;; arithmetic
+    +    -    *    /    //   %      ;; arithmetic
     !    ||   &&                    ;; logical
+    &    |    ^    ~    <<   >>     ;; bitwise
     #                               ;; length
     ++                              ;; concatenation
-    ?>   !>                         ;; membership
-    ===  =!=  =>=  =<=              ;; structural comparison
 ```
 
 Operators are used in [operation](#operations) expressions.
+
+The binary operators, except the equivalence and relational ones, also
+combine with `=` to form the compound assignments of the
+[`set` expression](#set), such as `+=` and `++=`.
 
 ## Identifiers
 
@@ -573,8 +576,8 @@ y10
 Atmos provides literals for all [value types](#types--values):
     `nil`, `boolean`, `number`, and `string`.
 
-It also provides literals for [tag](#TODO), clock durations, and
-[native](#TODO) expressions, which only exist at compile time.
+It also provides literals for [tags](#hierarchical-tags), clock durations, and
+[native](#native-literals) code, which only exist at compile time.
 
 ```
 NIL  : nil
@@ -583,11 +586,13 @@ TAG  : :[A-Za-z0-9_\.]+     ;; colon + leter/digit/under/dot
 NUM  : [0-9][0-9A-Za-z\.]*  ;; digit/letter/dot
 CLK  : ([0-9\.]+(day|h|min|s|ms|us))+ ;; clock duration expression
 STR  : '.*' | ".*"          ;; string expression
-NAT  : `.*`                 ;; native expression
+NAT  : `.*`                 ;; native code
 ```
 
 The literals for `nil`, `boolean` and `number` follow the same
 [lexical conventions of Lua][lua-lexical].
+A number with no fractional part and no exponent is an integer (e.g., `10`,
+`0xFF`), and any other is a real (e.g., `1.5`, `1e3`).
 
 The literal `nil` is the single value of the `nil` type.
 
@@ -611,8 +616,8 @@ Atmos supports multi-line strings when using multiple quote delimiters.
 A `native` literal is a sequence of characters enclosed by an odd number
 of matching back quotes (`` ` ``).
 Atmos supports multi-line native literals when using multiple quote delimiters.
-Native literals are used in expressions and are interpreted as plain Lua
-expressions.
+Native literals are used in expressions and are interpreted as
+[C code](#native-literals).
 
 Examples:
 
@@ -624,10 +629,45 @@ false               ;; boolean literal
 :X.Y                ;; tag literal
 """Hello!"""        ;; string literal
 1.25                ;; number literal
-`x:f {"lua"}`       ;; native literal
+`:int strlen("c")`  ;; native literal
 ```
 
 [lua-lexical]: https://www.lua.org/manual/5.4/manual.html#3.1
+
+### Native Literals
+
+A native literal holds C code, which goes as it is to the C file that the
+compiler generates.
+A tag in the beginning of the literal gives its kind:
+
+```
+`stmts`             ;; C statements, evaluates to nil
+`:pre decls`        ;; C declarations in the beginning of the file
+`:int e`            ;; C expression converted to an integer
+`:num e`            ;; C expression converted to a real
+`:bool e`           ;; C expression converted to a boolean
+`:str e`            ;; C string, which is copied (NULL becomes nil)
+`:val e`            ;; C expression that is already an Atmos value
+```
+
+In the code, `$x` refers to the Atmos variable `x`, which is a value of type
+`AVal` that can be read and assigned.
+The interface of the runtime (`rt/atmos.h`) has the operations to inspect and
+create values, such as `a_dbl(v)` to read a number, `A_STR_OF(v)->s` to read
+a string, and `a_int(i)`, `a_num(d)`, and `a_strz(s)` to create values.
+
+Examples:
+
+```
+```:pre
+#include <string.h>
+```
+val s = "hello"
+val n = `:int strlen(A_STR_OF($s)->s)`  ;; 5
+var x = 1
+`$x = a_int($x.u.i + 1);`               ;; x becomes 2
+print(n, x)                             ;; --> 5, 2
+```
 
 ## Comments
 
@@ -654,18 +694,28 @@ Examples:
 # TYPES & VALUES
 
 Atmos supports and mimics the semantics of the standard [Lua types][lua-types]:
-    `nil`, `boolean`, `number`, `string`,
-    `function`, `userdata`, `thread`, and `table`.
+    `nil`, `boolean`, `number`, `string`, `function`, and `table`.
 
 Atmos also provides three new types related to tasks:
     `task`, `xtask`, and `tasks`.
+
+Finally, the type `native` represents resources of [C](#native), such as
+files.
 
 Atmos differentiates between *value* and *reference* types:
 
 - Value types are built from the [basic literals](#literals):
     `nil`, `boolean`, `number`, and `string`.
 - Reference types are built from constructors:
-    `function`, `userdata`, `thread`, `table`, `task`, `xtask`, and `tasks`.
+    `function`, `table`, `task`, `xtask`, `tasks`, and `native`.
+
+A `number` is either an integer with 64 bits or a real with double precision,
+as in Lua.
+An operation with two integers results in an integer, except for the division
+`/`, which always results in a real.
+Any other operation with numbers results in a real.
+An integer and a real with the same value are equal (`1 == 1.0`), and are
+the same key in a table.
 
 [lua-types]: https://www.lua.org/manual/5.4/manual.html#2.1
 
@@ -690,11 +740,14 @@ formats:
 
 - `@(e1)=e2` maps key/index `e1` to value `e2`
 - `id=e` maps string `id` to `e` (same as `@("id")=e`)
-- `e` maps numeric index `i` to `e` (same as `@(i)=e`), where `i` starts at `1`
+- `e` maps numeric index `i` to `e` (same as `@(i)=e`), where `i` starts at `0`
   and increments after each assignment
 
-A table is also a vector if it contains numeric indexes starting from `1` with
+A table is also a vector if it contains numeric indexes starting from `0` with
 no [holes][lua-sequences].
+
+If the last positional entry is a call or the variadic `...`, then all of its
+values are entries of the table.
 
 [lua-sequences]: https://www.lua.org/manual/5.4/manual.html#3.4.7
 
@@ -705,21 +758,21 @@ Examples:
 ```
 val k = "idx"
 val t = [      ;; all 3 formats:
-    @k = 10,   ;; same as [ @(k)=10, @("v")="x", @(1)=20, @(2)=30 ]
+    @k = 10,   ;; same as [ @(k)=10, @("v")="x", @(0)=20, @(1)=30 ]
     v = "x",
     20, 30
 ]
 print(type(t))              ;; --> 'table'
-print(t.idx, t@("v"), t@2)  ;; --> 10, x, 30
+print(t.idx, t@("v"), t@1)  ;; --> 10, x, 30
 ```
 
 <!-- exs/val-02-vector.atm -->
 
 ```
 val vs = [1, 2, 3]      ;; a vector of numbers
-print(vs@2)             ;; --> 2
+print(vs@1)             ;; --> 2
 print(vs ?? :table)     ;; --> true
-set vs@(#vs+1) = 4      ;; [1, 2, 3, 4]
+set vs@(#vs) = 4        ;; [1, 2, 3, 4]
 ```
 
 [lua-table]: https://www.lua.org/manual/5.4/manual.html#3.4.9
@@ -891,8 +944,9 @@ spawn {                     ;; fires a transparent task
 ```
 
 A task or pool is always lexically attached to an enclosing block, which on
-termination, automatically aborts its owned tasks and pools.
-A [pin](#local-variables) assignment, which is mandatory for pools, explicitly
+termination, automatically aborts its owned tasks and pools, in the reverse
+order in which they were attached.
+A [pin](#pin) assignment, which is mandatory for pools, explicitly
 attaches the reference to the declaration block.
 By default, an unassigned `spawn` attaches the new task to the enclosing block.
 
@@ -903,9 +957,6 @@ owner.
 Note that other compound constructs of Atmos, including
 [par and watching](#parallel), also rely on transparent tasks internally.
 
-`TODO: attached to enclosing or returning block`
-
-`TODO: currently, transparent task cannot be assigned`
 
 Examples:
 
@@ -928,7 +979,7 @@ do {
         }
         await(false)
     }
-}                       ;; --> aborted 3,2,1
+}                       ;; --> aborted 3,1,2
 ```
 
 See [Ambiguities](#ambiguities):
@@ -936,7 +987,7 @@ See [Ambiguities](#ambiguities):
 
 ### Pub
 
-A task has a single public field `pub`, which can be accessed both internally
+A task has a public field `pub`, which can be accessed both internally
 and externally:
 
 ```
@@ -962,6 +1013,29 @@ task T (n) {
 }
 pin t = spawn T(10)
 print(t.pub)            ;; --> 20
+```
+
+A task also has the field `ret`, which can only be read, and holds the value
+that the task terminated with.
+
+## Native
+
+The `native` reference type represents a resource of C, such as an open file.
+A native value holds a pointer and a finalizer, which releases the resource
+exactly once: when the value is explicitly closed, when it is no longer
+referenced, or when its [pin](#pin) block terminates.
+
+Native values are created by libraries written in C.
+In the [standard libraries](#standard-libraries), files are native values.
+
+Examples:
+
+```
+do {
+    pin f = io.open("/tmp/x.txt", "w")
+    print(type(f))          ;; --> 'native'
+    io.write(f, "hello\n")
+}                           ;; the file is closed here
 ```
 
 # EXPRESSIONS
