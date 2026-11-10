@@ -378,17 +378,10 @@ AStatus a_arith (AArith op, AVal* dst, AVal a, AVal b) {
         case A_SUB:  r = x - y;         break;
         case A_MUL:  r = x * y;         break;
         case A_DIV:  r = x / y;         break;
-        case A_IDIV: r = floor(x / y);  break;
+        case A_IDIV: r = trunc(x / y);  break;
         case A_MOD:
-            // as in Lua: the result has the sign of the divisor
-            if (isinf(y)) {
-                r = (x==x && ((x>=0) == (y>0))) ? x : y;
-            } else {
-                r = fmod(x, y);
-                if (r!=0 && ((r<0) != (y<0))) {
-                    r += y;
-                }
-            }
+            // as in C: the result has the sign of the dividend
+            r = fmod(x, y);
             break;
     }
     a_set(dst, a_num(r));

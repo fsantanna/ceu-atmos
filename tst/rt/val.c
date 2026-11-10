@@ -41,7 +41,8 @@ int main (void) {
     AVal x = a_nil();
     assert(a_add(&x, a_num(1), a_num(2))==A_OK && x.u.n==3);
     assert(a_idiv(&x, a_num(7), a_num(2))==A_OK && x.u.n==3);
-    assert(a_mod(&x, a_num(-1), a_num(3))==A_OK && x.u.n==2);
+    assert(a_mod(&x, a_num(-1), a_num(3))==A_OK && x.u.n==-1);
+    assert(a_idiv(&x, a_num(-7), a_num(2))==A_OK && x.u.n==-3);
     assert(a_add(&x, a_num(1), a_nil()) == A_ERROR);
     assert(strstr(a_error_msg(), "expected number : got nil"));
 
