@@ -1,0 +1,19 @@
+task T (i) {
+    defer {
+        print("aborted " ++ i)
+    }
+    await(false)
+}
+do {
+    pin ts = tasks()
+    spawn T(1)
+    spawn @ts T(2)
+    spawn @ts T(3)
+    spawn {
+        defer {
+            print("aborted 4")
+        }
+        await(false)
+    }
+}
+print(:end)

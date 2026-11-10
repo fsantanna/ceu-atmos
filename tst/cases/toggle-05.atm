@@ -1,0 +1,24 @@
+spawn {
+    toggle on :Ok with :Draw {
+        par {
+            loop on :Tick {
+                print :tick
+            }
+        } with {
+            loop on :Draw {
+                print :draw
+            }
+        }
+    }
+}
+emit(:Tick)
+emit(:Ok [false])
+emit(:Tick)
+emit(:Draw)
+emit(:Ok [true])
+emit(:Tick)
+spawn {
+    val v = toggle on :Z { await(:end) ; :value }
+    print(v)
+}
+emit(:end)

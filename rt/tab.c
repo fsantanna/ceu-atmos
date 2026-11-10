@@ -275,6 +275,9 @@ AStatus a_len (AVal* dst, AVal v) {
         case A_STR:
             a_set(dst, a_num(A_STR_OF(v)->len));
             return A_OK;
+        case A_TASKS:
+            a_set(dst, a_num(a_tasks_len(A_TASKS_OF(v))));
+            return A_OK;
         default:
             return a_error("invalid operation '#' : unexpected %s",
                 a_typename(v));

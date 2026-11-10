@@ -1,0 +1,13 @@
+p.c	to_p
+a	to_a
+--
+p.c	go
+p.c	local
+a	parent
+p.c	parent
+a	global
+p.c	global
+p.c	task
+p.c	zero
+a	one
+p.c	one

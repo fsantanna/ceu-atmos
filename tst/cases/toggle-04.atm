@@ -1,0 +1,13 @@
+spawn {
+    toggle on :T {
+        loop {
+            val e = await(:E)
+            print(e@0)
+        }
+    }
+}
+emit :E [1]
+emit :T [false]
+emit :E [2]
+emit :T [true]
+emit :E [3]

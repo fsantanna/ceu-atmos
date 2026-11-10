@@ -1,0 +1,10 @@
+task T () {
+    await :X
+    print :ok
+}
+pin t = spawn T()
+toggle t(false)
+emit :X
+print(:off)
+toggle t(true)
+emit :X

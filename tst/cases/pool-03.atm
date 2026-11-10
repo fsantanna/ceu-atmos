@@ -1,0 +1,21 @@
+task T (v) {
+    set pub = v
+    await(:X)
+    v
+}
+pin ts = tasks()
+spawn @ts T(10)
+spawn @ts T(20)
+spawn @ts T(30)
+loop i, t in ts {
+    print(i, t.pub)
+}
+var sum = 0
+loop _, t in ts {
+    set sum = sum + t.pub
+}
+print(sum)
+val a = spawn @ts T(40)
+print(a ?> ts, 99 ?> ts, #(ts ++ ts))
+abort(ts)
+print(#ts)

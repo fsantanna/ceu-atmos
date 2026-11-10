@@ -1,0 +1,17 @@
+val T = task (n) {
+    print(task ?? :xtask)
+    await(:X)
+    print("done", n)
+}
+pin ts = tasks(2)
+print(ts ?? :tasks, #ts)
+val t2 = spawn @ts T(2)
+print(t2 ?? :xtask, #ts)
+val t3 = spawn @ts T(3)
+print(t3 ?? :xtask, #ts)
+val t4 = spawn @ts T(4)
+print(t4, #ts)
+emit(:X)
+print(#ts)
+val t5 = spawn @ts T(5)
+print(t5 ?? :xtask, #ts)

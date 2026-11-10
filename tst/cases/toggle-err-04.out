@@ -1,0 +1,3 @@
+==> ERROR:
+ v  toggle-err-04.atm:4 (throw)
+==> invalid toggle : expected awaiting task

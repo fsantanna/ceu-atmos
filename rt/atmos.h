@@ -484,7 +484,7 @@ AStatus a_call (AVal f, int base);
 ///////////////////////////////////////////////////////////////////////////////
 
 struct ATask;
-struct APatt;
+typedef struct APatt APatt;
 
 // Why a task is resumed:
 //  - R_START: first execution
@@ -525,7 +525,12 @@ typedef struct ANode {
     uint8_t dirty;
     // terminated task, or released pool
     uint8_t dead;
+    // toggled off: emits skip the subtree, unless a filter matches
     uint8_t toggled;
+    struct APatt** filt;
+    int    nfilt;
+    // tag of the events that toggle the node automatically
+    AVal   tog;
 } ANode;
 
 typedef enum {
@@ -592,6 +597,23 @@ extern void* a_join_key;
 // tasks(n)
 AStatus a_tasks (AVal* dst, AVal max);
 
+// Number of live tasks in a pool.
+int a_tasks_len (struct ATasks* ts);
+
+// Next live task of a pool from position `pos`, which advances, or
+// NULL at the end.
+struct ATask* a_tasks_next (struct ATasks* ts, int* pos);
+
+// Table with the live tasks of a pool (owned).
+AVal a_tasks_tab (AVal ts);
+
+// toggle t(on) with P, ...: takes over the `n` filters.
+AStatus a_toggle (AVal t, AVal on, APatt** fs, int n);
+
+// toggle on :T with P, ... {...}: events `:T [false]` and `:T [true]`
+// toggle the task from now on. Takes over the filters.
+void a_toggle_auto (AVal t, AVal tag, APatt** fs, int n);
+
 // abort(t)
 AStatus a_abort (AVal v);
 
@@ -600,7 +622,6 @@ AStatus a_emit (AVal to, AVal evt);
 
 // Await patterns are built from the leaves up, then handed to
 // `a_await`. Values are borrowed; operands are taken over.
-typedef struct APatt APatt;
 
 // Value: boolean, tag, table, or task.
 APatt* a_pt_val (AVal v);
@@ -610,6 +631,9 @@ APatt* a_pt_spawn (AVal proto, AVal args);
 
 // [p] until (f)  /  [p] while (f): `base` may be NULL.
 APatt* a_pt_pred (int until, APatt* base, AVal f);
+
+// :any ts  /  :all ts
+APatt* a_pt_pool (int all, AVal ts);
 
 // !p
 APatt* a_pt_not (APatt* a);

@@ -1,0 +1,23 @@
+task T (name) {
+    loop {
+        val e = await(true)
+        print(name, e)
+    }
+}
+task P (name) {
+    spawn T(name ++ ".c")
+    await(:go)
+    emit(:local)
+    emit @:parent (:parent)
+    emit @:global (:global)
+    emit @:task (:task)
+    emit @0 (:zero)
+    emit @1 (:one)
+    await(false)
+}
+pin a = spawn T("a")
+pin p = spawn P("p")
+emit @p (:to_p)
+emit @a (:to_a)
+print("--")
+emit @p (:go)

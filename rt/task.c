@@ -17,6 +17,7 @@ static uint32_t TIME = 1;
 
 static AStatus node_abort (ANode* n);
 static AStatus emit_top   (ANode* n, AVal evt);
+static AStatus emit_self  (ANode* n, uint32_t time, AVal evt);
 
 // The running task was aborted by what it just did.
 static AStatus chk_aborted (AStatus st) {
@@ -46,7 +47,9 @@ typedef enum {
     // [p] until (f) / [p] while (f)
     PK_UNTIL, PK_WHILE,
     // !p / p && q / p || q
-    PK_NOT, PK_AND, PK_OR
+    PK_NOT, PK_AND, PK_OR,
+    // :any ts / :all ts
+    PK_ANY, PK_ALL
 } PKind;
 
 struct APatt {
@@ -93,6 +96,13 @@ APatt* a_pt_pred (int until, APatt* base, AVal f) {
     p->a = base;
     p->v = f;
     a_inc(f);
+    return p;
+}
+
+APatt* a_pt_pool (int all, AVal ts) {
+    APatt* p = patt_new(all ? PK_ALL : PK_ANY);
+    p->v = ts;
+    a_inc(ts);
     return p;
 }
 
@@ -310,6 +320,13 @@ static AStatus patt_start (APatt* p, int* done) {
             }
             break;
 
+        case PK_ANY:
+        case PK_ALL:
+            if (p->v.type != A_TASKS) {
+                return a_error("invalid await : expected tasks pool");
+            }
+            break;
+
         default:
             break;
     }
@@ -398,6 +415,18 @@ static AStatus patt_match (APatt* p, AVal evt, int* done) {
             }
             return st;
 
+        case PK_ANY:
+        case PK_ALL:
+            // a task of the pool terminated (and it was the last one)
+            if (evt.type==A_XTASK && A_TASK_OF(evt)->pool==A_TASKS_OF(p->v)) {
+                if (p->kind==PK_ANY || a_tasks_len(A_TASKS_OF(p->v))==0) {
+                    pay_task(evt);
+                    a_pay_addc(p->v);
+                    *done = 1;
+                }
+            }
+            return A_OK;
+
         default:
             break;
     }
@@ -473,7 +502,20 @@ static void frame_dec (ATask* t) {
     }
 }
 
+// Releases the toggle state of a node.
+static void node_untoggle (ANode* n) {
+    for (int i=0; i<n->nfilt; i++) {
+        patt_free(n->filt[i]);
+    }
+    free(n->filt);
+    n->filt  = NULL;
+    n->nfilt = 0;
+    n->toggled = 0;
+}
+
 void a_node_free (ANode* n) {
+    node_untoggle(n);
+    a_dec(n->tog);
     if (n->hdr.type == A_XTASK) {
         ATask* t = (ATask*) n;
         patt_free(t->awt);
@@ -617,6 +659,61 @@ AStatus a_abort (AVal v) {
 // EMIT
 ///////////////////////////////////////////////////////////////////////////////
 
+static AStatus emit_node (ANode* n, uint32_t time, AVal evt);
+
+// Starts the filters of a node that was toggled off.
+static AStatus toggle_off (ANode* n) {
+    n->toggled = 1;
+    AStatus st = A_OK;
+    for (int i=0; i<n->nfilt && st==A_OK; i++) {
+        int done = 0;
+        st = patt_start(n->filt[i], &done);
+        a_pay_clear();
+    }
+    return st;
+}
+
+// A node toggled on receives a zero tick, which awakes `await(true)`
+// and lets its timers report again.
+static AStatus toggle_on (ANode* n) {
+    n->toggled = 0;
+    return emit_node(n, ++TIME, a_num(0));
+}
+
+// A toggled-off node only reacts to events that match a filter,
+// which then starts again.
+static AStatus toggle_pass (ANode* n, AVal evt, int* pass) {
+    AStatus st = A_OK;
+    *pass = 0;
+    for (int i=0; i<n->nfilt && st==A_OK; i++) {
+        int done = 0;
+        st = patt_match(n->filt[i], evt, &done);
+        if (st==A_OK && done) {
+            *pass = 1;
+            patt_stop(n->filt[i]);
+            st = patt_start(n->filt[i], &done);
+        }
+        a_pay_clear();
+    }
+    return st;
+}
+
+// The event is `:T [b]` for the tag of an automatic toggle.
+static int toggle_evt (ANode* n, AVal evt, int* on) {
+    if (n->tog.type==A_NIL || evt.type!=A_TAB) {
+        return 0;
+    }
+    AVal k = a_strz("tag");
+    AVal tag = a_tab_get(A_TAB_OF(evt), k);
+    a_dec(k);
+    AVal b = a_tab_get(A_TAB_OF(evt), a_num(0));
+    if (b.type!=A_BOOL || !a_gte(n->tog, tag)) {
+        return 0;
+    }
+    *on = b.u.b;
+    return 1;
+}
+
 // Traverses a subtree: the children in order, then the node itself at
 // its await.
 static AStatus emit_node (ANode* n, uint32_t time, AVal evt) {
@@ -626,6 +723,30 @@ static AStatus emit_node (ANode* n, uint32_t time, AVal evt) {
     AVal me = a_obj(&n->hdr);
     a_inc(me);
 
+    AStatus st = A_OK;
+    int pass = 1;
+    if (n->toggled) {
+        st = toggle_pass(n, evt, &pass);
+    }
+    if (st==A_OK && pass) {
+        st = emit_self(n, time, evt);
+    }
+
+    // automatic toggle, after the node has seen the event
+    int on;
+    if (st==A_OK && !n->dead && toggle_evt(n,evt,&on)) {
+        if (on && n->toggled) {
+            st = toggle_on(n);
+        } else if (!on && !n->toggled) {
+            st = toggle_off(n);
+        }
+    }
+
+    a_dec(me);
+    return st;
+}
+
+static AStatus emit_self (ANode* n, uint32_t time, AVal evt) {
     AStatus st = A_OK;
     node_trav(n, 1);
     int cnt = n->ndns;
@@ -658,9 +779,46 @@ static AStatus emit_node (ANode* n, uint32_t time, AVal evt) {
             }
         }
     }
-
-    a_dec(me);
     return st;
+}
+
+AStatus a_toggle (AVal t, AVal on, APatt** fs, int n) {
+    AStatus st = A_OK;
+    ANode* x = (ANode*) t.u.o;
+    if (t.type!=A_XTASK && t.type!=A_TASKS) {
+        st = a_error("invalid toggle : expected task");
+    } else if (on.type != A_BOOL) {
+        st = a_error("invalid toggle : expected bool argument");
+    } else if (on.u.b && n>0) {
+        st = a_error("invalid toggle : unexpected argument");
+    } else if (on.u.b && !x->toggled) {
+        st = a_error("invalid toggle : expected toggled off task");
+    } else if (!on.u.b && x->toggled) {
+        st = a_error("invalid toggle : expected awaiting task");
+    }
+    if (st != A_OK) {
+        for (int i=0; i<n; i++) {
+            patt_free(fs[i]);
+        }
+        return st;
+    }
+
+    if (on.u.b) {
+        node_untoggle(x);
+        return chk_aborted(toggle_on(x));
+    }
+    x->filt = malloc((n > 0 ? n : 1) * sizeof(APatt*));
+    memcpy(x->filt, fs, n * sizeof(APatt*));
+    x->nfilt = n;
+    return toggle_off(x);
+}
+
+void a_toggle_auto (AVal t, AVal tag, APatt** fs, int n) {
+    ANode* x = (ANode*) t.u.o;
+    a_cpy(&x->tog, tag);
+    x->filt = malloc((n > 0 ? n : 1) * sizeof(APatt*));
+    memcpy(x->filt, fs, n * sizeof(APatt*));
+    x->nfilt = n;
 }
 
 static AStatus emit_top (ANode* n, AVal evt) {
@@ -718,12 +876,32 @@ AStatus a_emit (AVal to, AVal evt) {
 // SPAWN
 ///////////////////////////////////////////////////////////////////////////////
 
-static int pool_live (ATasks* ts) {
+int a_tasks_len (ATasks* ts) {
     int n = 0;
     for (int i=0; i<ts->node.ndns; i++) {
         n += !ts->node.dns[i]->dead;
     }
     return n;
+}
+
+ATask* a_tasks_next (ATasks* ts, int* pos) {
+    while (*pos < ts->node.ndns) {
+        ANode* n = ts->node.dns[(*pos)++];
+        if (!n->dead) {
+            return (ATask*) n;
+        }
+    }
+    return NULL;
+}
+
+AVal a_tasks_tab (AVal ts) {
+    AVal t = a_tab();
+    int pos = 0;
+    ATask* x;
+    while ((x = a_tasks_next(A_TASKS_OF(ts), &pos)) != NULL) {
+        a_tab_set(A_TAB_OF(t), a_num(A_TAB_OF(t)->an), a_obj(&x->node.hdr));
+    }
+    return t;
 }
 
 // New task under `up`, with the arguments at `[base,a_top)`.
@@ -768,7 +946,7 @@ AStatus a_spawn (AVal* dst, AVal proto, AVal pool, int base) {
     if (pool.type == A_TASKS) {
         ATasks* ts = A_TASKS_OF(pool);
         up = &ts->node;
-        if (ts->max>=0 && pool_live(ts)>=ts->max) {
+        if (ts->max>=0 && a_tasks_len(ts)>=ts->max) {
             a_settop(base);
             a_clr(dst);
             return A_OK;

@@ -502,8 +502,19 @@ static void res (Expr* e) {
             break;
 
         case E_TOGGLE:
+            res(e->u.toggle.t);
+            res_list(&e->u.toggle.args);
+            for (int i=0; i<e->u.toggle.nf; i++) {
+                res_patt(e->u.toggle.fs[i]);
+            }
+            break;
+
         case E_TOGGLE_ON:
-            err(e->tk, "tasks : not implemented");
+            chk_await(e->tk, "toggle");
+            for (int i=0; i<e->u.toggle_on.nf; i++) {
+                res_patt(e->u.toggle_on.fs[i]);
+            }
+            res_block(e->u.toggle_on.blk);
             break;
 
         case E_PROTO: {

@@ -1,0 +1,9 @@
+task T () { await(false) }
+pin xs = tasks()
+pin ys = tasks()
+val x = spawn @xs T()
+val y = spawn @ys T()
+val ts = xs ++ ys
+print(#ts, x ?> ts, y ?> ts, x ?> ys)
+val both = [1] ++ xs
+print(#both, both@1 == x)

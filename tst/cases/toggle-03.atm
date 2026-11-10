@@ -1,0 +1,17 @@
+val T = task (v) {
+    loop {
+        await(true)
+        print(v)
+    }
+}
+pin ts = tasks()
+spawn @ts T(1)
+spawn @ts T(2)
+emit(:X)
+toggle ts(false)
+print("---")
+emit(:X)
+emit(:X)
+print("---")
+toggle ts(true)
+emit(:X)

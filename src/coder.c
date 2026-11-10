@@ -1735,7 +1735,7 @@ static void patt_eval (Unit* u, Patt* p, Opnd* os, int* n) {
         }
         case PT_ANY:
         case PT_ALL:
-            err(p->tk, "await pattern : not implemented");
+            os[(*n)++] = gen_expr(u, p->e);
             break;
         case PT_UNTIL:
         case PT_WHILE:
@@ -1771,6 +1771,7 @@ static const char* patt_build (Unit* u, Patt* p, Opnd* os, int* n, int* k) {
             break;
         case PT_ANY:
         case PT_ALL:
+            c = xfmt("a_pt_pool(%d, %s)", p->kind==PT_ALL, os[(*n)++].c);
             break;
         case PT_UNTIL:
         case PT_WHILE:
@@ -1818,6 +1819,75 @@ static void gen_await_patt (Unit* u, Patt* p, int lin, Dst d) {
         opnd_rel(u, os[j]);
     }
     gen_suspend(u, d);
+}
+
+// Evaluates and builds the filters of a toggle into the C array
+// `fs`, inside an open C block. Returns the operands to release.
+static Opnd* gen_filters (Unit* u, Patt** fs, int nf, int* n) {
+    int size = 0;
+    for (int i=0; i<nf; i++) {
+        size += patt_size(fs[i]);
+    }
+    Opnd* os = xalloc((size + 1) * sizeof(Opnd));
+    *n = 0;
+    for (int i=0; i<nf; i++) {
+        patt_eval(u, fs[i], os, n);
+    }
+    out(u, "{");
+    out(u, "    APatt* fs[%d];", (nf > 0) ? nf : 1);
+    int j = 0;
+    int k = 0;
+    for (int i=0; i<nf; i++) {
+        const char* v = patt_build(u, fs[i], os, &j, &k);
+        out(u, "    fs[%d] = %s;", i, v);
+    }
+    return os;
+}
+
+// toggle t(b) with P, ...
+static void gen_toggle (Unit* u, Expr* e) {
+    List args = { 0, NULL };
+    flatten(&args, &e->u.toggle.args);
+    if (args.n != 1) {
+        err(e->tk, "invalid toggle : expected single argument");
+    }
+    Opnd t  = gen_expr(u, e->u.toggle.t);
+    Opnd on = gen_expr(u, args.v[0]);
+    int n;
+    Opnd* os = gen_filters(u, e->u.toggle.fs, e->u.toggle.nf, &n);
+    out(u, "    a_lin = %d;", e->tk.lin);
+    out(u, "    st = a_toggle(%s, %s, fs, %d);", t.c, on.c, e->u.toggle.nf);
+    out(u, "}");
+    out(u, "if (st != A_OK) goto CL_%d;", u->cleanup);
+    for (int i=0; i<n; i++) {
+        opnd_rel(u, os[i]);
+    }
+    opnd_rel(u, t);
+    opnd_rel(u, on);
+}
+
+// toggle on :T with P, ... {...}: the block runs as a transparent
+// task that events `:T [false]` and `:T [true]` toggle.
+static void gen_toggle_on (Unit* u, Expr* e, Dst d) {
+    Opnd r = opnd_tmp(u);
+    Blk b = blk_open(u);
+    const char* t = opnd_tmp(u).c;
+    gen_pin_end(u, t);
+    gen_spawn_tra(u, e->u.toggle_on.blk, PAR_NONE, 0, t);
+
+    int n;
+    Opnd* os = gen_filters(u, e->u.toggle_on.fs, e->u.toggle_on.nf, &n);
+    out(u, "    a_toggle_auto(%s, K[%d], fs, %d);",
+        t, konst(e->tk.str+1,e->tk.len-1), e->u.toggle_on.nf);
+    out(u, "}");
+    for (int i=0; i<n; i++) {
+        opnd_rel(u, os[i]);
+    }
+
+    out(u, "st = a_await(t, a_pt_val(%s));", t);
+    gen_suspend(u, dst_slot(r.c));
+    blk_close(u, b, hnd_none());
+    store(u, r, d);
 }
 
 // await P
@@ -1978,10 +2048,15 @@ static void gen (Unit* u, Expr* e, Dst d) {
         case E_PAR:
             gen_par(u, e, d);
             break;
+        case E_TOGGLE:
+            gen_toggle(u, e);
+            store_void(u, d);
+            break;
+        case E_TOGGLE_ON:
+            gen_toggle_on(u, e, d);
+            break;
         case E_NAT:
         case E_MET:
-        case E_TOGGLE:
-        case E_TOGGLE_ON:
             err(e->tk, "expression not implemented");
             break;
         default:

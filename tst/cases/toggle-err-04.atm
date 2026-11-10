@@ -1,0 +1,4 @@
+task T () { await(false) }
+pin t = spawn T()
+toggle t(false)
+toggle t(false)

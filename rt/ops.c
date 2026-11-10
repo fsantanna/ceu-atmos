@@ -61,6 +61,13 @@ int a_is (AVal v, AVal x) {
 
 AStatus a_in (AVal* dst, AVal v, AVal t, int neg) {
     int ret = 0;
+    if (t.type == A_TASKS) {
+        // the tasks of a pool
+        AVal x = a_tasks_tab(t);
+        AStatus st = a_in(dst, v, x, neg);
+        a_dec(x);
+        return st;
+    }
     if (t.type == A_TAB) {
         // any value, or any non-numeric key
         uint32_t pos = 0;
@@ -98,6 +105,19 @@ static AStatus cat_str (AVal* dst, AVal a, AVal b) {
 }
 
 AStatus a_cat (AVal* dst, AVal a, AVal b) {
+    // a pool concatenates as the vector of its tasks
+    if (a.type==A_TASKS || b.type==A_TASKS) {
+        AVal x = (a.type == A_TASKS) ? a_tasks_tab(a) : a;
+        AVal y = (b.type == A_TASKS) ? a_tasks_tab(b) : b;
+        AStatus st = a_cat(dst, x, y);
+        if (a.type == A_TASKS) {
+            a_dec(x);
+        }
+        if (b.type == A_TASKS) {
+            a_dec(y);
+        }
+        return st;
+    }
     int str_a = (a.type==A_STR || a.type==A_NUM);
     int str_b = (b.type==A_STR || b.type==A_NUM);
     if (str_a && str_b) {
@@ -139,6 +159,21 @@ AStatus a_next (AVal it, AVal lim, AVal* pos, AVal* k, AVal* v) {
             if (a_tab_next(A_TAB_OF(it), &i, &x, &y)) {
                 a_cpy(k, x);
                 a_cpy(v, y);
+            } else {
+                a_clr(k);
+                a_clr(v);
+            }
+            *pos = a_num(i);
+            return A_OK;
+        }
+        case A_TASKS: {
+            // index among the live tasks, and the task
+            int i = (int) p;
+            ATask* x = a_tasks_next(A_TASKS_OF(it), &i);
+            double n = (v->type == A_NIL && k->type == A_NIL) ? 0 : k->u.n + 1;
+            if (x != NULL) {
+                a_set(k, a_num(n));
+                a_cpy(v, a_obj(&x->node.hdr));
             } else {
                 a_clr(k);
                 a_clr(v);

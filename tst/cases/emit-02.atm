@@ -1,0 +1,18 @@
+task T () {
+    spawn {
+        spawn {
+            await(:go)
+            emit(:in)
+            emit @1 (:up)
+        }
+        val e = await(true)
+        print(:tra, e)
+        await(false)
+    }
+    val e = await(true)
+    print(:T, e)
+    await(false)
+}
+spawn T()
+spawn { val e = await(:up) ; print(:main, e) }
+emit(:go)

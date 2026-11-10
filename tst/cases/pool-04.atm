@@ -1,0 +1,16 @@
+task T (v, e) {
+    await(e)
+    v
+}
+pin ts = tasks()
+spawn @ts T(1, :A)
+spawn @ts T(2, :B)
+spawn {
+    val v, t, p = await :any ts
+    print(:any, v, t ?? :xtask, p == ts)
+    val w = await :all ts
+    print(:all, w, #ts)
+}
+emit(:B)
+print(:mid)
+emit(:A)

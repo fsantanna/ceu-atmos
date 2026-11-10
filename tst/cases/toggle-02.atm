@@ -1,0 +1,13 @@
+val T = task () {
+    spawn (task () { loop on :Draw  { print(:draw)  } }) ()
+    spawn (task () { loop on :Click { print(:click) } }) ()
+    loop on :Tick { print(:tick) }
+}
+pin t = spawn T()
+emit(:Tick)
+toggle t (false) with <:Draw || :Click>
+emit(:Draw)
+emit(:Click)
+emit(:Tick)
+toggle t (true)
+emit(:Tick)
