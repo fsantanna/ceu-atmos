@@ -2362,9 +2362,16 @@ Like in [expressions](#precedence-and-associativity), the combinators follow
 the precedences of C: `!` binds tighter than `&&`, which binds tighter than
 `||`.
 
-Inside the `<...>` form, a bare `>` always closes the pattern.
-Therefore, an expression that uses the operators `>` or `>>` must be enclosed
-by parenthesis: `await <:X until (it.n > 3)>`.
+Inside the `<...>` form, some operators in a predicate are ambiguous, and
+the predicate must be enclosed by parenthesis:
+
+- `>` and `>>` could also close the pattern:
+  `await <:X until (it.n > 3)>`.
+- `&&` and `||` could also be combinators of the pattern:
+  `await <:X until (a || b)>`, or `await <<:X until a> || :Y>`.
+
+The compiler rejects the ambiguous forms with the error
+`pattern error : use parentheses to disambiguate`.
 The `until`/`while` suffix applies to the whole combination to its left.
 
 An `await` is only valid in the body of a task, which includes the main chunk
@@ -2455,8 +2462,8 @@ See [Ambiguities](#ambiguities):
     a bare `await :X || :Y` is invalid (combinators need `await<:X || :Y>`);
     `await :X` ⏎ `until c` reads as `await :X ; until c` (not
     `await<:X until c>`);
-    and `await <:X until a > b>` closes the pattern at the first `>` (use
-    `await <:X until (a > b)>`).
+    and `await <:X until a > b>` and `await <:X until a || :Y>` are errors
+    (use parenthesis to disambiguate).
 
 ### Emit
 
@@ -3014,7 +3021,8 @@ may surprise a naive reading:
 |-------------------|-----------------------|-------------------------|--------------------------|
 | [await](#await)   | `await 20min + 1s`    | `(await 20min) + 1s`    | `await(20min + 1s)`      |
 | [await](#await)   | `await P` ⏎ `until c` | `await P ; until c`     | `await<P until c>`       |
-| [await](#await)   | `<P until a > b>`     | `<P until a>` then `b>` | `<P until (a > b)>`      |
+| [await](#await)   | `<P until a > b>`     | error: use parenthesis  | `<P until (a > b)>`      |
+| [await](#await)   | `<P until a \|\| Q>`  | error: use parenthesis  | `<<P until a> \|\| Q>`   |
 | [table](#table)   | `:X` ⏎ `[]`           | `:X ; []`               | `:X []`                  |
 | [calls](#calls)   | `f` ⏎ `(x)`           | `f ; (x)`               | `f(x)`                   |
 | [calls](#calls)   | `f :X []`             | `f(:X [])`              | `f(:X) []`               |

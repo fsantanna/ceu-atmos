@@ -1,1 +1,1 @@
-await-pred-err-01.atm : line 2 : near '3' : sequence error : expected ';' or new line
+await-pred-err-01.atm : line 2 : near '>' : pattern error : use parentheses to disambiguate

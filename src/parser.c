@@ -665,7 +665,7 @@ static int accept_angle (const char* one) {
         TK0.len = 1;
         TK1.str = one;
         TK1.len = 1;
-        return 1;
+        return 2;
     }
     return 0;
 }
@@ -673,6 +673,23 @@ static int accept_angle (const char* one) {
 static void accept_angle_err (const char* one) {
     if (!accept_angle(one)) {
         err(TK1, "expected '%s'", one);
+    }
+}
+
+// Closes a pattern. If an operand follows in the same line, the `>`
+// was meant as the operator of a predicate: `<:X until a > b>`.
+static void accept_angle_close (void) {
+    int ok = accept_angle(">");
+    if (!ok) {
+        err(TK1, "expected '>'");
+    }
+    Tk tk = TK0;
+    int opnd = is_lit(TK1.tag) || check_tag(TK_ID) || check_tag(TK_TAG) ||
+               check_str("(") || check_str("[");
+    // the same for half of a `>>` that closes the outermost pattern
+    int half = (ok==2 && ANGLE==0);
+    if (half || (TK0.sep==TK1.sep && opnd)) {
+        err(tk, "pattern error : use parentheses to disambiguate");
     }
 }
 
@@ -715,7 +732,7 @@ static Patt* parser_await_1_prim (void) {
         ANGLE++;
         Patt* p = parser_await_3_bin();
         ANGLE--;
-        accept_angle_err(">");
+        accept_angle_close();
         return p;
 
     // (E): a value
@@ -793,7 +810,7 @@ static Patt* parser_await (void) {
         ANGLE++;
         Patt* p = parser_await_3_bin();
         ANGLE--;
-        accept_angle_err(">");
+        accept_angle_close();
         return p;
     }
 
@@ -1293,8 +1310,15 @@ static int check_level (int lvl) {
     if (!check_tag(TK_OP)) {
         return 0;
     }
-    if (ANGLE>0 && (!strcmp(TK1.str,">") || !strcmp(TK1.str,">>"))) {
-        return 0;
+    if (ANGLE > 0) {
+        // in a predicate with no delimiters of its own
+        if (!strcmp(TK1.str,">") || !strcmp(TK1.str,">>")) {
+            return 0;
+        }
+        // operator of the predicate, or combinator of the pattern?
+        if (!strcmp(TK1.str,"&&") || !strcmp(TK1.str,"||")) {
+            err(TK1, "pattern error : use parentheses to disambiguate");
+        }
     }
     for (int i=0; i<8 && LEVELS[lvl][i]!=NULL; i++) {
         if (!strcmp(LEVELS[lvl][i], TK1.str)) {

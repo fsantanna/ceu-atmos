@@ -860,8 +860,10 @@ Agreed after `atmos-lang/atmos@5977b07`.
       expression in parentheses has a single value, as in Lua:
       `return (f())` truncates, `return f()` does not.
     - The predicates of await patterns follow: `await :X until c`.
-      Inside `<...>`, a bare `>` always closes the pattern, so `>` and
-      `>>` need parentheses there: `<:X until (a > b)>`.
+      Inside `<...>`, the operators `>` `>>` `&&` `||` are ambiguous
+      in a predicate with no parentheses (pattern delimiter or
+      combinator?), and are a compile error:
+      `pattern error : use parentheses to disambiguate`.
     - `until` and `while` keep the same names in loops and in
       patterns. The line tells them apart: in the line of the `await`
       it is a predicate, in the next line it is a statement.
