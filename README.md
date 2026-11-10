@@ -94,3 +94,11 @@ tst/    tests
     - compound assignment: `set x += 1`.
 - `**`, `?>`, `!>`, `=>=`, `=<=`, `===`, and `=!=` are functions:
   `math.pow`, `X.xin`, `X.gte`, and `X.eq`.
+- `pin` applies to any dynamic value: tasks, pools, tables, and
+  functions.
+    - A pinned value is freed when its block ends, cycles included.
+    - It cannot escape its block: storing it in an outer variable, in
+      an unpinned table, in a `throw`, or emitting it outwards raises
+      `invalid escape : pinned value`.
+    - Returning it from its own block transfers it: it flows out as a
+      fresh value, which may be pinned again.

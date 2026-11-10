@@ -265,6 +265,11 @@ typedef struct {
     - The value must be unique (`rc == 1`), else
       `invalid pin : shared value`.
     - Pinning an already pinned value is an error.
+        - Except for a unique value that is only confined by what it
+          holds (a closure, or data that left its block): the pin
+          narrows it to the current block.
+    - `pin x = [...]` pins the table before filling it, so that the
+      constructor accepts pinned values. Nested constructors do not.
     - Pinning the running task or an ancestor is an error.
     - An unassigned `spawn` is an implicit pin in the enclosing block.
     - Tasks and pools must be pinned: `val`/`var` of an unpinned task
@@ -276,6 +281,10 @@ typedef struct {
     - table: entries released, then freed;
     - function: captures released, then freed;
     - native: finalizer called, then freed.
+- The block ends in two phases, so that no code ever sees empty data:
+    - first, tasks and pools are aborted and defers run, in reverse
+      order of declaration;
+    - then, tables and functions are released.
 
 #### Invariant
 
@@ -310,6 +319,16 @@ Storing a pinned value `v` with depth `p`:
   of the running task.
 - A task that receives a pinned argument inherits its depth: it cannot
   be stored, returned, or pooled above `p`.
+    - If nobody pins it (dropped, rejected by a `val`, refused by a
+      transfer), it is aborted when the block at `p` ends.
+    - A task with no pinned arguments that nobody pins lives with its
+      parent task, as today.
+- Depths only compare along one chain of blocks. `emit` is the lateral
+  channel, so its target must also be in the subtree of the task that
+  owns the pin block, attached inside that block.
+- A named `func f` or `task T` is a top-level variable, as in Lua. If
+  it captures a pinned local, the declaration is an escape: use
+  `val f = func ...` instead.
 - A closure that captures pinned values inherits their scope (see
   Functions and closures).
 - Unpinned task arguments are plain refcounted references. They are
@@ -332,6 +351,14 @@ carry a value `v` with depth `p` to a destination at depth `d`:
       Tasks and pools must be pinned again.
     - Safe by the invariant: every other reference lived in the exited
       blocks and was released with them, so refcounts are exact.
+    - If what leaves still holds values pinned at depth `<= d`, it is
+      not freed of them: it stays confined to the deepest one.
+    - A task or pool that leaves directly is unpinned. One that is only
+      held by data that leaves stays, and is aborted with its block.
+    - A task confined by its arguments (depth `> d`) cannot leave:
+      `invalid escape : pinned value`.
+    - The transfer is all or nothing, and happens before the block
+      runs its defers.
 - Today `func f () { pin t = spawn T() ; t }` returns a dead task.
   With transfer it behaves like `func f () { spawn T() }`.
 
@@ -726,7 +753,7 @@ exs/        examples
 - [x] M6 pools and targets: `tasks(n)`, `spawn @ts`, `:any ts`,
       `:all ts`, emit targets, `toggle` (both forms, `with`).
 - [x] M7 time: clock awaits, `:clock`, timers, default driver loop.
-- [ ] M8 memory: `pin` for all values, block depths, store checks,
+- [x] M8 memory: `pin` for all values, block depths, store checks,
       transfer on exits, deferred abort of blocks on the C stack.
 - [ ] M9 natives and stdlib: C natives, `$x`, native box, stdlib v1, X.
 - [ ] M10 parity: golden suite green, `exs/` ported, manual rewritten.
@@ -777,6 +804,10 @@ Agreed after `atmos-lang/atmos@5977b07`.
   reverse order of their declarations, interleaved with the defers.
 - A block aborted while running unwinds over a private copy of the
   frame (Scheduler).
+- Memory refinements found while implementing M8 (Pin, Stores, Exits):
+  pin at birth for constructors, two-phase block end, lateral check on
+  `emit`, confinement after a transfer, abort of confined tasks that
+  nobody pinned.
 
 ### Rejected
 
