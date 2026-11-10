@@ -300,9 +300,43 @@ static void res (Expr* e) {
         case E_NUM:
         case E_STR:
         case E_TAG:
-        case E_NAT:
         case E_CLK:
             break;
+
+        case E_NAT: {
+            // `$id` refers to a variable
+            const char* s;
+            NatKind kind = nat_kind(e->tk.str, &s);
+            if (kind == NAT_ERR) {
+                err(e->tk, "invalid native : unknown type");
+            }
+            int n = 0;
+            for (const char* p=s; *p!='\0'; p++) {
+                n += (p[0]=='$' && nat_id(p+1)>0);
+            }
+            if (kind==NAT_PRE && n>0) {
+                err(e->tk, "invalid native : unexpected variable");
+            }
+            e->vars = xalloc((n+1) * sizeof(Var*));
+            n = 0;
+            for (const char* p=s; *p!='\0'; p++) {
+                int len = nat_id(p+1);
+                if (p[0]!='$' || len==0) {
+                    continue;
+                }
+                char* id = xalloc(len + 1);
+                memcpy(id, p+1, len);
+                id[len] = '\0';
+                Var* v = lookup(id);
+                if (v == NULL) {
+                    err(e->tk, "undeclared variable");
+                }
+                capture(v);
+                e->vars[n++] = v;
+                p += len;
+            }
+            break;
+        }
 
         case E_DOTS:
             if (!PROTO->dots) {

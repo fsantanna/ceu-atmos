@@ -14,6 +14,25 @@ void* xalloc (size_t n);
 char* xstrndup (const char* s, size_t n);
 char* xfmt (const char* fmt, ...);
 
+// Kinds of native literals, given by a leading tag:
+//      `stmts`         C statements, evaluates to nil
+//      `:pre decls`    C declarations at file scope
+//      `:int e`        C expression converted to an integer
+//      `:num e`        ... to a real
+//      `:bool e`       ... to a boolean
+//      `:str e`        ... to a string (NULL gives nil)
+//      `:val e`        C expression of type AVal (owned)
+typedef enum {
+    NAT_STMT, NAT_PRE, NAT_INT, NAT_NUM, NAT_BOOL, NAT_STR, NAT_VAL,
+    NAT_ERR
+} NatKind;
+
+// Kind of a native, and where its code starts.
+NatKind nat_kind (const char* s, const char** code);
+
+// Length of the identifier at `s`, as in `$id`.
+int nat_id (const char* s);
+
 ///////////////////////////////////////////////////////////////////////////////
 // LEXER
 ///////////////////////////////////////////////////////////////////////////////

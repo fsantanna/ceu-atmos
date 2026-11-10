@@ -47,3 +47,34 @@ void err (Tk tk, const char* fmt, ...) {
     fprintf(stderr, "\n");
     exit(1);
 }
+
+NatKind nat_kind (const char* s, const char** code) {
+    static const char* TAGS[] = {
+        "", "pre", "int", "num", "bool", "str", "val", NULL
+    };
+    while (*s==' ' || *s=='\t' || *s=='\n') {
+        s++;
+    }
+    *code = s;
+    if (*s != ':') {
+        return NAT_STMT;
+    }
+    int n = nat_id(s+1);
+    for (int i=1; TAGS[i]!=NULL; i++) {
+        if ((int)strlen(TAGS[i])==n && !strncmp(s+1,TAGS[i],n)) {
+            *code = s + 1 + n;
+            return (NatKind) i;
+        }
+    }
+    return NAT_ERR;
+}
+
+int nat_id (const char* s) {
+    int n = 0;
+    while ((s[n]>='a' && s[n]<='z') || (s[n]>='A' && s[n]<='Z') ||
+           s[n]=='_' || (n>0 && s[n]>='0' && s[n]<='9'))
+    {
+        n++;
+    }
+    return n;
+}

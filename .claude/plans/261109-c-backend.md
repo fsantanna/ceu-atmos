@@ -565,10 +565,25 @@ typedef AStatus (*AResume) (ATask* t, AKind k, AVal evt);
 
 ### Natives
 
-- Native blocks are C expressions or statements.
-- `$x` refers to an Atmos variable.
-- A C API header gives macros to read and build values:
-  `A_NUM(v)`, `A_STR(v)`, `a_num(d)`, `a_str(s)`, `a_tab()`, ...
+- Native literals are C code. A leading tag gives the kind:
+
+| Literal        | Meaning                                         |
+|----------------|-------------------------------------------------|
+| `` `stmts` ``      | C statements, evaluates to `nil`            |
+| `` `:pre decls` `` | C declarations at file scope (`#include`)   |
+| `` `:int e` ``     | C expression converted to an integer        |
+| `` `:num e` ``     | C expression converted to a real            |
+| `` `:bool e` ``    | C expression converted to a boolean         |
+| `` `:str e` ``     | C string copied, `NULL` gives `nil`         |
+| `` `:val e` ``     | C expression of type `AVal`, owned          |
+
+- `$x` refers to an Atmos variable, as an `AVal` that may be read and
+  assigned. It is captured like any other access.
+- The C API in `rt/atmos.h` reads and builds values: `$x.u.i`,
+  `a_dbl($x)`, `A_STR_OF($x)->s`, `a_int(i)`, `a_num(d)`, `a_strz(s)`,
+  `a_tab()`, ...
+- The tags follow the native literals of dceu. To confirm with the
+  author.
 - Native box:
 
 ```c
@@ -576,6 +591,7 @@ typedef struct {
     AObj   hdr;
     void*  ptr;
     void (*fin) (void*);
+    const char* kind;   // tells C types apart, compared by address
 } ANat;
 ```
 
@@ -608,12 +624,13 @@ void    atm_quit  (void);
 - **base:** `print`, `type`, `tostring`, `tonumber`, `assert`, `next`.
 - **math:** `floor`, `ceil`, `abs`, `min`, `max`, `sqrt`, `pow`, `sin`,
   `cos`, `random`, `randomseed`, `huge`, `pi`.
-- **string:** `sub`, `find` (plain), `split`, `byte`, `char`, `upper`,
-  `lower`, `rep`, `format` (`%d %s %f %g %x %%`).
+- **string:** `len`, `sub`, `find` (plain), `split`, `byte`, `char`,
+  `upper`, `lower`, `rep`, `format` (`%d %s %f %g %x %%`).
     - Positions are 0-based, and `sub(s, i, j)` includes both ends.
+    - A negative position counts from the end: `-1` is the last byte.
 - **vector:** `insert`, `remove`, `sort` (with comparator), `join`.
 - **io:** `write`, `read` (line), `open`/`close`/`lines` as native box.
-- **os:** `time`, `clock`, `exit`, `getenv`.
+- **os:** `time`, `clock`, `exit`, `getenv`, `remove`.
 - **X:** `tostring`, `print`, `copy`, `eq`, `neq`, `gte`, `xin`.
 - **atmos:** `status(t)`.
 
@@ -755,7 +772,7 @@ exs/        examples
 - [x] M7 time: clock awaits, `:clock`, timers, default driver loop.
 - [x] M8 memory: `pin` for all values, block depths, store checks,
       transfer on exits, deferred abort of blocks on the C stack.
-- [ ] M9 natives and stdlib: C natives, `$x`, native box, stdlib v1, X.
+- [x] M9 natives and stdlib: C natives, `$x`, native box, stdlib v1, X.
 - [ ] M10 parity: golden suite green, `exs/` ported, manual rewritten.
 
 ## Later (after M10)

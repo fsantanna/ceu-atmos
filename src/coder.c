@@ -1680,6 +1680,59 @@ static Opnd gen_proto (Unit* u, Expr* e) {
     return d;
 }
 
+// Native declarations, at file scope.
+static Buf PRES = { NULL, 0, 0 };
+
+// `C code`: statements, declarations, or an expression converted
+// according to its tag. `$x` is the variable `x`, as an `AVal`.
+static void gen_nat (Unit* u, Expr* e, Dst d) {
+    const char* s;
+    NatKind kind = nat_kind(e->tk.str, &s);
+
+    Buf code = { NULL, 0, 0 };
+    buf_add(&code, "");
+    int n = 0;
+    while (*s != '\0') {
+        int len = (s[0] == '$') ? nat_id(s+1) : 0;
+        if (len > 0) {
+            buf_add(&code, var_c(u, e->vars[n++]));
+            s += 1 + len;
+        } else {
+            char c[2] = { *s++, '\0' };
+            buf_add(&code, c);
+        }
+    }
+    const char* line = xfmt("#line %d %s\n", e->tk.lin,
+        quote(FILENAME, strlen(FILENAME)));
+
+    if (kind == NAT_PRE) {
+        buf_add(&PRES, line);
+        buf_add(&PRES, code.s);
+        buf_add(&PRES, "\n");
+        store_void(u, d);
+        return;
+    }
+    if (kind == NAT_STMT) {
+        buf_add(&u->body, line);
+        buf_add(&u->body, code.s);
+        buf_add(&u->body, "\n;\n");
+        store_void(u, d);
+        return;
+    }
+
+    static const char* CONV[] = {
+        NULL, NULL,
+        "a_int((int64_t)(", "a_num((double)(", "a_bool(0 != (",
+        "a_strn((", "(("
+    };
+    Opnd t = opnd_tmp(u);
+    buf_add(&u->body, line);
+    buf_add(&u->body, xfmt("a_set(&%s, %s", t.c, CONV[kind]));
+    buf_add(&u->body, code.s);
+    buf_add(&u->body, ")));\n");
+    store(u, t, d);
+}
+
 // `...`: the extra arguments of the function. A task keeps them in a
 // table in its frame.
 static void gen_dots (Unit* u, Dst d) {
@@ -2230,6 +2283,8 @@ static void gen (Unit* u, Expr* e, Dst d) {
             gen_toggle_on(u, e, d);
             break;
         case E_NAT:
+            gen_nat(u, e, d);
+            break;
         case E_MET:
             err(e->tk, "expression not implemented");
             break;
@@ -2253,6 +2308,8 @@ char* coder_main (Expr* prog, Var** globals, int nglobals) {
 
     Buf c = { NULL, 0, 0 };
     buf_add(&c, "#include \"atmos.h\"\n\n");
+    buf_add(&c, PRES.s ? PRES.s : "");
+    buf_add(&c, "\n");
     buf_add(&c, xfmt("const char* atm_file = %s;\n\n",
         quote(FILENAME, strlen(FILENAME))));
 

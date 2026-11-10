@@ -94,6 +94,13 @@ tst/    tests
     - compound assignment: `set x += 1`.
 - `**`, `?>`, `!>`, `=>=`, `=<=`, `===`, and `=!=` are functions:
   `math.pow`, `X.xin`, `X.gte`, and `X.eq`.
+- Native literals are C code, not Lua: `` `:int strlen("abc")` ``.
+    - A leading tag converts the expression: `:int`, `:num`, `:bool`,
+      `:str`, `:val`. With no tag, the code is a statement.
+    - `` `:pre ...` `` declares at file scope, as in `#include`.
+    - `$x` refers to the variable `x`.
+- The libraries are `string`, `vector`, `math`, `io`, and `os`, with
+  0-based positions, instead of the libraries of Lua.
 - `pin` applies to any dynamic value: tasks, pools, tables, and
   functions.
     - A pinned value is freed when its block ends, cycles included.

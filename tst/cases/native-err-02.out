@@ -1,0 +1,1 @@
+native-err-02.atm : line 1 : near ':int $nope' : undeclared variable
