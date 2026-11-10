@@ -592,6 +592,7 @@ void atm_std_init (void) {
     atm_lib_string_init();
     atm_lib_vector_init();
     atm_lib_os_init();
+    atm_lib_io_init();
 }
 
 void atm_std_quit (void) {
@@ -607,4 +608,5 @@ void atm_std_quit (void) {
     atm_lib_string_quit();
     atm_lib_vector_quit();
     atm_lib_os_quit();
+    atm_lib_io_quit();
 }

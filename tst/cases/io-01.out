@@ -1,0 +1,13 @@
+native
+false	invalid argument to 'write' : closed file
+false	invalid argument to 'close' : closed file
+one	2	[]	last	nil
+<one><2><><last>
+one
+false	invalid escape : pinned value
+false	invalid escape : pinned value
+2
+nil	/nonexistent/file : No such file or directory
+false	invalid argument to 'lines' : /nonexistent/file : No such file or directory
+false	invalid argument to 'read' : expected file : got number
+true	nil	/tmp/atmos-tst-io-01.txt : No such file or directory

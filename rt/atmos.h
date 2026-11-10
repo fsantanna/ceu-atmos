@@ -507,6 +507,40 @@ typedef struct ABox {
 // New box holding nil (owned).
 AVal a_box (void);
 
+///////////////////////////////////////////////////////////////////////////////
+// NATIVES
+///////////////////////////////////////////////////////////////////////////////
+
+// A native box holds a C pointer, with a finalizer that runs exactly
+// once: when the box is closed, when it is released, or when its pin
+// block ends. The kind tells boxes of different C types apart: it is
+// compared by address.
+
+typedef struct ANat {
+    AObj        hdr;
+    void*       ptr;
+    void      (*fin) (void*);
+    const char* kind;
+} ANat;
+
+#define A_NAT_OF(v) ((ANat*)(v).u.o)
+
+// New box (owned). The finalizer may be NULL.
+AVal a_nat (void* ptr, void (*fin)(void*), const char* kind);
+
+// The value is a box of the given kind.
+static inline int a_nat_is (AVal v, const char* kind) {
+    return v.type==A_NAT && A_NAT_OF(v)->kind==kind;
+}
+
+// The pointer of a box, or NULL once it is closed.
+static inline void* a_nat_ptr (AVal v) {
+    return A_NAT_OF(v)->ptr;
+}
+
+// Runs the finalizer now, unless it has run.
+void a_nat_close (AVal v);
+
 // Pushes the extra arguments of a variadic function: those from
 // position `npar` on. Returns how many.
 static inline int a_dots (int argc, AVal* argv, int npar) {
@@ -731,6 +765,7 @@ AStatus a_pin_end (AVal* slot, AStatus st);
 // Then, data is released, so that no code ever sees it empty:
 //  - table: entries released
 //  - function: captures released
+//  - native: finalizer called
 void a_pin_clr (AVal* slot);
 
 // Releases all entries of a table.
@@ -941,6 +976,7 @@ extern AVal atm_g_math;
 extern AVal atm_g_string;
 extern AVal atm_g_vector;
 extern AVal atm_g_os;
+extern AVal atm_g_io;
 extern AVal atm_g_next;
 
 // Deep string representation: tables as `:Tag [v, k=v]`, with sorted

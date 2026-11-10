@@ -1,0 +1,39 @@
+val path = "/tmp/atmos-tst-io-01.txt"
+do {
+    val f = io.open(path, "w")
+    print(type(f))
+    io.write(f, "one\n", 2, "\n", "\n", "last")
+    io.close(f)
+    print(catch true { io.write(f, "x") })
+    print(catch true { io.close(f) })
+}
+do {
+    val f = io.open(path)
+    print(io.read(f), io.read(f), "[" ++ io.read(f) ++ "]", io.read(f), io.read(f))
+}
+loop l in io.lines(path) {
+    io.write("<", l, ">")
+}
+io.write("\n")
+;; a pinned file closes with its block
+var keep
+do {
+    pin f = io.open(path)
+    val it = io.lines(f)
+    print(it())
+    print(catch true { set keep = f })
+    print(catch true { set keep = it })
+}
+;; a returned file is transferred
+func open () {
+    pin f = io.open(path)
+    io.read(f)
+    f
+}
+val g = open()
+print(io.read(g))
+set keep = g
+print(io.open("/nonexistent/file"))
+print(catch true { io.lines("/nonexistent/file") })
+print(catch true { io.read(10) })
+print(os.remove(path), os.remove(path))

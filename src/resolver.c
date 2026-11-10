@@ -45,6 +45,7 @@ static const char* BUILTINS[][2] = {
     { "string",   "atm_g_string"   },
     { "vector",   "atm_g_vector"   },
     { "os",       "atm_g_os"       },
+    { "io",       "atm_g_io"       },
     { "next",     "atm_g_next"     },
     { NULL, NULL }
 };

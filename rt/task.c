@@ -1542,6 +1542,8 @@ void a_pin_clr (AVal* slot) {
         a_tab_clear(A_TAB_OF(v));
     } else if (v.type==A_FUNC || v.type==A_TASK) {
         a_clrs(A_FUNC_OF(v)->caps, A_FUNC_OF(v)->ncap);
+    } else if (v.type == A_NAT) {
+        a_nat_close(v);
     }
 }
 

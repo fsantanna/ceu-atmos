@@ -254,6 +254,9 @@ void a_free (AObj* o) {
         case A_BOX:
             a_dec(((ABox*)o)->v);
             break;
+        case A_NAT:
+            a_nat_close(a_obj(o));
+            break;
         default:
             break;
     }
@@ -298,6 +301,26 @@ AVal a_box (void) {
     b->hdr.depth  = 0;
     b->v = a_nil();
     return a_obj(&b->hdr);
+}
+
+AVal a_nat (void* ptr, void (*fin)(void*), const char* kind) {
+    ANat* n = malloc(sizeof(ANat));
+    n->hdr.rc     = 1;
+    n->hdr.type   = A_NAT;
+    n->hdr.pinned = 0;
+    n->hdr.depth  = 0;
+    n->ptr  = ptr;
+    n->fin  = fin;
+    n->kind = kind;
+    return a_obj(&n->hdr);
+}
+
+void a_nat_close (AVal v) {
+    ANat* n = A_NAT_OF(v);
+    if (n->ptr!=NULL && n->fin!=NULL) {
+        n->fin(n->ptr);
+    }
+    n->ptr = NULL;
 }
 
 // Nested calls in progress: bounded to protect the C stack.

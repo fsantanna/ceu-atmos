@@ -70,5 +70,7 @@ void atm_lib_vector_init (void);
 void atm_lib_vector_quit (void);
 void atm_lib_os_init (void);
 void atm_lib_os_quit (void);
+void atm_lib_io_init (void);
+void atm_lib_io_quit (void);
 
 #endif

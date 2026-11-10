@@ -1,5 +1,6 @@
 // Library `os`.
 
+#include <errno.h>
 #include <stdio.h>
 #include <time.h>
 #include <unistd.h>
@@ -50,8 +51,27 @@ static AStatus os_exit (AFunc* self, int argc, AVal* argv) {
     return A_OK;
 }
 
+// os.remove(path): deletes a file. Gives true, or `nil, msg`.
+static AStatus os_remove (AFunc* self, int argc, AVal* argv) {
+    (void) self;
+    AStr* s;
+    if (arg_str(argc, argv, 0, "remove", &s) != A_OK) {
+        return A_ERROR;
+    }
+    if (remove(s->s) == 0) {
+        a_push(a_bool(1));
+    } else {
+        char msg[512];
+        snprintf(msg, sizeof(msg), "%s : %s", s->s, strerror(errno));
+        a_push(a_nil());
+        a_push(a_strz(msg));
+    }
+    return A_OK;
+}
+
 void atm_lib_os_init (void) {
     atm_g_os = a_tab();
+    field(atm_g_os, "remove", os_remove);
     field(atm_g_os, "time",   os_time);
     field(atm_g_os, "clock",  os_clock);
     field(atm_g_os, "getenv", os_getenv);
