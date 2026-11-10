@@ -668,9 +668,11 @@ static AStatus task_resume (ATask* t, AKind k) {
     a_inc(me);
     a_cur = t;
     t->status = T_RUNNING;
-    int lin = a_lin;
+    int lin   = a_lin;
+    int depth = a_depth;
     AStatus st = t->desc->resume(t, k);
-    a_lin = lin;
+    a_lin   = lin;
+    a_depth = depth;
     a_cur = prev;
     if (st == A_AWAIT) {
         t->status = T_SUSPENDED;
@@ -835,11 +837,14 @@ static AStatus emit_self (ANode* n, uint32_t time, AVal evt) {
             }
         } else if (t->status==T_SUSPENDED && t->time<time) {
             // predicates run in the context of the awaiting task
-            int done = 0;
+            int done  = 0;
+            int depth = a_depth;
             ATask* prev = a_cur;
-            a_cur = t;
+            a_cur   = t;
+            a_depth = t->adepth;
             st = patt_match(t->awt, evt, &done);
-            a_cur = prev;
+            a_cur   = prev;
+            a_depth = depth;
             if (st != A_OK) {
                 t->exit = st;
                 st = task_resume(t, R_EXIT);
@@ -1054,10 +1059,16 @@ AStatus a_spawn (AVal* dst, AVal proto, AVal pool, int base) {
     }
 
     ATask* t = task_new(A_FUNC_OF(proto), up, base);
+    // the body is one deeper than the block the task is attached to
+    t->depth = a_depth + 1;
     // a task in a pool is owned by the pool
     if (pool.type == A_TASKS) {
         t->node.hdr.pinned = 1;
+        t->node.hdr.depth  = pool.u.o->depth;
         t->pool = A_TASKS_OF(pool);
+        if (pool.u.o->pinned) {
+            t->depth = pool.u.o->depth + 1;
+        }
     }
     a_cpy(dst, a_obj(&t->node.hdr));
     return chk_aborted(task_resume(t, R_START));
@@ -1073,6 +1084,8 @@ AStatus a_spawn_tra (AVal* dst, ATask* owner, const AProto* p) {
     t->frame = owner->frame;
     t->frame->rc++;
     t->L = owner->L;
+    // a transparent block is a nested block of its owner
+    t->depth = owner->depth;
     t->status = T_RUNNING;
     node_add(&owner->node, &t->node);
     a_cpy(dst, a_obj(&t->node.hdr));
@@ -1100,7 +1113,8 @@ AStatus a_await (ATask* t, APatt* p) {
         patt_free(p);
         return A_ABORT;
     }
-    t->time = TIME;
+    t->time   = TIME;
+    t->adepth = a_depth;
     int done = 0;
     AStatus st = chk_aborted(patt_start(p, &done));
     if (st!=A_OK || done) {
@@ -1167,6 +1181,7 @@ AStatus a_pin (AVal* slot) {
         return a_error("invalid assignment : unexpected parent task");
     }
     v.u.o->pinned = 1;
+    v.u.o->depth  = a_depth;
     return A_OK;
 }
 
@@ -1225,6 +1240,7 @@ AStatus a_main (const AProto* p) {
         a_push(a_strz(ARGV[i]));
     }
     MAIN = task_new(A_FUNC_OF(proto), &ROOT.node, base);
+    MAIN->depth = 1;
     a_inc(a_obj(&MAIN->node.hdr));
     a_dec(proto);
     return task_resume(MAIN, R_START);

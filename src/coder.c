@@ -68,6 +68,9 @@ typedef struct Unit {
     int ind;
     // source line of the statement being compiled
     int lin;
+    // nesting level of the enclosing block: the body is level 0, at
+    // the depth `D` of the unit
+    int level;
     // finalizers of the enclosing block
     struct Defer* defs;
     int ndefs;
@@ -721,8 +724,10 @@ static Blk blk_open (Unit* u) {
     u->cleanup = b.cl;
     u->defs  = NULL;
     u->ndefs = 0;
+    u->level++;
     out(u, "{");
     u->ind++;
+    out(u, "a_depth = D + %d;", u->level);
     return b;
 }
 
@@ -732,6 +737,9 @@ static void blk_close (Unit* u, Blk b, Hnd h) {
     u->ind--;
     out0(u, "CL_%d:", b.cl);
     u->ind++;
+
+    // an exit may arrive from a deeper block
+    out(u, "a_depth = D + %d;", u->level);
 
     // a task aborted while running unwinds over a private frame
     if (u->task) {
@@ -780,6 +788,8 @@ static void blk_close (Unit* u, Blk b, Hnd h) {
     if (*nslots(u) > b.lo) {
         out(u, "a_clrs(&L[%d], %d);", b.lo, *nslots(u)-b.lo);
     }
+    u->level--;
+    out(u, "a_depth = D + %d;", u->level);
     if (h.brk > 0) {
         out(u, "if (st == A_BREAK) {");
         u->ind++;
@@ -1481,12 +1491,15 @@ static Buf FUNCS = { NULL, 0, 0 };
 // frame, and starts by jumping to its resumption point.
 static void unit_emit (Unit* u, Buf* c) {
     int n = (u->nslots > 0) ? u->nslots : 1;
+    // depth of the body block
     if (u->task) {
         buf_add(c, "    AVal* L = t->L;\n");
         buf_add(c, "    AFunc* self = t->proto;\n");
+        buf_add(c, "    int D = t->depth;\n");
     } else {
         buf_add(c, xfmt("    AVal L[%d];\n", n));
         buf_add(c, xfmt("    a_nils(L, %d);\n", n));
+        buf_add(c, "    int D = a_depth + 1;\n");
     }
     buf_add(c, "    AStatus st = A_OK;\n");
     buf_add(c, "    int base = a_top;\n");
@@ -1522,6 +1535,7 @@ static const char* gen_task (Proto* p, Var** pars, int npar, List* body,
     u.proto = p;
     u.npar  = npar;
     u.task  = 1;
+    u.level = -1;
     for (int i=0; i<npar; i++) {
         pars[i]->slot = u.nslots++;
     }
@@ -1558,6 +1572,7 @@ static const char* gen_func (Expr* e) {
     memset(&u, 0, sizeof(u));
     u.proto = e->proto;
     u.npar  = e->u.proto.n;
+    u.level = -1;
 
     // parameters are immutable copies of the arguments
     for (int i=0; i<e->u.proto.n; i++) {
@@ -1680,6 +1695,8 @@ static const char* gen_tra (Unit* up, List* body, ParMode mode, int key,
     u.npar  = up->npar;
     u.task  = 1;
     u.root  = (up->root != NULL) ? up->root : up;
+    // a transparent block is a nested block of its owner
+    u.level = up->level;
 
     if (mode == PAR_ANY) {
         Dst m = dst_multi(&u);
@@ -1798,6 +1815,7 @@ static void gen_suspend (Unit* u, Dst d) {
     out0(u, "AW_%d:", pc);
     out(u, "    base = a_top;");
     out(u, "    a_lin = %d;", u->lin);
+    out(u, "    a_depth = D + %d;", u->level);
     out(u, "    st = a_resumed(t, k);");
     out(u, "}");
     out(u, "if (st != A_OK) goto CL_%d;", u->cleanup);

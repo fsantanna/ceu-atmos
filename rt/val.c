@@ -18,6 +18,7 @@ static int  PAY_CAP = 0;
 static char ERR[512];
 
 int a_lin = 0;
+int a_depth = 0;
 
 // Trace of the pending error: the line that raised it, and the lines
 // of the calls it has crossed (innermost first).
@@ -304,12 +305,14 @@ AStatus a_call (AVal f, int base) {
 
     // the function must outlive its own call
     a_inc(f);
-    int argc = a_top - base;
-    int lin  = a_lin;
+    int argc  = a_top - base;
+    int lin   = a_lin;
+    int depth = a_depth;
     CALLS++;
     AStatus st = ((AFunc*)f.u.o)->fn((AFunc*)f.u.o, argc, &a_stk[base]);
     CALLS--;
-    a_lin = lin;
+    a_lin   = lin;
+    a_depth = depth;
     a_dec(f);
 
     // the call aborted the running task: it unwinds

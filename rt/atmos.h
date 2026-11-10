@@ -134,6 +134,13 @@ extern int a_lin;
 // Source file of the program, set by the generated code.
 extern const char* atm_file;
 
+// Depth of the block being executed, set by the generated code.
+//  - a block is one deeper than its parent block
+//  - the block of the main chunk has depth 1
+//  - a function body is one deeper than the block of its caller
+//  - a task body is one deeper than the block it is attached to
+extern int a_depth;
+
 // Shows the pending error and its trace: the calls it crossed, from
 // the outermost one, then the line that raised it.
 void a_error_dump (void);
@@ -590,6 +597,9 @@ typedef struct ATask {
     AStatus  exit;
     // emit counter when the current await was established
     uint32_t time;
+    // depth of the body block, and of the block of the current await
+    int      depth;
+    int      adepth;
     struct APatt* awt;
     AVal     pub;
     AVal     ret;
