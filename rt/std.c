@@ -565,6 +565,7 @@ void atm_std_init (void) {
     field(atm_g_atmos, "next",   atmos_next);
 
     atm_lib_string_init();
+    atm_lib_vector_init();
 }
 
 void atm_std_quit (void) {
@@ -577,4 +578,5 @@ void atm_std_quit (void) {
     a_clr(&atm_g_atmos);
     a_clr(&atm_g_math);
     atm_lib_string_quit();
+    atm_lib_vector_quit();
 }

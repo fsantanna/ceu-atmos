@@ -1,0 +1,19 @@
+[5, 10, 15, 20, 30, 40, 50]
+50	5	15
+[10, 20, 30, 40]
+nil	0
+[x]
+[-4, 1, 1, 2.5, 3, 10]
+[10, 3, 2.5, 1, 1, -4]
+[apple, fig, kiwi, pear]
+bdac
+1, a, 2.5	xy	[]
+false	invalid comparison : string with number
+false	err
+false	invalid argument to 'insert' : position out of bounds
+false	invalid argument to 'remove' : position out of bounds
+false	invalid argument to 'join' : expected string or number : got table
+false	invalid argument to 'insert' : expected table : got number
+false	invalid escape : pinned value
+false	invalid escape : pinned value
+0	2

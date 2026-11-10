@@ -1,0 +1,47 @@
+val t = [10, 20, 30]
+vector.insert(t, 40)
+vector.insert(t, 0, 5)
+vector.insert(t, 2, 15)
+vector.insert(t, #t, 50)
+X.print(t)
+print(vector.remove(t), vector.remove(t, 0), vector.remove(t, 1))
+X.print(t)
+val e = []
+print(vector.remove(e), #e)
+vector.insert(e, :x)
+X.print(e)
+
+val v = [3, 1, 2.5, -4, 10, 1]
+vector.sort(v)
+X.print(v)
+vector.sort(v, func (a, b) { a > b })
+X.print(v)
+val ws = ["pear", "fig", "apple", "kiwi"]
+vector.sort(ws)
+X.print(ws)
+;; stable
+val ps = [[k=2,n=:a], [k=1,n=:b], [k=2,n=:c], [k=1,n=:d]]
+vector.sort(ps, func (a, b) { a.k < b.k })
+print(vector.join([(ps@0).n, (ps@1).n, (ps@2).n, (ps@3).n], ""))
+vector.sort([])
+vector.sort([1])
+
+print(vector.join([1, "a", 2.5], ", "), vector.join([:x, :y]), "[" ++ vector.join([]) ++ "]")
+
+print(catch true { vector.sort([1, "a"]) })
+print(catch true { vector.sort([2, 1], func (a, b) { throw(:err) }) })
+print(catch true { vector.insert(t, 9, 1) })
+print(catch true { vector.remove(t, 9) })
+print(catch true { vector.join([1, []]) })
+print(catch true { vector.insert(1, 2) })
+;; store checks
+do {
+    pin p = [1]
+    val u = []
+    print(catch true { vector.insert(u, p) })
+    print(catch true { vector.insert(u, 0, p) })
+    pin q = []
+    vector.insert(q, p)
+    vector.insert(q, 0, p)
+    print(#u, #q)
+}

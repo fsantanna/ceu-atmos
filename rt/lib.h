@@ -66,5 +66,7 @@ AStatus arg_int (int argc, AVal* argv, int i, const char* f, int opt,
 // Libraries: each creates and releases its global table.
 void atm_lib_string_init (void);
 void atm_lib_string_quit (void);
+void atm_lib_vector_init (void);
+void atm_lib_vector_quit (void);
 
 #endif
