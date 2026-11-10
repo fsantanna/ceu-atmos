@@ -88,7 +88,16 @@ structured, deterministic concurrency.
       `//=` `%=` `++=` `&=` `|=` `^=` `<<=` `>>=` `&&=` `||=`.
         - A single destination, evaluated once.
     - Removed: `**` (use `math.pow`), `?>` `!>` (`X.xin`), `=>=`
-      `=<=` (`X.gte`), `===` `=!=` (`X.eq`).
+      `=<=` (`X.gte`), `===` `=!=` (`X.eq`, `X.neq`).
+    - `??` is the single matching operator, always as
+      `value ?? pattern`. `a ?? b` holds if:
+        - `a == b`; or
+        - `b` names the type of `a`; or
+        - `b` is a dot prefix of `a`, or of the tag of `a`; or
+        - both are tables, and every field of `b` matches the same
+          field of `a`, recursively with `??`.
+    - The combinators of an await pattern follow the same precedence:
+      `!`, then `&&`, then `||`, then the `until`/`while` suffix.
     - `->` and `<-` stay, as do `-->` and `<--`.
 - **Multiple values and varargs are kept, exactly as in Lua 5.4.**
     - `catch`, `await`, `escape`, `par :all`, and `val a,b = ...` rely
@@ -479,7 +488,7 @@ typedef AStatus (*AResume) (ATask* t, AKind k, AVal evt);
 - **Await.** Build the pattern once, eagerly (including spawned task
   arguments); `until`/`while` predicates stay closures, called on each
   candidate event.
-    - Patterns: boolean, value (`??`), tagged table (`X.gte`), clock,
+    - Patterns: boolean, value or tagged table (`??`), clock,
       `:clock`, task, `T(...)`, `:any ts`, `:all ts`, `until`, `while`,
       `!`, `&&`, `||`.
     - `&&` keeps per-operand state inside the pattern.
@@ -503,6 +512,10 @@ typedef AStatus (*AResume) (ATask* t, AKind k, AVal evt);
     - Cleanup and deallocation run when control returns to that code,
       which sees `A_ABORT` and unwinds.
     - Pinned values held in its temporaries stay valid until then.
+    - A transparent block shares the frame of its owner, which goes on
+      and may reuse the slots. So the marked block gets a private
+      copy of the frame: its cleanup and its defers still see the
+      variables as they were, and cannot disturb the owner.
 - **Pinned payloads.** `emit` of a pinned value requires the target to
   live inside the value's pin block (see Memory, Stores).
 - **Termination.** A finishing task stores `ret` and signals its owner,
@@ -574,7 +587,7 @@ void    atm_quit  (void);
 - **vector:** `insert`, `remove`, `sort` (with comparator), `join`.
 - **io:** `write`, `read` (line), `open`/`close`/`lines` as native box.
 - **os:** `time`, `clock`, `exit`, `getenv`.
-- **X:** `tostring`, `print`, `copy`, `eq`, `gte`, `xin`.
+- **X:** `tostring`, `print`, `copy`, `eq`, `neq`, `gte`, `xin`.
 - **atmos:** `status(t)`.
 
 ## Compiler
@@ -757,15 +770,13 @@ Agreed after `atmos-lang/atmos@5977b07`.
 - `**`, `?>`, `!>`, `=>=`, `=<=`, `===`, `=!=` removed in favor of
   functions (Settled decisions).
 
-### Open
-
-- **`??` over tables.** With `=>=` gone, `a ?? b` could gain a fourth
-  rule: if both are tables, every field of `b` matches the same field
-  of `a`, recursively with `??`.
-    - `await`, `match`, `catch`, and `escape` would then share one
-      matching operator, always as `value ?? pattern`.
-    - Not decided: `??` keeps its three rules for now, and `await` on
-      a table keeps using `X.gte`.
+- `??` matches tables field by field, and `await`, `match`, `catch`,
+  and `escape` all use it (Settled decisions).
+- Await combinators follow the precedence of C (Settled decisions).
+- At the end of a block, pinned tasks and pools are aborted in the
+  reverse order of their declarations, interleaved with the defers.
+- A block aborted while running unwinds over a private copy of the
+  frame (Scheduler).
 
 ### Rejected
 
