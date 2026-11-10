@@ -487,6 +487,10 @@ typedef struct AFunc {
 // New function with `ncap` empty captures (owned).
 AVal a_func (AFn fn, int ncap);
 
+// A closure inherits the scope of what it captures: it is pinned at
+// the deepest pin block among its captures. Called once they are set.
+void a_func_scope (AVal f);
+
 // A captured mutable variable lives in a box, shared by the function
 // that declares it and by the closures that capture it.
 typedef struct ABox {

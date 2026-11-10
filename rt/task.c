@@ -1070,6 +1070,8 @@ static ATask* task_new (AFunc* f, ANode* up, int base) {
     t->frame->n  = p->nslots;
     t->L = t->frame->L;
     t->status = T_RUNNING;
+    // a task is confined like its prototype, if it is a closure
+    t->mindepth = a_pdepth(a_obj(&f->hdr));
 
     // parameters, then a table with the extra arguments
     int argc = a_top - base;
@@ -1106,7 +1108,12 @@ AStatus a_spawn (AVal* dst, AVal proto, AVal pool, int base) {
     if (pool.type == A_TASKS) {
         ATasks* ts = A_TASKS_OF(pool);
         up = &ts->node;
-        // the task lives as long as the pool: so must its arguments
+        // the task lives as long as the pool: so must its prototype
+        // and its arguments
+        if (a_chk_store(proto, a_pdepth(pool)) != A_OK) {
+            a_settop(base);
+            return A_ERROR;
+        }
         for (int i=base; i<a_top; i++) {
             if (a_chk_store(a_stk[i], a_pdepth(pool)) != A_OK) {
                 a_settop(base);
@@ -1250,6 +1257,21 @@ AStatus a_pub_set (ATask* t, AVal v) {
     return A_OK;
 }
 
+void a_func_scope (AVal f) {
+    AFunc* fn = A_FUNC_OF(f);
+    int d = 0;
+    for (int i=0; i<fn->ncap; i++) {
+        int p = a_pdepth(fn->caps[i]);
+        if (p > d) {
+            d = p;
+        }
+    }
+    if (d > 0) {
+        fn->hdr.pinned = 1;
+        fn->hdr.depth  = d;
+    }
+}
+
 int a_pdepth (AVal v) {
     if (v.type < A_TAB) {
         return 0;
@@ -1277,9 +1299,17 @@ AStatus a_pin (AVal* slot) {
                 return a_err_pinned();
             }
             break;
-        case A_TAB:
         case A_FUNC:
         case A_TASK:
+            // a fresh closure may already carry the scope of its
+            // captures: the pin only narrows it to this block
+            if (v.u.o->rc != 1) {
+                return a_error(v.u.o->pinned ?
+                    "invalid assignment : unexpected pinned value" :
+                    "invalid pin : shared value");
+            }
+            break;
+        case A_TAB:
         case A_NAT:
             if (v.u.o->pinned) {
                 return a_error("invalid assignment : unexpected pinned value");

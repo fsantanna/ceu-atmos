@@ -1,0 +1,26 @@
+;; tasks are confined like their prototypes and arguments
+func main () {
+    pin ts = tasks()
+    pin t = [1]
+    val T = task () {
+        await(:X)
+        print(:T, t@0)
+    }
+    spawn @ts T()
+    do {
+        pin a = [2]
+        val U = task (v) {
+            await(:X)
+            print(:U, a@0, v)
+        }
+        print(catch true { spawn @ts U(:ts) })
+        pin us = tasks()
+        spawn @us U(:us)
+        spawn U(:blk)
+        pin u = spawn U(:pin)
+        print(#ts, #us)
+        emit(:X)
+    }
+    print(catch true { task Bad () { t } })
+}
+pin m = spawn (task () { main() }) ()

@@ -1644,6 +1644,9 @@ static Opnd gen_proto (Unit* u, Expr* e) {
         out(u, "a_cpy(&A_FUNC_OF(%s)->caps[%d], %s);",
             d.c, i, var_raw(u,p->caps[i]));
     }
+    if (p->ncaps > 0) {
+        out(u, "a_func_scope(%s);", d.c);
+    }
     return d;
 }
 

@@ -1,0 +1,43 @@
+;; closures inherit the scope of their captures
+func main () {
+    pin t = [1]
+    val u = []
+    var out
+    val f = func () { t@0 }
+    print(f())
+    do {
+        pin a = [2]
+        val g = func () { a@0 + t@0 }
+        val h = func () { g() + 1 }
+        print(g(), h())
+        set out = f
+        print(catch true { set out = g })
+        print(catch true { set out = h })
+        print(catch true { set t.g = g })
+        set a.g = g
+        set a.h = h
+        print(a.h())
+        pin p = func () { a@0 * 10 }
+        print(p())
+        print(catch true { set t.p = p })
+    }
+    print(out())
+    print(catch true { set u.f = f })
+    print(catch true { [f] })
+    set t.f = f
+    print(t.f())
+    ;; no captures of pinned values: free
+    val k = 5
+    val n = func () { k + 1 }
+    set u.n = n
+    print(u.n())
+    ;; a named function is a top-level variable
+    print(catch true { func bad () { t@0 } })
+    func good () { k }
+}
+main()
+print(good())
+;; top-level variables are not captured
+pin g = [7]
+val gs = [func () { g@0 }]
+print(gs@0())
