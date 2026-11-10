@@ -13,8 +13,8 @@ void atm_free (void) {
 
 static double len (AVal t) {
     AVal n = a_nil();
-    assert(a_len(&n, t) == A_OK);
-    return n.u.n;
+    assert(a_len(&n, t)==A_OK && n.type==A_INT);
+    return (double) n.u.i;
 }
 
 static double get (AVal t, AVal k) {
@@ -116,6 +116,12 @@ int main (void) {
         assert(get(u,s) == ((i%2 == 0) ? -1 : i));
         a_dec(s);
     }
+
+    // an integer and a real with the same value are the same key
+    a_tab_set(U, a_num(7), a_num(70));
+    assert(get(u,a_int(7))==70 && get(u,a_num(7.0))==70);
+    a_tab_set(U, a_int(7), a_nil());
+    assert(get(u,a_num(7)) == -1);
 
     // generic operations
     AVal d = a_nil();

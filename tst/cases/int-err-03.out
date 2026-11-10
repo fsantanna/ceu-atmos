@@ -1,0 +1,4 @@
+inf	inf	true
+==> ERROR:
+ v  int-err-03.atm:2 (throw)
+==> invalid operation '+' : expected number : got string

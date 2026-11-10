@@ -349,6 +349,7 @@ const char* a_typename (AVal v) {
     switch (v.type) {
         case A_NIL:   return "nil";
         case A_BOOL:  return "boolean";
+        case A_INT:   return "number";
         case A_NUM:   return "number";
         case A_STR:   return "string";
         case A_TAB:   return "table";
@@ -364,31 +365,123 @@ const char* a_typename (AVal v) {
 
 static const char* ARITH[] = { "+", "-", "*", "/", "//", "%" };
 
+AVal a_numi (double n) {
+    if (n==floor(n) && n>=-9223372036854775808.0 && n<9223372036854775808.0) {
+        return a_int((int64_t) n);
+    }
+    return a_num(n);
+}
+
+int a_toint (AVal v, int64_t* i) {
+    if (v.type == A_INT) {
+        *i = v.u.i;
+        return 1;
+    }
+    if (v.type == A_NUM) {
+        AVal x = a_numi(v.u.n);
+        if (x.type == A_INT) {
+            *i = x.u.i;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+// An integer against a real, with no loss of precision.
+static int cmp_id (int64_t i, double d) {
+    if (d != d) {
+        return 2;
+    }
+    if (d >= 9223372036854775808.0) {
+        return -1;
+    }
+    if (d < -9223372036854775808.0) {
+        return 1;
+    }
+    int64_t t = (int64_t) d;
+    if (i != t) {
+        return (i < t) ? -1 : 1;
+    }
+    double frac = d - (double)t;
+    return (frac > 0) ? -1 : (frac < 0) ? 1 : 0;
+}
+
+int a_num_cmp (AVal a, AVal b) {
+    if (a.type==A_INT && b.type==A_INT) {
+        return (a.u.i < b.u.i) ? -1 : (a.u.i > b.u.i);
+    }
+    if (a.type==A_NUM && b.type==A_NUM) {
+        if (a.u.n!=a.u.n || b.u.n!=b.u.n) {
+            return 2;
+        }
+        return (a.u.n < b.u.n) ? -1 : (a.u.n > b.u.n);
+    }
+    if (a.type == A_INT) {
+        return cmp_id(a.u.i, b.u.n);
+    }
+    int c = cmp_id(b.u.i, a.u.n);
+    return (c == 2) ? 2 : -c;
+}
+
+// Integer arithmetic wraps on overflow.
+static AStatus arith_int (AArith op, AVal* dst, int64_t x, int64_t y) {
+    uint64_t ux = (uint64_t) x;
+    uint64_t uy = (uint64_t) y;
+    int64_t r = 0;
+    switch (op) {
+        case A_ADD: r = (int64_t)(ux + uy); break;
+        case A_SUB: r = (int64_t)(ux - uy); break;
+        case A_MUL: r = (int64_t)(ux * uy); break;
+        case A_IDIV:
+        case A_MOD:
+            if (y == 0) {
+                return a_error("invalid operation '%s' : division by zero",
+                    ARITH[op]);
+            }
+            // the only overflow: the minimum integer by -1
+            if (y == -1) {
+                r = (op == A_IDIV) ? (int64_t)(0 - ux) : 0;
+            } else {
+                r = (op == A_IDIV) ? x / y : x % y;
+            }
+            break;
+        default:
+            break;
+    }
+    a_set(dst, a_int(r));
+    return A_OK;
+}
+
 AStatus a_arith (AArith op, AVal* dst, AVal a, AVal b) {
-    if (a.type!=A_NUM || b.type!=A_NUM) {
-        AVal x = (a.type != A_NUM) ? a : b;
+    if (!a_isnum(a) || !a_isnum(b)) {
+        AVal x = !a_isnum(a) ? a : b;
         return a_error("invalid operation '%s' : expected number : got %s",
             ARITH[op], a_typename(x));
     }
-    double x = a.u.n;
-    double y = b.u.n;
+    if (a.type==A_INT && b.type==A_INT && op!=A_DIV) {
+        return arith_int(op, dst, a.u.i, b.u.i);
+    }
+    double x = a_dbl(a);
+    double y = a_dbl(b);
     double r = 0;
     switch (op) {
         case A_ADD:  r = x + y;         break;
         case A_SUB:  r = x - y;         break;
         case A_MUL:  r = x * y;         break;
         case A_DIV:  r = x / y;         break;
+        // as in C: truncation, and the sign of the dividend
         case A_IDIV: r = trunc(x / y);  break;
-        case A_MOD:
-            // as in C: the result has the sign of the dividend
-            r = fmod(x, y);
-            break;
+        case A_MOD:  r = fmod(x, y);    break;
     }
     a_set(dst, a_num(r));
     return A_OK;
 }
 
 AStatus a_neg (AVal* dst, AVal a) {
+    if (a.type == A_INT) {
+        a_set(dst, a_int((int64_t)(0 - (uint64_t)a.u.i)));
+        return A_OK;
+    }
     if (a.type != A_NUM) {
         return a_error("invalid operation '-' : expected number : got %s",
             a_typename(a));
@@ -398,8 +491,10 @@ AStatus a_neg (AVal* dst, AVal a) {
 }
 
 AStatus a_less (int eq, AVal* dst, AVal a, AVal b) {
-    if (a.type==A_NUM && b.type==A_NUM) {
-        a_set(dst, a_bool(eq ? a.u.n<=b.u.n : a.u.n<b.u.n));
+    if (a_isnum(a) && a_isnum(b)) {
+        // any comparison with NaN is false
+        int c = a_num_cmp(a, b);
+        a_set(dst, a_bool(c!=2 && (eq ? c<=0 : c<0)));
         return A_OK;
     }
     if (a.type==A_STR && b.type==A_STR) {
@@ -425,8 +520,9 @@ AVal a_tostring (AVal v) {
             return a_strz("nil");
         case A_BOOL:
             return a_strz(v.u.b ? "true" : "false");
+        case A_INT:
         case A_NUM:
-            a_num_fmt(buf, sizeof(buf), v.u.n);
+            a_num_fmt(buf, sizeof(buf), v);
             return a_strz(buf);
         case A_STR:
             a_inc(v);
@@ -438,12 +534,16 @@ AVal a_tostring (AVal v) {
     }
 }
 
-int a_num_fmt (char* buf, size_t n, double v) {
-    if (v==floor(v) && fabs(v)<1e15) {
-        return snprintf(buf, n, "%.0f", v);
-    } else {
-        return snprintf(buf, n, "%.14g", v);
+int a_num_fmt (char* buf, size_t n, AVal v) {
+    if (v.type == A_INT) {
+        return snprintf(buf, n, "%lld", (long long)v.u.i);
     }
+    int len = snprintf(buf, n, "%.14g", v.u.n);
+    // a real always looks like a real
+    if (strspn(buf, "-0123456789") == (size_t)len) {
+        len += snprintf(buf+len, n-len, ".0");
+    }
+    return len;
 }
 
 ///////////////////////////////////////////////////////////////////////////////

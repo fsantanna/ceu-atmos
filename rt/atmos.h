@@ -13,8 +13,10 @@
 
 // Types from A_STR on are heap objects with an AObj header.
 // A_BOX is internal: it never reaches a program as a value.
+// A_INT and A_NUM are the two subtypes of `number`: 64-bit integers
+// and doubles.
 typedef enum {
-    A_NIL, A_BOOL, A_NUM,
+    A_NIL, A_BOOL, A_INT, A_NUM,
     A_STR, A_TAB, A_FUNC, A_TASK, A_XTASK, A_TASKS, A_NAT,
     A_BOX
 } AType;
@@ -29,9 +31,10 @@ typedef struct AObj {
 typedef struct AVal {
     uint8_t type;
     union {
-        int    b;
-        double n;
-        AObj*  o;
+        int     b;
+        int64_t i;
+        double  n;
+        AObj*   o;
     } u;
 } AVal;
 
@@ -49,12 +52,35 @@ static inline AVal a_bool (int b) {
     return v;
 }
 
+static inline AVal a_int (int64_t i) {
+    AVal v;
+    v.type = A_INT;
+    v.u.i  = i;
+    return v;
+}
+
 static inline AVal a_num (double n) {
     AVal v;
     v.type = A_NUM;
     v.u.n  = n;
     return v;
 }
+
+static inline int a_isnum (AVal v) {
+    return v.type==A_INT || v.type==A_NUM;
+}
+
+// A number as a double.
+static inline double a_dbl (AVal v) {
+    return (v.type == A_INT) ? (double)v.u.i : v.u.n;
+}
+
+// An integer if the value is integral and fits, else a real.
+AVal a_numi (double n);
+
+// A number as an integer, if it has an integral value that fits.
+// Returns 0 otherwise.
+int a_toint (AVal v, int64_t* i);
 
 static inline AVal a_obj (AObj* o) {
     AVal v;
@@ -690,19 +716,30 @@ typedef enum {
 // Slow path of arithmetic: computes or raises.
 AStatus a_arith (AArith op, AVal* dst, AVal a, AVal b);
 
-#define A_ARITH_FAST(name, OP, expr)                                \
+// Integers wrap on overflow; a mix of integer and real is real.
+#define A_ARITH_FAST(name, OP, op)                                  \
     static inline AStatus name (AVal* dst, AVal a, AVal b) {        \
+        if (a.type==A_INT && b.type==A_INT) {                       \
+            uint64_t x = (uint64_t) a.u.i;                          \
+            uint64_t y = (uint64_t) b.u.i;                          \
+            a_set(dst, a_int((int64_t)(x op y)));                   \
+            return A_OK;                                            \
+        }                                                           \
         if (a.type==A_NUM && b.type==A_NUM) {                       \
-            a_set(dst, a_num(expr));                                \
+            a_set(dst, a_num(a.u.n op b.u.n));                      \
             return A_OK;                                            \
         }                                                           \
         return a_arith(OP, dst, a, b);                              \
     }
 
-A_ARITH_FAST(a_add, A_ADD, a.u.n + b.u.n)
-A_ARITH_FAST(a_sub, A_SUB, a.u.n - b.u.n)
-A_ARITH_FAST(a_mul, A_MUL, a.u.n * b.u.n)
-A_ARITH_FAST(a_div, A_DIV, a.u.n / b.u.n)
+A_ARITH_FAST(a_add, A_ADD, +)
+A_ARITH_FAST(a_sub, A_SUB, -)
+A_ARITH_FAST(a_mul, A_MUL, *)
+
+// a / b: always real
+static inline AStatus a_div (AVal* dst, AVal a, AVal b) {
+    return a_arith(A_DIV, dst, a, b);
+}
 
 static inline AStatus a_idiv (AVal* dst, AVal a, AVal b) {
     return a_arith(A_IDIV, dst, a, b);
@@ -712,15 +749,19 @@ static inline AStatus a_mod (AVal* dst, AVal a, AVal b) {
     return a_arith(A_MOD, dst, a, b);
 }
 
+// Compares two numbers exactly: -1, 0, 1, or 2 if unordered (NaN).
+int a_num_cmp (AVal a, AVal b);
+
 // a == b: by value for nil, booleans, and numbers; by reference for
-// objects (strings are interned).
+// objects (strings are interned). `1 == 1.0` holds.
 static inline int a_eq (AVal a, AVal b) {
     if (a.type != b.type) {
-        return 0;
+        return a_isnum(a) && a_isnum(b) && a_num_cmp(a,b)==0;
     }
     switch (a.type) {
         case A_NIL:  return 1;
         case A_BOOL: return a.u.b == b.u.b;
+        case A_INT:  return a.u.i == b.u.i;
         case A_NUM:  return a.u.n == b.u.n;
         default:     return a.u.o == b.u.o;
     }
@@ -731,8 +772,8 @@ AStatus a_less (int eq, AVal* dst, AVal a, AVal b);
 
 // a < b
 static inline AStatus a_lt (AVal* dst, AVal a, AVal b) {
-    if (a.type==A_NUM && b.type==A_NUM) {
-        a_set(dst, a_bool(a.u.n < b.u.n));
+    if (a.type==A_INT && b.type==A_INT) {
+        a_set(dst, a_bool(a.u.i < b.u.i));
         return A_OK;
     }
     return a_less(0, dst, a, b);
@@ -740,8 +781,8 @@ static inline AStatus a_lt (AVal* dst, AVal a, AVal b) {
 
 // a <= b
 static inline AStatus a_le (AVal* dst, AVal a, AVal b) {
-    if (a.type==A_NUM && b.type==A_NUM) {
-        a_set(dst, a_bool(a.u.n <= b.u.n));
+    if (a.type==A_INT && b.type==A_INT) {
+        a_set(dst, a_bool(a.u.i <= b.u.i));
         return A_OK;
     }
     return a_less(1, dst, a, b);
@@ -794,9 +835,9 @@ static inline void a_not (AVal* dst, AVal a) {
 // Name of the type of a value: "nil", "number", ...
 const char* a_typename (AVal v);
 
-// Writes a number as `print` shows it: integral values without
-// decimals, others with 14 significant digits.
-int a_num_fmt (char* buf, size_t n, double v);
+// Writes a number as `print` shows it: an integer as `5`, a real with
+// 14 significant digits and always as a real (`5.0`).
+int a_num_fmt (char* buf, size_t n, AVal v);
 
 ///////////////////////////////////////////////////////////////////////////////
 // STDLIB

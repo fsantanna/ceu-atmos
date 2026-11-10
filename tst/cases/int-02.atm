@@ -1,0 +1,13 @@
+val t = [10, 20, 30]
+print(t@1, t@(1.0), t@(2 // 1), t@(4 / 2))
+set t@(3.0) = 40
+print(#t, t@3)
+val u = []
+set u@1 = :int
+set u@(1.0) = :real
+set u@(1.5) = :frac
+X.print(u)
+print(#"abc" + 1, #t * 2, type(1), type(1.0), 1 ?? :number, 1.5 ?? :number)
+loop i in 2.5 { print(i) }
+loop i in (1.5, 3) { print(i) }
+loop i in (1, 2.5) { print(i) }

@@ -482,6 +482,20 @@ static void gen_args (Unit* u, List* es, const char* n, Opnd* self) {
     }
 }
 
+// A number literal is an integer if it has neither a fraction nor an
+// exponent. A decimal one that does not fit becomes a real; a
+// hexadecimal one wraps.
+static const char* gen_num (const char* str) {
+    int hex = (str[0]=='0' && (str[1]=='x' || str[1]=='X'));
+    if (strpbrk(str, hex ? ".pP" : ".eE") == NULL) {
+        unsigned long long v = strtoull(str, NULL, 0);
+        if (hex || (strlen(str)<=19 && v<=9223372036854775807ULL)) {
+            return xfmt("a_int((int64_t)%lluULL)", v);
+        }
+    }
+    return xfmt("a_num(%.17g)", strtod(str, NULL));
+}
+
 // An immutable variable is borrowed in place. A mutable one is
 // copied, since it may change before the value is consumed.
 static Opnd gen_acc (Unit* u, Expr* e) {
@@ -593,7 +607,7 @@ static Opnd gen_table (Unit* u, Expr* e) {
             out(u, "a_tab_fill(%s, %d, %s);", d.c, n, m.n);
         } else if (key == NULL) {
             Opnd v = gen_expr(u, val);
-            out(u, "a_tab_set(A_TAB_OF(%s), a_num(%d), %s);", d.c, n++, v.c);
+            out(u, "a_tab_set(A_TAB_OF(%s), a_int(%d), %s);", d.c, n++, v.c);
             opnd_rel(u, v);
         } else {
             Opnd k = gen_expr(u, key);
@@ -1517,7 +1531,7 @@ static void gen_dots (Unit* u, Dst d) {
             case D_NONE:
                 break;
             case D_SLOT:
-                out(u, "a_cpy(&%s, a_tab_get(A_TAB_OF(L[%d]), a_num(0)));",
+                out(u, "a_cpy(&%s, a_tab_get(A_TAB_OF(L[%d]), a_int(0)));",
                     d.slot, u->npar);
                 break;
             case D_MULTI:
@@ -1913,10 +1927,15 @@ static Opnd gen_expr (Unit* u, Expr* e) {
             return opnd_c(!strcmp(e->tk.str,"true") ?
                 "a_bool(1)" : "a_bool(0)");
         case E_NUM:
-            return opnd_c(xfmt("a_num(%.17g)", strtod(e->tk.str,NULL)));
-        case E_CLK:
+            return opnd_c(gen_num(e->tk.str));
+        case E_CLK: {
             // a clock is a number of microseconds
-            return opnd_c(xfmt("a_num(%.17g)", e->tk.clk));
+            double us = e->tk.clk;
+            if (us==(double)(long long)us && us<9e18) {
+                return opnd_c(xfmt("a_int(%lldLL)", (long long)us));
+            }
+            return opnd_c(xfmt("a_num(%.17g)", us));
+        }
         case E_STR: {
             // only quoted single-line literals have escapes
             int len = e->tk.len;

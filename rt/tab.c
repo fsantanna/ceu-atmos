@@ -38,12 +38,12 @@ static uint32_t hash (AVal k) {
         case A_BOOL:
             x = k.u.b + 1;
             break;
-        case A_NUM: {
-            // 0 and -0 are the same key
-            double n = (k.u.n == 0) ? 0 : k.u.n;
-            memcpy(&x, &n, sizeof(x));
+        case A_INT:
+            x = (uint64_t) k.u.i;
             break;
-        }
+        case A_NUM:
+            memcpy(&x, &k.u.n, sizeof(x));
+            break;
         case A_STR:
             return A_STR_OF(k)->hash;
         default:
@@ -154,13 +154,15 @@ static void hset (ATab* t, AVal k, AVal v) {
 // ARRAY PART
 ///////////////////////////////////////////////////////////////////////////////
 
-// Array index of a key, or -1.
+// A real key with an integral value is the same key as the integer.
+static AVal norm (AVal k) {
+    return (k.type == A_NUM) ? a_numi(k.u.n) : k;
+}
+
+// Array index of a normalized key, or -1.
 static int64_t aidx (AVal k) {
-    if (k.type == A_NUM) {
-        double n = k.u.n;
-        if (n>=0 && n<4294967296.0 && n==floor(n)) {
-            return (int64_t) n;
-        }
+    if (k.type==A_INT && k.u.i>=0 && k.u.i<4294967296LL) {
+        return k.u.i;
     }
     return -1;
 }
@@ -176,6 +178,7 @@ static void apush (ATab* t, AVal v) {
 ///////////////////////////////////////////////////////////////////////////////
 
 AVal a_tab_get (ATab* t, AVal k) {
+    k = norm(k);
     int64_t i = aidx(k);
     if (i>=0 && i<t->an) {
         return t->arr[i];
@@ -184,6 +187,7 @@ AVal a_tab_get (ATab* t, AVal k) {
 }
 
 void a_tab_set (ATab* t, AVal k, AVal v) {
+    k = norm(k);
     int64_t i = aidx(k);
     if (i>=0 && i<t->an) {
         a_cpy(&t->arr[i], v);
@@ -199,7 +203,7 @@ void a_tab_set (ATab* t, AVal k, AVal v) {
         apush(t, v);
         // the keys that follow move in from the hash part
         while (t->elive > 0) {
-            AVal x = hdel(t, a_num(t->an));
+            AVal x = hdel(t, a_int(t->an));
             if (x.type == A_NIL) {
                 break;
             }
@@ -214,7 +218,7 @@ int a_tab_next (ATab* t, uint32_t* pos, AVal* k, AVal* v) {
     while (*pos < t->an) {
         uint32_t i = (*pos)++;
         if (t->arr[i].type != A_NIL) {
-            *k = a_num(i);
+            *k = a_int(i);
             *v = t->arr[i];
             return 1;
         }
@@ -270,13 +274,13 @@ AStatus a_setindex (AVal t, AVal k, AVal v) {
 AStatus a_len (AVal* dst, AVal v) {
     switch (v.type) {
         case A_TAB:
-            a_set(dst, a_num(A_TAB_OF(v)->an));
+            a_set(dst, a_int(A_TAB_OF(v)->an));
             return A_OK;
         case A_STR:
-            a_set(dst, a_num(A_STR_OF(v)->len));
+            a_set(dst, a_int(A_STR_OF(v)->len));
             return A_OK;
         case A_TASKS:
-            a_set(dst, a_num(a_tasks_len(A_TASKS_OF(v))));
+            a_set(dst, a_int(a_tasks_len(A_TASKS_OF(v))));
             return A_OK;
         default:
             return a_error("invalid operation '#' : unexpected %s",
@@ -296,21 +300,21 @@ AStatus a_index_last (AVal* dst, AVal t) {
     if (check(t) != A_OK) {
         return A_ERROR;
     }
-    return a_index(dst, t, a_num((double)A_TAB_OF(t)->an - 1));
+    return a_index(dst, t, a_int((int64_t)A_TAB_OF(t)->an - 1));
 }
 
 AStatus a_setindex_last (AVal t, AVal v) {
     if (check(t) != A_OK) {
         return A_ERROR;
     }
-    return a_setindex(t, a_num((double)A_TAB_OF(t)->an - 1), v);
+    return a_setindex(t, a_int((int64_t)A_TAB_OF(t)->an - 1), v);
 }
 
 AStatus a_setindex_next (AVal t, AVal v) {
     if (check(t) != A_OK) {
         return A_ERROR;
     }
-    return a_setindex(t, a_num(A_TAB_OF(t)->an), v);
+    return a_setindex(t, a_int(A_TAB_OF(t)->an), v);
 }
 
 AStatus a_tag (AVal t, AVal tag) {
@@ -326,7 +330,7 @@ AStatus a_tag (AVal t, AVal tag) {
 
 void a_tab_fill (AVal t, int i, int n) {
     for (int j=0; j<n; j++) {
-        a_tab_set(A_TAB_OF(t), a_num(i+j), a_stk[a_top-n+j]);
+        a_tab_set(A_TAB_OF(t), a_int(i+j), a_stk[a_top-n+j]);
     }
     a_settop(a_top - n);
 }

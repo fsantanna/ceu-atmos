@@ -29,21 +29,40 @@ int main (void) {
     assert(!a_truthy(a_bool(0)));
     assert(a_truthy(a_num(0)));
 
-    // numbers
-    a_num_fmt(buf, sizeof(buf), 3);
+    // numbers: integers and reals
+    a_num_fmt(buf, sizeof(buf), a_int(3));
     assert(!strcmp(buf, "3"));
-    a_num_fmt(buf, sizeof(buf), 4.0/3 + 1);
+    a_num_fmt(buf, sizeof(buf), a_num(3));
+    assert(!strcmp(buf, "3.0"));
+    a_num_fmt(buf, sizeof(buf), a_num(4.0/3 + 1));
     assert(!strcmp(buf, "2.3333333333333"));
-    a_num_fmt(buf, sizeof(buf), -0.5);
+    a_num_fmt(buf, sizeof(buf), a_num(-0.5));
     assert(!strcmp(buf, "-0.5"));
+    a_num_fmt(buf, sizeof(buf), a_num(1e100));
+    assert(!strcmp(buf, "1e+100"));
+    assert(a_eq(a_int(1), a_num(1)) && !a_eq(a_int(1), a_num(1.5)));
+    assert(a_num_cmp(a_int(1), a_num(1.5)) == -1);
+    assert(a_num_cmp(a_num(2.5), a_int(2)) == 1);
+    assert(a_num_cmp(a_int(INT64_MAX), a_num(9223372036854775808.0)) == -1);
+    assert(a_num_cmp(a_int(1), a_num(0.0/0.0)) == 2);
+    assert(a_numi(3.0).type==A_INT && a_numi(3.5).type==A_NUM);
 
-    // arithmetic
+    // arithmetic: integers wrap, a mix is real, / is always real
     AVal x = a_nil();
-    assert(a_add(&x, a_num(1), a_num(2))==A_OK && x.u.n==3);
-    assert(a_idiv(&x, a_num(7), a_num(2))==A_OK && x.u.n==3);
-    assert(a_mod(&x, a_num(-1), a_num(3))==A_OK && x.u.n==-1);
-    assert(a_idiv(&x, a_num(-7), a_num(2))==A_OK && x.u.n==-3);
-    assert(a_add(&x, a_num(1), a_nil()) == A_ERROR);
+    assert(a_add(&x, a_int(1), a_int(2))==A_OK && x.type==A_INT && x.u.i==3);
+    assert(a_add(&x, a_int(1), a_num(2))==A_OK && x.type==A_NUM && x.u.n==3);
+    assert(a_add(&x, a_int(INT64_MAX), a_int(1))==A_OK && x.u.i==INT64_MIN);
+    assert(a_div(&x, a_int(7), a_int(2))==A_OK && x.type==A_NUM && x.u.n==3.5);
+    assert(a_idiv(&x, a_int(7), a_int(2))==A_OK && x.type==A_INT && x.u.i==3);
+    assert(a_idiv(&x, a_int(-7), a_int(2))==A_OK && x.u.i==-3);
+    assert(a_mod(&x, a_int(-7), a_int(3))==A_OK && x.u.i==-1);
+    assert(a_mod(&x, a_num(-7), a_int(3))==A_OK && x.u.n==-1);
+    assert(a_idiv(&x, a_num(7.5), a_int(2))==A_OK && x.u.n==3);
+    assert(a_idiv(&x, a_int(1), a_int(0)) == A_ERROR);
+    assert(strstr(a_error_msg(), "division by zero"));
+    assert(a_mod(&x, a_int(1), a_int(0)) == A_ERROR);
+    assert(a_idiv(&x, a_int(INT64_MIN), a_int(-1))==A_OK && x.u.i==INT64_MIN);
+    assert(a_add(&x, a_int(1), a_nil()) == A_ERROR);
     assert(strstr(a_error_msg(), "expected number : got nil"));
 
     // calls: results replace the arguments

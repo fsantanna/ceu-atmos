@@ -15,10 +15,10 @@ static int prefix (AStr* a, AStr* b) {
 }
 
 int a_gte (AVal a, AVal b) {
-    if (a.type != b.type) {
-        return 0;
-    } else if (a_eq(a, b)) {
+    if (a_eq(a, b)) {
         return 1;
+    } else if (a.type != b.type) {
+        return 0;
     } else if (a.type == A_STR) {
         return prefix(A_STR_OF(a), A_STR_OF(b));
     } else if (a.type == A_TAB) {
@@ -73,13 +73,12 @@ AStatus a_in (AVal* dst, AVal v, AVal t) {
         uint32_t pos = 0;
         AVal k, x;
         while (!ret && a_tab_next(A_TAB_OF(t), &pos, &k, &x)) {
-            ret = a_gte(v, x) || (k.type!=A_NUM && a_gte(v, k));
+            ret = a_gte(v, x) || (!a_isnum(k) && a_gte(v, k));
         }
-    } else if (t.type == A_NUM) {
-        // range 0..t-1
-        for (double i=0; !ret && i<t.u.n; i++) {
-            ret = a_gte(v, a_num(i));
-        }
+    } else if (a_isnum(t)) {
+        // an integer in the range 0..t-1
+        int64_t i;
+        ret = a_isnum(v) && a_toint(v,&i) && i>=0 && a_num_cmp(v,t)==-1;
     } else {
         return a_error("invalid argument to 'xin' : unexpected %s",
             a_typename(t));
@@ -118,8 +117,8 @@ AStatus a_cat (AVal* dst, AVal a, AVal b) {
         }
         return st;
     }
-    int str_a = (a.type==A_STR || a.type==A_NUM);
-    int str_b = (b.type==A_STR || b.type==A_NUM);
+    int str_a = (a.type==A_STR || a_isnum(a));
+    int str_b = (b.type==A_STR || a_isnum(b));
     if (str_a && str_b) {
         return cat_str(dst, a, b);
     }
@@ -136,11 +135,11 @@ AStatus a_cat (AVal* dst, AVal a, AVal b) {
         a_tab_set(t, k, v);
     }
     // keys 0,1,... of `b` in sequence are appended
-    double n = 0;
+    int64_t n = 0;
     pos = 0;
     while (a_tab_next(A_TAB_OF(b), &pos, &k, &v)) {
-        if (k.type==A_NUM && k.u.n==n) {
-            a_tab_set(t, a_num(t->an), v);
+        if (k.type==A_INT && k.u.i==n) {
+            a_tab_set(t, a_int(t->an), v);
             n++;
         } else {
             a_tab_set(t, k, v);
@@ -151,7 +150,7 @@ AStatus a_cat (AVal* dst, AVal a, AVal b) {
 }
 
 AStatus a_next (AVal it, AVal lim, AVal* pos, AVal* k, AVal* v) {
-    double p = (pos->type == A_NUM) ? pos->u.n : 0;
+    int64_t p = (pos->type == A_INT) ? pos->u.i : 0;
     switch (it.type) {
         case A_TAB: {
             uint32_t i = (uint32_t) p;
@@ -163,43 +162,47 @@ AStatus a_next (AVal it, AVal lim, AVal* pos, AVal* k, AVal* v) {
                 a_clr(k);
                 a_clr(v);
             }
-            *pos = a_num(i);
+            *pos = a_int(i);
             return A_OK;
         }
         case A_TASKS: {
             // index among the live tasks, and the task
             int i = (int) p;
             ATask* x = a_tasks_next(A_TASKS_OF(it), &i);
-            double n = (v->type == A_NIL && k->type == A_NIL) ? 0 : k->u.n + 1;
+            int64_t n = (k->type == A_INT) ? k->u.i + 1 : 0;
             if (x != NULL) {
-                a_set(k, a_num(n));
+                a_set(k, a_int(n));
                 a_cpy(v, a_obj(&x->node.hdr));
             } else {
                 a_clr(k);
                 a_clr(v);
             }
-            *pos = a_num(i);
+            *pos = a_int(i);
             return A_OK;
         }
         case A_NIL:
-            a_set(k, a_num(p));
-            *pos = a_num(p + 1);
+            a_set(k, a_int(p));
+            *pos = a_int(p + 1);
             return A_OK;
+        case A_INT:
         case A_NUM: {
+            AVal x;
             int end;
-            double x;
-            if (lim.type == A_NUM) {
-                x   = it.u.n + p;
-                end = (x > lim.u.n);
+            if (a_isnum(lim)) {
+                // a..b
+                x = (it.type == A_INT) ? a_int(it.u.i + p) : a_num(it.u.n + p);
+                int c = a_num_cmp(x, lim);
+                end = (c!=-1 && c!=0);
             } else if (lim.type == A_NIL) {
-                x   = p;
-                end = (p >= it.u.n);
+                // 0..n-1
+                x   = a_int(p);
+                end = (a_num_cmp(x, it) != -1);
             } else {
                 return a_error("invalid loop : expected number : got %s",
                     a_typename(lim));
             }
-            a_set(k, end ? a_nil() : a_num(x));
-            *pos = a_num(p + 1);
+            a_set(k, end ? a_nil() : x);
+            *pos = a_int(p + 1);
             return A_OK;
         }
         case A_FUNC: {

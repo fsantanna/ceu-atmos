@@ -1,0 +1,3 @@
+==> ERROR:
+ v  int-err-01.atm:1 (throw)
+==> invalid operation '//' : division by zero

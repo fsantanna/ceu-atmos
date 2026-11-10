@@ -223,7 +223,7 @@ static AStatus patt_start (APatt* p, int* done);
 // needs.
 static void patt_clk (APatt* p, int* done) {
     if (p->clk <= 0) {
-        pay1(a_num(CLK_LATE - p->clk));
+        pay1(a_numi(CLK_LATE - p->clk));
         *done = 1;
     } else if (p->clk < CLK_MIN) {
         CLK_MIN = p->clk;
@@ -258,6 +258,7 @@ static AStatus patt_start (APatt* p, int* done) {
                     p->kind = !strcmp(A_STR_OF(p->v)->s,"clock") ?
                         PK_TICK : PK_IS;
                     break;
+                case A_INT:
                 case A_NUM:
                     p->kind = PK_CLK;
                     return patt_start(p, done);
@@ -278,7 +279,7 @@ static AStatus patt_start (APatt* p, int* done) {
 
         case PK_CLK:
             // a timer counts down from its full duration
-            p->clk = p->v.u.n;
+            p->clk = a_dbl(p->v);
             patt_clk(p, done);
             break;
 
@@ -451,17 +452,17 @@ static AStatus patt_match (APatt* p, AVal evt, int* done) {
             return st;
 
         case PK_CLK:
-            if (evt.type == A_NUM) {
-                p->clk -= evt.u.n;
+            if (a_isnum(evt)) {
+                p->clk -= a_dbl(evt);
                 patt_clk(p, done);
             }
             return A_OK;
 
         case PK_TICK:
-            if (evt.type == A_NUM) {
+            if (a_isnum(evt)) {
                 a_pay_clear();
                 a_pay_addc(evt);
-                a_pay_add(a_num(CLK_LATE));
+                a_pay_add(a_numi(CLK_LATE));
                 *done = 1;
             }
             return A_OK;
@@ -728,7 +729,7 @@ static AStatus toggle_off (ANode* n) {
 // and lets its timers report again.
 static AStatus toggle_on (ANode* n) {
     n->toggled = 0;
-    return emit_node(n, ++TIME, a_num(0));
+    return emit_node(n, ++TIME, a_int(0));
 }
 
 // A toggled-off node only reacts to events that match a filter,
@@ -757,7 +758,7 @@ static int toggle_evt (ANode* n, AVal evt, int* on) {
     AVal k = a_strz("tag");
     AVal tag = a_tab_get(A_TAB_OF(evt), k);
     a_dec(k);
-    AVal b = a_tab_get(A_TAB_OF(evt), a_num(0));
+    AVal b = a_tab_get(A_TAB_OF(evt), a_int(0));
     if (b.type!=A_BOOL || !a_gte(n->tog, tag)) {
         return 0;
     }
@@ -888,8 +889,8 @@ static AStatus emit_to (ANode** ret, AVal to) {
     } else if (to.type==A_XTASK || to.type==A_TASKS) {
         *ret = (ANode*) to.u.o;
         return A_OK;
-    } else if (to.type == A_NUM) {
-        lvl = to.u.n;
+    } else if (a_isnum(to)) {
+        lvl = a_dbl(to);
     } else if (to.type==A_STR && !strcmp(A_STR_OF(to)->s,"task")) {
         // default
     } else if (to.type==A_STR && !strcmp(A_STR_OF(to)->s,"parent")) {
@@ -925,7 +926,7 @@ static AStatus emit_tick (double us) {
         // the timers report again
         CLK_MIN  = INFINITY;
         CLK_LATE = us;
-        st = emit_top(&ROOT.node, a_num(d));
+        st = emit_top(&ROOT.node, a_numi(d));
     } while (st==A_OK && us>0);
     CLK_LATE = late;
     return st;
@@ -937,12 +938,12 @@ AStatus a_emit (AVal to, AVal evt) {
     if (st != A_OK) {
         return st;
     }
-    if (evt.type == A_NUM) {
+    if (a_isnum(evt)) {
         // time passes for the whole program
         if (n != &ROOT.node) {
             return a_error("invalid emit : expected global");
         }
-        return chk_aborted(emit_tick(evt.u.n));
+        return chk_aborted(emit_tick(a_dbl(evt)));
     }
     return chk_aborted(emit_top(n, evt));
 }
@@ -978,7 +979,7 @@ AVal a_tasks_tab (AVal ts) {
     int pos = 0;
     ATask* x;
     while ((x = a_tasks_next(A_TASKS_OF(ts), &pos)) != NULL) {
-        a_tab_set(A_TAB_OF(t), a_num(A_TAB_OF(t)->an), a_obj(&x->node.hdr));
+        a_tab_set(A_TAB_OF(t), a_int(A_TAB_OF(t)->an), a_obj(&x->node.hdr));
     }
     return t;
 }
@@ -1005,7 +1006,7 @@ static ATask* task_new (AFunc* f, ANode* up, int base) {
     if (p->dots) {
         t->L[p->npar] = a_tab();
         for (int i=p->npar; i<argc; i++) {
-            a_tab_set(A_TAB_OF(t->L[p->npar]), a_num(i - p->npar),
+            a_tab_set(A_TAB_OF(t->L[p->npar]), a_int(i - p->npar),
                 a_stk[base+i]);
         }
     }
@@ -1062,12 +1063,12 @@ AStatus a_spawn_tra (AVal* dst, ATask* owner, const AProto* p) {
 }
 
 AStatus a_tasks (AVal* dst, AVal max) {
-    if (max.type!=A_NIL && max.type!=A_NUM) {
+    if (max.type!=A_NIL && !a_isnum(max)) {
         return a_error("invalid tasks limit : expected number");
     }
     ATasks* ts = calloc(1, sizeof(ATasks));
     node_init(&ts->node, A_TASKS);
-    ts->max = (max.type == A_NUM) ? (int)max.u.n : -1;
+    ts->max = a_isnum(max) ? (int)a_dbl(max) : -1;
     node_add((a_cur != NULL) ? &a_cur->node : &ROOT.node, &ts->node);
     a_cpy(dst, a_obj(&ts->node.hdr));
     return A_OK;
@@ -1245,8 +1246,8 @@ AStatus atm_stop (void) {
 }
 
 AStatus atm_emit (AVal evt) {
-    if (evt.type == A_NUM) {
-        return emit_tick(evt.u.n);
+    if (a_isnum(evt)) {
+        return emit_tick(a_dbl(evt));
     }
     return emit_top(&ROOT.node, evt);
 }

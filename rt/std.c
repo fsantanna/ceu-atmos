@@ -81,25 +81,39 @@ static AStatus std_tostring (AFunc* self, int argc, AVal* argv) {
     return A_OK;
 }
 
-// tonumber(v): a number, or a string holding a whole number literal.
+// tonumber(v): a number, or a string holding a whole number literal:
+// an integer if it has neither a fraction nor an exponent.
 static AStatus std_tonumber (AFunc* self, int argc, AVal* argv) {
     (void) self;
     AVal v = arg(argc, argv, 0);
-    if (v.type == A_NUM) {
+    if (a_isnum(v)) {
         a_push(v);
-    } else if (v.type == A_STR) {
-        char* end;
-        const char* s = A_STR_OF(v)->s;
-        double n = strtod(s, &end);
-        while (*end==' ' || *end=='\t' || *end=='\n') {
-            end++;
-        }
-        int ok = (end != s) && (*end == '\0') &&
-                 (size_t)(end - s) == A_STR_OF(v)->len;
-        a_push(ok ? a_num(n) : a_nil());
-    } else {
-        a_push(a_nil());
+        return A_OK;
     }
+    if (v.type != A_STR) {
+        a_push(a_nil());
+        return A_OK;
+    }
+    const char* s = A_STR_OF(v)->s;
+    while (*s==' ' || *s=='\t' || *s=='\n') {
+        s++;
+    }
+    const char* d = (*s=='-' || *s=='+') ? s+1 : s;
+    int hex = (d[0]=='0' && (d[1]=='x' || d[1]=='X'));
+    char* end;
+    AVal ret;
+    if (strpbrk(s, hex ? ".pP" : ".eEnN") == NULL) {
+        uint64_t u = strtoull(d, &end, 0);
+        ret = a_int((int64_t)((*s == '-') ? 0 - u : u));
+    } else {
+        ret = a_num(strtod(s, &end));
+    }
+    int ok = (end != s) && (end != d);
+    while (*end==' ' || *end=='\t' || *end=='\n') {
+        end++;
+    }
+    ok = ok && (size_t)(end - A_STR_OF(v)->s) == A_STR_OF(v)->len;
+    a_push(ok ? ret : a_nil());
     return A_OK;
 }
 
@@ -129,11 +143,11 @@ static AStatus std_assert (AFunc* self, int argc, AVal* argv) {
 // Argument `i` as a number.
 static AStatus argn (int argc, AVal* argv, int i, const char* f, double* n) {
     AVal v = arg(argc, argv, i);
-    if (v.type != A_NUM) {
+    if (!a_isnum(v)) {
         return a_error("invalid argument to '%s' : expected number : got %s",
             f, a_typename(v));
     }
-    *n = v.u.n;
+    *n = a_dbl(v);
     return A_OK;
 }
 
@@ -148,12 +162,45 @@ static AStatus argn (int argc, AVal* argv, int i, const char* f, double* n) {
         return A_OK;                                                    \
     }
 
-MATH1(floor, floor(x))
-MATH1(ceil,  ceil(x))
-MATH1(abs,   fabs(x))
 MATH1(sqrt,  sqrt(x))
 MATH1(sin,   sin(x))
 MATH1(cos,   cos(x))
+
+// math.floor(x) / math.ceil(x): an integer, if it fits
+static AStatus math_round (int up, int argc, AVal* argv) {
+    double x = 0;
+    if (argn(argc, argv, 0, up ? "ceil" : "floor", &x) != A_OK) {
+        return A_ERROR;
+    }
+    a_push((argv[0].type == A_INT) ? argv[0] : a_numi(up ? ceil(x) : floor(x)));
+    return A_OK;
+}
+
+static AStatus math_floor (AFunc* self, int argc, AVal* argv) {
+    (void) self;
+    return math_round(0, argc, argv);
+}
+
+static AStatus math_ceil (AFunc* self, int argc, AVal* argv) {
+    (void) self;
+    return math_round(1, argc, argv);
+}
+
+// math.abs(x): keeps the subtype
+static AStatus math_abs (AFunc* self, int argc, AVal* argv) {
+    (void) self;
+    double x = 0;
+    if (argn(argc, argv, 0, "abs", &x) != A_OK) {
+        return A_ERROR;
+    }
+    if (argv[0].type == A_INT) {
+        int64_t i = argv[0].u.i;
+        a_push(a_int((i < 0) ? (int64_t)(0 - (uint64_t)i) : i));
+    } else {
+        a_push(a_num(fabs(x)));
+    }
+    return A_OK;
+}
 
 // math.pow(x, y)
 static AStatus math_pow (AFunc* self, int argc, AVal* argv) {
@@ -170,20 +217,22 @@ static AStatus math_pow (AFunc* self, int argc, AVal* argv) {
 // math.min(...) / math.max(...)
 static AStatus math_minmax (int max, int argc, AVal* argv) {
     const char* f = max ? "max" : "min";
-    double ret;
-    if (argn(argc, argv, 0, f, &ret) != A_OK) {
+    double x = 0;
+    if (argn(argc, argv, 0, f, &x) != A_OK) {
         return A_ERROR;
     }
+    // the chosen argument keeps its subtype
+    AVal ret = argv[0];
     for (int i=1; i<argc; i++) {
-        double x = 0;
         if (argn(argc, argv, i, f, &x) != A_OK) {
             return A_ERROR;
         }
-        if (max ? x>ret : x<ret) {
-            ret = x;
+        int c = a_num_cmp(argv[i], ret);
+        if (max ? c==1 : c==-1) {
+            ret = argv[i];
         }
     }
-    a_push(a_num(ret));
+    a_push(ret);
     return A_OK;
 }
 
@@ -222,7 +271,7 @@ static AStatus math_random (AFunc* self, int argc, AVal* argv) {
     if (b <= a) {
         return a_error("invalid argument to 'random' : empty interval");
     }
-    a_push(a_num(a + floor(r * (b - a))));
+    a_push(a_numi(a + floor(r * (b - a))));
     return A_OK;
 }
 
@@ -243,8 +292,8 @@ static AStatus math_randomseed (AFunc* self, int argc, AVal* argv) {
 
 // Number of a key, if it is a number or a numeric string.
 static int knum (AVal k, double* n) {
-    if (k.type == A_NUM) {
-        *n = k.u.n;
+    if (a_isnum(k)) {
+        *n = a_dbl(k);
         return 1;
     }
     char* end;
@@ -287,7 +336,7 @@ static AStatus xtostring (Buf* b, AVal v) {
     AVal k, x;
     AStatus st = A_OK;
     while (a_tab_next(t, &pos, &k, &x)) {
-        if (k.type!=A_NUM && k.type!=A_STR) {
+        if (!a_isnum(k) && k.type!=A_STR) {
             st = a_error("invalid key : expected number or string : got %s",
                 a_typename(k));
             break;
@@ -449,7 +498,7 @@ static AStatus atmos_next (AFunc* self, int argc, AVal* argv) {
     (void) argc;
     (void) argv;
     double us = a_clock_next();
-    a_push((us < 0) ? a_nil() : a_num(us));
+    a_push((us < 0) ? a_nil() : a_numi(us));
     return A_OK;
 }
 
