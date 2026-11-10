@@ -1,0 +1,1 @@
+spawn { await <:X || :Y && :Z> }

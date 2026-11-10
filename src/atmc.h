@@ -90,6 +90,18 @@ typedef enum {
     E_PROTO,
     // task (the running task)
     E_ME,
+    // spawn T(...)  spawn @ts T(...)  spawn {...}
+    E_SPAWN, E_SPAWN_BLK,
+    // tasks(n)
+    E_TASKS,
+    // emit @to (e)
+    E_EMIT,
+    // await P
+    E_AWAIT,
+    // toggle t(b) with P  toggle on :T with P {...}
+    E_TOGGLE, E_TOGGLE_ON,
+    // par {...} with {...}  watching P {...}
+    E_PAR, E_WATCHING,
 } ETag;
 
 typedef struct Expr  Expr;
@@ -105,6 +117,39 @@ typedef struct List {
 typedef enum {
     IDX_EXPR, IDX_LAST, IDX_NEXT
 } IdxKind;
+
+// Await patterns.
+typedef enum {
+    // value: event, tag, table, clock, task, boolean
+    PT_VAL,
+    // T(...): spawns the task and awaits its termination
+    PT_SPAWN,
+    // :any ts  :all ts
+    PT_ANY, PT_ALL,
+    // [p] until (c)  [p] while (c)
+    PT_UNTIL, PT_WHILE,
+    // !p  p && p  p || p
+    PT_NOT, PT_AND, PT_OR,
+} PKind;
+
+typedef struct Patt Patt;
+
+struct Patt {
+    PKind kind;
+    Tk    tk;
+    // value, task prototype, pool, or predicate
+    Expr* e;
+    // arguments of a spawn
+    List  args;
+    // operands; `a` is the optional base of until/while
+    Patt* a;
+    Patt* b;
+};
+
+// Rejoin of a par.
+typedef enum {
+    PAR_NONE, PAR_ANY, PAR_ALL
+} ParMode;
 
 // Calls to reserved names are statements in disguise.
 typedef enum {
@@ -157,7 +202,20 @@ struct Expr {
         struct { Expr* blk; }                           defer;
         // head: match expression, or NULL
         struct { Expr* head; int n; Case* cases; }      ifs;
-        struct { int n; Tk* ids; Expr* itr; Expr* blk; } loop;
+        // on: pattern of an event loop, or NULL
+        struct { int n; Tk* ids; Expr* itr; Expr* blk; Patt* on; } loop;
+        // pool: destination pool, or NULL
+        struct { Expr* pool; Expr* f; List args; }      spawn;
+        struct { Expr* blk; }                           sblk;
+        struct { Expr* n; }                             tasks;
+        // to: target, or NULL
+        struct { Expr* to; Expr* e; }                   emit;
+        struct { Patt* p; }                             await;
+        struct { Expr* t; List args; int nf; Patt** fs; } toggle;
+        // tk is the tag
+        struct { int nf; Patt** fs; Expr* blk; }        toggle_on;
+        struct { ParMode mode; List blks; }             par;
+        struct { Patt* p; Expr* blk; }                  watching;
         struct { Expr* cnd; Expr* blk; }                xcatch;
         // inl: lambda of an if/ifs/match, expanded in place
         struct { int task; int dots; int n; Tk* pars; Expr* blk; int inl; }

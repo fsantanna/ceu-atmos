@@ -1,0 +1,1 @@
+await :any ts ; await :all ts ; await until (it > 10) ; await while (\{ it }) ; await :X until (it.n == 3)

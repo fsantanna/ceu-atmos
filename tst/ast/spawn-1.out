@@ -1,0 +1,5 @@
+(spawn T)
+(spawn T 1 2)
+(spawn @ts T 3)
+(spawn @e T)
+(spawn { (call f) })

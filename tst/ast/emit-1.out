@@ -1,0 +1,7 @@
+(emit :X)
+(emit :X)
+(emit (tag :X [10]))
+(emit @t e)
+(emit @:global :Y)
+(emit @1 :Z)
+(emit @(call f) 1)

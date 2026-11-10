@@ -1,0 +1,3 @@
+(par { (call a) } { (call b) })
+(par :any { (call a) } { (call b) } { (call c) })
+(par :all { 1 })

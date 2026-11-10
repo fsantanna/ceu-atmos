@@ -1,0 +1,5 @@
+(await (:any ts))
+(await (:all ts))
+(await (until (func (it) { (> it 10) })))
+(await (while (func (it) { it })))
+(await (until :X (func (it) { (== (@ it "n") 3) })))

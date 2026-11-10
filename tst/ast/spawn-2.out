@@ -1,0 +1,6 @@
+(pin t = (spawn T 10))
+(val u = (spawn @ts T))
+(pin b = (spawn (task () { (await :X) })))
+(pin ts = (tasks 2))
+(pin us = (tasks))
+(spawn T 10)

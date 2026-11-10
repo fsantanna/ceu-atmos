@@ -1,0 +1,2 @@
+await <:X && :Y> ; await <!:X> ; await <:X until (it.n==3)> ; await <<:X || :Y> && :Z> ; await <!:X || :Y>
+await <:X || 5ms> ; await <T() || :X> ; await <(f()) && :any ts>

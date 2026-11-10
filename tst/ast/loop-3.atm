@@ -1,0 +1,1 @@
+loop on :tick { f() } ; loop e on :X { g(e) } ; loop on 1s { } ; loop on <:A || :B> { }

@@ -1,0 +1,1 @@
+abort(t) ; pub ; set pub = 10 ; t.pub ; task

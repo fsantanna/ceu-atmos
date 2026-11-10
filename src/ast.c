@@ -4,6 +4,52 @@
 
 #include "atmc.h"
 
+static void dump_patt (Patt* p) {
+    switch (p->kind) {
+        case PT_VAL:
+            ast_dump(p->e);
+            break;
+        case PT_SPAWN:
+            printf("(spawn ");
+            ast_dump(p->e);
+            for (int i=0; i<p->args.n; i++) {
+                printf(" ");
+                ast_dump(p->args.v[i]);
+            }
+            printf(")");
+            break;
+        case PT_ANY:
+        case PT_ALL:
+            printf("(%s ", p->tk.str);
+            ast_dump(p->e);
+            printf(")");
+            break;
+        case PT_UNTIL:
+        case PT_WHILE:
+            printf("(%s ", p->tk.str);
+            if (p->a != NULL) {
+                dump_patt(p->a);
+                printf(" ");
+            }
+            ast_dump(p->e);
+            printf(")");
+            break;
+        case PT_NOT:
+            printf("(! ");
+            dump_patt(p->a);
+            printf(")");
+            break;
+        case PT_AND:
+        case PT_OR:
+            printf("(%s ", p->tk.str);
+            dump_patt(p->a);
+            printf(" ");
+            dump_patt(p->b);
+            printf(")");
+            break;
+    }
+}
+
 static void dump_list (List* l) {
     for (int i=0; i<l->n; i++) {
         printf(" ");
@@ -162,6 +208,10 @@ void ast_dump (Expr* e) {
                 printf(" in ");
                 ast_dump(e->u.loop.itr);
             }
+            if (e->u.loop.on != NULL) {
+                printf(" on ");
+                dump_patt(e->u.loop.on);
+            }
             printf(" ");
             ast_dump(e->u.loop.blk);
             printf(")");
@@ -187,6 +237,78 @@ void ast_dump (Expr* e) {
             break;
         case E_ME:
             printf("(me)");
+            break;
+        case E_SPAWN:
+            printf("(spawn ");
+            if (e->u.spawn.pool != NULL) {
+                printf("@");
+                ast_dump(e->u.spawn.pool);
+                printf(" ");
+            }
+            ast_dump(e->u.spawn.f);
+            dump_list(&e->u.spawn.args);
+            printf(")");
+            break;
+        case E_SPAWN_BLK:
+            printf("(spawn ");
+            ast_dump(e->u.sblk.blk);
+            printf(")");
+            break;
+        case E_TASKS:
+            printf("(tasks");
+            if (e->u.tasks.n != NULL) {
+                printf(" ");
+                ast_dump(e->u.tasks.n);
+            }
+            printf(")");
+            break;
+        case E_EMIT:
+            printf("(emit ");
+            if (e->u.emit.to != NULL) {
+                printf("@");
+                ast_dump(e->u.emit.to);
+                printf(" ");
+            }
+            ast_dump(e->u.emit.e);
+            printf(")");
+            break;
+        case E_AWAIT:
+            printf("(await ");
+            dump_patt(e->u.await.p);
+            printf(")");
+            break;
+        case E_TOGGLE:
+            printf("(toggle ");
+            ast_dump(e->u.toggle.t);
+            dump_list(&e->u.toggle.args);
+            for (int i=0; i<e->u.toggle.nf; i++) {
+                printf(" with ");
+                dump_patt(e->u.toggle.fs[i]);
+            }
+            printf(")");
+            break;
+        case E_TOGGLE_ON:
+            printf("(toggle on %s", e->tk.str);
+            for (int i=0; i<e->u.toggle_on.nf; i++) {
+                printf(" with ");
+                dump_patt(e->u.toggle_on.fs[i]);
+            }
+            printf(" ");
+            ast_dump(e->u.toggle_on.blk);
+            printf(")");
+            break;
+        case E_PAR:
+            printf("(par%s", (e->u.par.mode == PAR_ANY) ? " :any" :
+                             (e->u.par.mode == PAR_ALL) ? " :all" : "");
+            dump_list(&e->u.par.blks);
+            printf(")");
+            break;
+        case E_WATCHING:
+            printf("(watching ");
+            dump_patt(e->u.watching.p);
+            printf(" ");
+            ast_dump(e->u.watching.blk);
+            printf(")");
             break;
     }
 }

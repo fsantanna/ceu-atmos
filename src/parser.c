@@ -35,6 +35,10 @@ static const char* BINS[] = {
 
 static Expr* parser (void);
 static Expr* parser_1_prim (void);
+static Expr* parser_7_out (Expr* pre);
+static Patt* parser_await (void);
+static Expr* parser_spawn (void);
+static Expr* parser_at_err (void);
 static Expr* parser_2_suf (Expr* pre);
 static Expr* parser_3_met (Expr* pre);
 static Expr* parser_4_pre (Expr* pre);
@@ -335,6 +339,28 @@ static Expr* parser_proto (void) {
 // STATEMENTS
 ///////////////////////////////////////////////////////////////////////////////
 
+// spawn {...}  |  spawn T(...)  |  spawn @ts T(...)
+static Expr* parser_spawn (void) {
+    accept_str_err("spawn");
+    Tk tk = TK0;
+    if (check_str("{")) {
+        Expr* e = mk(E_SPAWN_BLK, tk);
+        e->u.sblk.blk = parser_block();
+        return e;
+    }
+    Expr* e = mk(E_SPAWN, tk);
+    if (accept_str("@")) {
+        e->u.spawn.pool = parser_at_err();
+    }
+    Expr* call = parser_6_pip(NULL);
+    if (call->tag != E_CALL) {
+        err(tk, "expected call syntax");
+    }
+    e->u.spawn.f    = call->u.call.f;
+    e->u.spawn.args = call->u.call.es;
+    return parser_7_out(e);
+}
+
 // val x  |  var x, y = e  |  val func f () {...}
 static Expr* parser_dcl (void) {
     Expr* dcl = mk(E_DCL, TK0);
@@ -357,7 +383,26 @@ static Expr* parser_dcl (void) {
 
     dcl->u.dcl.n = parser_ids(&dcl->u.dcl.ids);
     if (accept_str("=")) {
-        dcl->u.dcl.set = parser();
+        if (check_str("spawn")) {
+            Expr* spw = parser_spawn();
+            if (spw->tag == E_SPAWN_BLK) {
+                // pin t = spawn {...}: the block is promoted to an
+                // anonymous task with its own identity
+                if (strcmp(dcl->tk.str, "pin")) {
+                    err(dcl->tk,
+                        "invalid assignment : unexpected transparent task");
+                }
+                Expr* p = mk(E_PROTO, spw->tk);
+                p->u.proto.task = 1;
+                p->u.proto.blk  = spw->u.sblk.blk;
+                Expr* e = mk(E_SPAWN, spw->tk);
+                e->u.spawn.f = p;
+                spw = e;
+            }
+            dcl->u.dcl.set = spw;
+        } else {
+            dcl->u.dcl.set = parser();
+        }
     }
     return dcl;
 }
@@ -456,20 +501,192 @@ static Expr* parser_ifs (int match) {
     return ifs;
 }
 
-// loop {...}  |  loop i {...}  |  loop k,v in e {...}
+// loop {...}  |  loop i {...}  |  loop k,v in e {...}  |  loop e on P {...}
 static Expr* parser_loop (void) {
     Expr* loop = mk(E_LOOP, TK0);
     if (check_tag(TK_ID)) {
         loop->u.loop.n = parser_ids(&loop->u.loop.ids);
     }
-    if (check_str("on")) {
-        err(TK1, "loop on : not implemented");
-    }
-    if (accept_str("in")) {
+    if (accept_str("on")) {
+        loop->u.loop.on = parser_await();
+    } else if (accept_str("in")) {
         loop->u.loop.itr = parser();
     }
     loop->u.loop.blk = parser_block();
     return loop;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// AWAIT PATTERNS
+///////////////////////////////////////////////////////////////////////////////
+
+// await / watching / loop on / toggle with take one of three tiers:
+//   bare    : await P      one primary (a call spawns) + optional
+//                          until (c) / while (c)
+//   value   : await(E)     a plain value expression (a call is a
+//                          value, not a spawn)
+//   pattern : await<PAT>   the combinators, with their own levels:
+//       1_prim : :any/:all, until (c), (E) value, <P> group, primary
+//       2_pre  : !p
+//       3_bin  : p&&p | p||p | p until (c) | p while (c)
+
+static Patt* parser_await_3_bin (void);
+
+static Patt* mkp (PKind kind, Tk tk) {
+    Patt* p = xalloc(sizeof(Patt));
+    p->kind = kind;
+    p->tk   = tk;
+    return p;
+}
+
+// until/while predicate: `(E)`, a function, or an expression over
+// the event `it`.
+static Expr* parser_pred (void) {
+    accept_str_err("(");
+    Tk tk = TK0;
+    Expr* e = parser();
+    accept_str_err(")");
+    if (e->tag == E_PROTO) {
+        return e;
+    }
+    Expr* p = mk(E_PROTO, tk);
+    proto_par(p, tk_id(tk,"it"), 0);
+    p->u.proto.blk = block1(e);
+    return p;
+}
+
+static Patt* parser_await_1_prim (void) {
+    // :any ts  :all ts
+    if (check_tag(TK_TAG) &&
+        (!strcmp(TK1.str,":any") || !strcmp(TK1.str,":all")))
+    {
+        next();
+        Patt* p = mkp(!strcmp(TK0.str,":any") ? PT_ANY : PT_ALL, TK0);
+        p->e = parser_2_suf(NULL);
+        return p;
+
+    // until (c)  while (c)
+    } else if (accept_str("until") || accept_str("while")) {
+        Patt* p = mkp(!strcmp(TK0.str,"until") ? PT_UNTIL : PT_WHILE, TK0);
+        p->e = parser_pred();
+        return p;
+
+    // <p>
+    } else if (accept_str("<")) {
+        Patt* p = parser_await_3_bin();
+        accept_str_err(">");
+        return p;
+
+    // (E): a value
+    } else if (accept_str("(")) {
+        Patt* p = mkp(PT_VAL, TK0);
+        p->e = parser();
+        accept_str_err(")");
+        return p;
+
+    // primary: a call spawns
+    } else {
+        Tk tk = TK1;
+        Expr* e = parser_2_suf(NULL);
+        if (e->tag == E_CALL) {
+            Patt* p = mkp(PT_SPAWN, tk);
+            p->e    = e->u.call.f;
+            p->args = e->u.call.es;
+            return p;
+        }
+        Patt* p = mkp(PT_VAL, tk);
+        p->e = e;
+        return p;
+    }
+}
+
+static Patt* parser_await_2_pre (void) {
+    if (check_tag(TK_OP) && !strcmp(TK1.str,"!")) {
+        next();
+        Patt* p = mkp(PT_NOT, TK0);
+        p->a = parser_await_2_pre();
+        return p;
+    }
+    return parser_await_1_prim();
+}
+
+// Combinators chain with the same operator only.
+static Patt* parser_await_3_bin (void) {
+    Patt* p1 = parser_await_2_pre();
+    const char* op0 = NULL;
+    while (1) {
+        int bin = check_tag(TK_OP) &&
+                  (!strcmp(TK1.str,"&&") || !strcmp(TK1.str,"||"));
+        int suf = (TK0.sep == TK1.sep) &&
+                  (check_str("until") || check_str("while"));
+        if (!bin && !suf) {
+            return p1;
+        }
+        next();
+        Tk op = TK0;
+        if (op0!=NULL && strcmp(op0,op.str)) {
+            err(op, "operation error : use parentheses to disambiguate");
+        }
+        op0 = op.str;
+        Patt* p;
+        if (suf) {
+            p = mkp(!strcmp(op.str,"until") ? PT_UNTIL : PT_WHILE, op);
+            p->a = p1;
+            p->e = parser_pred();
+        } else {
+            p = mkp(!strcmp(op.str,"&&") ? PT_AND : PT_OR, op);
+            p->a = p1;
+            p->b = parser_await_2_pre();
+        }
+        p1 = p;
+    }
+}
+
+static Patt* parser_await (void) {
+    // value: await(E)
+    if (accept_str("(")) {
+        Patt* p = mkp(PT_VAL, TK0);
+        p->e = parser();
+        accept_str_err(")");
+        return p;
+    }
+
+    // pattern: await<PAT>
+    if (accept_str("<")) {
+        Patt* p = parser_await_3_bin();
+        accept_str_err(">");
+        return p;
+    }
+
+    // bare: await P, with no combinators and no loose values
+    Patt* p = parser_await_3_bin();
+    Patt* b = p;
+    if ((b->kind==PT_UNTIL || b->kind==PT_WHILE) && b->a!=NULL) {
+        b = b->a;
+    }
+    int ok;
+    if (b->kind == PT_VAL) {
+        ETag t = b->e->tag;
+        ok = (t==E_TAG || t==E_CLK || t==E_STR || t==E_NAT || t==E_BOOL ||
+              t==E_TABLE || t==E_TAGGED || t==E_PROTO);
+    } else {
+        ok = (b->kind!=PT_AND && b->kind!=PT_OR && b->kind!=PT_NOT);
+    }
+    if (!ok) {
+        err(TK1, "invalid await : unexpected expression");
+    }
+    return p;
+}
+
+// Filters of a toggle: patterns separated by commas.
+static int parser_filters (Patt*** fs) {
+    int n = 0;
+    *fs = NULL;
+    do {
+        *fs = realloc(*fs, (n+1) * sizeof(Patt*));
+        (*fs)[n++] = parser_await();
+    } while (accept_str(","));
+    return n;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -654,6 +871,92 @@ static Expr* parser_1_prim (void) {
     // loop
     } else if (accept_str("loop")) {
         return parser_loop();
+
+    // spawn {...}  spawn T(...)
+    } else if (check_str("spawn")) {
+        return parser_spawn();
+
+    // tasks(n)
+    } else if (accept_str("tasks")) {
+        Expr* e = mk(E_TASKS, TK0);
+        accept_str_err("(");
+        if (!check_str(")")) {
+            e->u.tasks.n = parser();
+        }
+        accept_str_err(")");
+        return e;
+
+    // emit @to (e)
+    } else if (accept_str("emit")) {
+        Tk tk = TK0;
+        Expr* e = mk(E_EMIT, tk);
+        if (accept_str("@")) {
+            e->u.emit.to = parser_at_err();
+        }
+        Expr* call = parser_2_suf(mk(E_ACC, tk));
+        call = parser_6_pip(parser_5_bin(parser_3_met(call)));
+        if (call->tag != E_CALL) {
+            err(tk, "expected call syntax");
+        }
+        if (call->u.call.es.n != 1) {
+            err(tk, "expected single argument");
+        }
+        e->u.emit.e = call->u.call.es.v[0];
+        return parser_7_out(e);
+
+    // await P
+    } else if (accept_str("await")) {
+        Expr* e = mk(E_AWAIT, TK0);
+        e->u.await.p = parser_await();
+        return e;
+
+    // toggle t(b) with P  |  toggle on :T with P {...}
+    } else if (accept_str("toggle")) {
+        Tk tk = TK0;
+        if (accept_str("on")) {
+            accept_tag_err(TK_TAG);
+            Expr* e = mk(E_TOGGLE_ON, TK0);
+            if (accept_str("with")) {
+                e->u.toggle_on.nf = parser_filters(&e->u.toggle_on.fs);
+            }
+            e->u.toggle_on.blk = parser_block();
+            return e;
+        }
+        Expr* e = mk(E_TOGGLE, tk);
+        Expr* call = parser_6_pip(NULL);
+        if (call->tag != E_CALL) {
+            err(tk, "expected call syntax");
+        }
+        e->u.toggle.t    = call->u.call.f;
+        e->u.toggle.args = call->u.call.es;
+        if (accept_str("with")) {
+            e->u.toggle.nf = parser_filters(&e->u.toggle.fs);
+        }
+        return parser_7_out(e);
+
+    // par {...} with {...}
+    } else if (accept_str("par")) {
+        Expr* e = mk(E_PAR, TK0);
+        if (accept_tag(TK_TAG)) {
+            if (!strcmp(TK0.str, ":all")) {
+                e->u.par.mode = PAR_ALL;
+            } else if (!strcmp(TK0.str, ":any")) {
+                e->u.par.mode = PAR_ANY;
+            } else {
+                err(TK0, "invalid par : invalid tag");
+            }
+        }
+        do {
+            list_add(&e->u.par.blks, parser_block());
+        } while (accept_str("with"));
+        return e;
+
+    // watching P {...}
+    } else if (accept_str("watching")) {
+        Expr* e = mk(E_WATCHING, TK0);
+        e->u.watching.p   = parser_await();
+        e->u.watching.blk = parser_block();
+        return e;
 
     // until(...)  while(...)
     } else if (accept_str("until") || accept_str("while")) {

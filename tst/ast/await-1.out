@@ -1,0 +1,7 @@
+(await false)
+(await :X)
+(await (tag :Key [:escape]))
+(await 1h10min)
+(await (call f))
+(await (spawn T))
+(await (spawn T 1 2))

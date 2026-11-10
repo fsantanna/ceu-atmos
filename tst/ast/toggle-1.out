@@ -1,0 +1,4 @@
+(toggle t false)
+(toggle t true)
+(toggle t false with :Draw)
+(toggle t false with :a with (until :b (func (it) { c })))

@@ -416,6 +416,18 @@ static void res (Expr* e) {
             res_block(e->u.xcatch.blk);
             break;
 
+        case E_SPAWN:
+        case E_SPAWN_BLK:
+        case E_TASKS:
+        case E_EMIT:
+        case E_AWAIT:
+        case E_TOGGLE:
+        case E_TOGGLE_ON:
+        case E_PAR:
+        case E_WATCHING:
+            err(e->tk, "tasks : not implemented");
+            break;
+
         case E_PROTO: {
             // a loop does not reach into a function
             int loops = LOOPS;

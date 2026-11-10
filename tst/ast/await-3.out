@@ -1,0 +1,8 @@
+(await (&& :X :Y))
+(await (! :X))
+(await (until :X (func (it) { (== (@ it "n") 3) })))
+(await (&& (|| :X :Y) :Z))
+(await (|| (! :X) :Y))
+(await (|| :X 5ms))
+(await (|| (spawn T) :X))
+(await (&& (call f) (:any ts)))

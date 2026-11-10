@@ -1,0 +1,4 @@
+(watching :done { (call f) })
+(watching (|| :X :Y) { })
+(watching 1s { })
+(watching (spawn T) { })
