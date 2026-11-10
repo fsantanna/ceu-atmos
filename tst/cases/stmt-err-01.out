@@ -1,0 +1,1 @@
+stmt-err-01.atm : line 2 : near 'set' : invalid assignment : expected statement

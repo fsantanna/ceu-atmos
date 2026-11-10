@@ -113,6 +113,9 @@ exs/    examples
       `val a, b = 1, 2`, `set x, y = y, x`.
     - `(a, b)` is still a list anywhere, and `(f())` has a single
       value, as in Lua.
+- A declaration, an assignment, or a `defer` is only valid as a
+  statement of a block. Using one as a value, as in
+  `print(val x = 1)`, is a compile error.
 - Native literals are C code, not Lua: `` `:int strlen("abc")` ``.
     - A leading tag converts the expression: `:int`, `:num`, `:bool`,
       `:str`, `:val`. With no tag, the code is a statement.

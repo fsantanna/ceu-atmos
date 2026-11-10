@@ -1,2 +1,1 @@
-print((val x = 1), x)
-set y = 1
+print(val x = 1, x)

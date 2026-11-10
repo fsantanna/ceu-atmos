@@ -282,17 +282,51 @@ static void res_list (List* l) {
     }
 }
 
+// The expression about to be resolved is an item of a block. Only
+// there a statement with no value is valid: a declaration, an
+// assignment, or a defer.
+static int STMT = 0;
+
+static void res_stmts (List* l) {
+    for (int i=0; i<l->n; i++) {
+        STMT = 1;
+        res(l->v[i]);
+    }
+    STMT = 0;
+}
+
 static void res_block (Expr* e) {
     scope_push();
-    res_list(&e->u.block.es);
+    res_stmts(&e->u.block.es);
     scope_pop();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
 static void res (Expr* e) {
+    int stmt = STMT;
+    STMT = 0;
     if (e == NULL) {
         return;
+    }
+    if (!stmt) {
+        const char* what = NULL;
+        switch (e->tag) {
+            case E_DCL:
+                what = "declaration";
+                break;
+            case E_SET:
+                what = e->u.set.proto ? "declaration" : "assignment";
+                break;
+            case E_DEFER:
+                what = "defer";
+                break;
+            default:
+                break;
+        }
+        if (what != NULL) {
+            err(e->tk, "invalid %s : expected statement", what);
+        }
     }
     switch (e->tag) {
         case E_NIL:
@@ -420,7 +454,7 @@ static void res (Expr* e) {
         case E_WHERE:
             // locals are visible in the clause and in the expression
             scope_push();
-            res_list(&e->u.where.dcls);
+            res_stmts(&e->u.where.dcls);
             res(e->u.where.e);
             scope_pop();
             break;
@@ -601,7 +635,7 @@ Var** resolver_main (Expr* prog, int* n) {
     PROTO = PROTO_MAIN;
     scope_push();
     hoist(prog);
-    res_list(&prog->u.block.es);
+    res_stmts(&prog->u.block.es);
     scope_pop();
     scope_pop();
 

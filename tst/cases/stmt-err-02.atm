@@ -1,0 +1,1 @@
+val t = [defer { print(:d) }]

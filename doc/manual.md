@@ -1039,9 +1039,21 @@ do {
 
 # EXPRESSIONS
 
-Atmos is an expression-based language in which all statements are expressions
+Atmos is an expression-based language in which statements are expressions
 that evaluate to a final value.
 Therefore, we use the terms statement and expression interchangeably.
+
+The exceptions are the statements that have no value:
+[declarations](#local-variables) (`val`, `var`, `pin`, and named `func` and
+`task`), [assignments](#set) (`set`), and [`defer`](#defer).
+They are only valid as an item of a [block](#blocks) or as the body of a
+[conditional](#conditionals) case.
+It is a compile error to use them where a value is expected, such as in an
+operand or in an argument: `print(val x = 1)`.
+
+The statements that leave a scope, such as `return`, `break`, and `throw`,
+are valid in any position, even though they never produce a value:
+`val v = f() || throw :X`.
 
 All [identifiers](#identifiers), [literals](#literals) and
 [values](#types--values) are also valid expressions.
@@ -3002,4 +3014,4 @@ may surprise a naive reading:
 | [return](#statement-arguments) | `return` ⏎ `f()` | `return ; f()`         | `return f()`             |
 | [return](#statement-arguments) | `return (a+1)*2` | `return ((a+1)*2)`     | `(return (a+1)) * 2`     |
 | [return](#statement-arguments) | `[return a, b]`  | `[return (a, b)]`      | `[(return a), b]`        |
-| [locals](#local-variables) | `f(val x = 1, y)`   | `f(val x = (1, y))`     | `f((val x = 1), y)`      |
+| [locals](#local-variables) | `val x = 1, y`      | `val x = (1, y)`        | `(val x = 1), y`         |

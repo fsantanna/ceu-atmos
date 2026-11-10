@@ -862,6 +862,13 @@ Agreed after `atmos-lang/atmos@5977b07`.
     - Unchanged: `do(e)`, `tasks(n)`, `await`, `toggle`, and the
       `until (c)` of await patterns, since a bare `>` would clash with
       the pattern delimiters.
+- Statements with no value (`val`, `var`, `pin`, `set`, `defer`, named
+  `func` and `task`) are only valid as an item of a block or as the
+  body of a case. Elsewhere they are a compile error.
+    - The reference accepts them anywhere and then generates invalid
+      Lua, so the error comes from Lua.
+    - Exits (`return`, `break`, `escape`, `throw`, `until`, `while`)
+      remain valid in any position: `val v = f() || throw :X`.
 - Memory refinements found while implementing M8 (Pin, Stores, Exits):
   pin at birth for constructors, two-phase block end, lateral check on
   `emit`, confinement after a transfer, abort of confined tasks that

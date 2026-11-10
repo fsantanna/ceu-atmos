@@ -1,0 +1,27 @@
+;; statements with no value are valid as items of a block and as the
+;; body of a case
+var x = 0
+if true => set x = 1
+print(x)
+val v = if x == 1 => do { val y = 10 ; y + 1 } => nil
+print(v)
+match x {
+    1    => set x += 1
+    else => set x = 0
+}
+print(x)
+val f = \{ set x = it }
+f(5)
+print(x)
+print(do { defer { print(:d) } })
+val z = (y * 2) where {
+    y = x + 1
+}
+print(z)
+;; exits are expressions
+func g (a) {
+    val b = a || return :none
+    b
+}
+print(g(nil), g(1))
+print(catch :E { val c = nil || throw :E })
