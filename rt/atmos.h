@@ -827,6 +827,18 @@ AVal a_tostring (AVal v);
 // -a
 AStatus a_neg (AVal* dst, AVal a);
 
+// Bitwise operations on integers. A real with an integral value is
+// accepted. `>>` is arithmetic; a shift of 64 or more gives 0 (or
+// -1), and a negative one shifts the other way.
+typedef enum {
+    A_BAND, A_BOR, A_BXOR, A_SHL, A_SHR
+} ABit;
+
+AStatus a_bit (ABit op, AVal* dst, AVal a, AVal b);
+
+// ~a
+AStatus a_bnot (AVal* dst, AVal a);
+
 // !a
 static inline void a_not (AVal* dst, AVal a) {
     a_set(dst, a_bool(!a_truthy(a)));

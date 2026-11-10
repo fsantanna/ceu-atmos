@@ -20,7 +20,7 @@ int OPT_TEST = 0;
 static Tk TK0;
 static Tk TK1;
 
-static const char* UNOS[] = { "-", "#", "!", NULL };
+static const char* UNOS[] = { "-", "#", "!", "~", NULL };
 
 static const char* BINS[] = {
     "==", "!=",
@@ -29,6 +29,7 @@ static const char* BINS[] = {
     ">", "<", ">=", "<=",
     "||", "&&",
     "++",
+    "&", "|", "^", "<<", ">>",
     NULL
 };
 
@@ -553,6 +554,32 @@ static Patt* mkp (PKind kind, Tk tk) {
     return p;
 }
 
+// Pattern delimiters `<` and `>`: nested ones may come glued as the
+// shift tokens `<<` and `>>`, which are split on demand.
+static int accept_angle (const char* one) {
+    if (accept_str(one)) {
+        return 1;
+    }
+    if (check_tag(TK_OP) && TK1.len==2 &&
+        TK1.str[0]==one[0] && TK1.str[1]==one[0])
+    {
+        // the first half is consumed, the second stays current
+        TK0 = TK1;
+        TK0.str = one;
+        TK0.len = 1;
+        TK1.str = one;
+        TK1.len = 1;
+        return 1;
+    }
+    return 0;
+}
+
+static void accept_angle_err (const char* one) {
+    if (!accept_angle(one)) {
+        err(TK1, "expected '%s'", one);
+    }
+}
+
 // until/while predicate: `(E)`, a function, or an expression over
 // the event `it`.
 static Expr* parser_pred (void) {
@@ -586,9 +613,9 @@ static Patt* parser_await_1_prim (void) {
         return p;
 
     // <p>
-    } else if (accept_str("<")) {
+    } else if (accept_angle("<")) {
         Patt* p = parser_await_3_bin();
-        accept_str_err(">");
+        accept_angle_err(">");
         return p;
 
     // (E): a value
@@ -666,9 +693,9 @@ static Patt* parser_await (void) {
     }
 
     // pattern: await<PAT>
-    if (accept_str("<")) {
+    if (accept_angle("<")) {
         Patt* p = parser_await_3_bin();
-        accept_str_err(">");
+        accept_angle_err(">");
         return p;
     }
 
@@ -1116,12 +1143,17 @@ static Expr* parser_4_pre (Expr* pre) {
 }
 
 // Binary operators follow the precedence of C, from the weakest
-// level, and associate to the left.
+// level, and associate to the left. Unlike C, the bitwise operators
+// bind stronger than the comparisons.
 static const char* LEVELS[][8] = {
     { "||", NULL },
     { "&&", NULL },
     { "==", "!=", "??", "!?", NULL },
     { "<", "<=", ">", ">=", NULL },
+    { "|", NULL },
+    { "^", NULL },
+    { "&", NULL },
+    { "<<", ">>", NULL },
     { "++", NULL },
     { "+", "-", NULL },
     { "*", "/", "//", "%", NULL },

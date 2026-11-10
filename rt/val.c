@@ -490,6 +490,70 @@ AStatus a_neg (AVal* dst, AVal a) {
     return A_OK;
 }
 
+static const char* BITS[] = { "&", "|", "^", "<<", ">>" };
+
+// Operand of a bitwise operation as an integer.
+static AStatus bit_int (const char* op, AVal v, int64_t* i) {
+    if (!a_isnum(v)) {
+        return a_error("invalid operation '%s' : expected number : got %s",
+            op, a_typename(v));
+    }
+    if (!a_toint(v, i)) {
+        return a_error("invalid operation '%s' : expected integer", op);
+    }
+    return A_OK;
+}
+
+static int64_t shl (int64_t x, int64_t n);
+
+// Arithmetic shift to the right.
+static int64_t shr (int64_t x, int64_t n) {
+    if (n < 0) {
+        return (n == INT64_MIN) ? 0 : shl(x, -n);
+    }
+    if (n >= 64) {
+        return (x < 0) ? -1 : 0;
+    }
+    return (x < 0) ? ~(~x >> n) : x >> n;
+}
+
+static int64_t shl (int64_t x, int64_t n) {
+    if (n < 0) {
+        return (n == INT64_MIN) ? ((x < 0) ? -1 : 0) : shr(x, -n);
+    }
+    if (n >= 64) {
+        return 0;
+    }
+    return (int64_t)((uint64_t)x << n);
+}
+
+AStatus a_bit (ABit op, AVal* dst, AVal a, AVal b) {
+    int64_t x = 0;
+    int64_t y = 0;
+    if (bit_int(BITS[op],a,&x)!=A_OK || bit_int(BITS[op],b,&y)!=A_OK) {
+        return A_ERROR;
+    }
+    int64_t r = 0;
+    switch (op) {
+        case A_BAND: r = x & y;     break;
+        case A_BOR:  r = x | y;     break;
+        case A_BXOR: r = x ^ y;     break;
+        case A_SHL:  r = shl(x, y); break;
+        case A_SHR:  r = shr(x, y); break;
+    }
+    a_set(dst, a_int(r));
+    return A_OK;
+}
+
+AStatus a_bnot (AVal* dst, AVal a) {
+    int64_t x = 0;
+    if (bit_int("~", a, &x) != A_OK) {
+        return A_ERROR;
+    }
+    a_set(dst, a_int(~x));
+    return A_OK;
+}
+
 AStatus a_less (int eq, AVal* dst, AVal a, AVal b) {
     if (a_isnum(a) && a_isnum(b)) {
         // any comparison with NaN is false

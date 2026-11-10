@@ -1,0 +1,6 @@
+a & b ; a | b ; a ^ b ; (~a) ; a << b ; a >> b
+a | b & c ; a ^ b | c ; a & b == c ; a << 1 + 2 ; a | b ^ c & d
+a & b && c | d ; (~a & b) ; (-a << 2) ; a ++ b << 1
+await <<:X || :Y> && :Z>
+await <<:X>>
+await <(a << 1) || <:Y && <:Z>>>

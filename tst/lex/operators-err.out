@@ -1,2 +1,2 @@
 1 1 id x
-operators-err.atm : line 1 : near '&' : invalid operator
+operators-err.atm : line 1 : near '?' : invalid operator

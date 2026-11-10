@@ -18,7 +18,7 @@ static int         END;
 
 static const char* SYMS = "{}()[],\\@";
 
-static const char* OPCS = "+-*/%><=|&?!#~";
+static const char* OPCS = "+-*/%><=|&?!#~^";
 
 static const char* OPS[] = {
     "#",
@@ -29,6 +29,7 @@ static const char* OPS[] = {
     "+", "-", "*", "/", "//", "%",
     "!",
     "++",
+    "&", "|", "^", "~", "<<", ">>",
     "??", "!?",
     "->", "-->", "<-", "<--",
     NULL

@@ -516,6 +516,8 @@ static Opnd gen_uno (Unit* u, Expr* e) {
         out_try(u, "a_neg(&%s, %s)", d.c, x.c);
     } else if (!strcmp(e->tk.str, "#")) {
         out_try(u, "a_len(&%s, %s)", d.c, x.c);
+    } else if (!strcmp(e->tk.str, "~")) {
+        out_try(u, "a_bnot(&%s, %s)", d.c, x.c);
     } else {
         out(u, "a_not(&%s, %s);", d.c, x.c);
     }
@@ -554,6 +556,12 @@ static Opnd gen_bin (Unit* u, Expr* e) {
         { "??",  "a_is",  "",  ""  }, { "!?",  "a_is",  "!", ""  },
         { NULL, NULL, NULL, NULL }
     };
+    // operator, bitwise operation
+    static const char* BITS[][2] = {
+        { "&",  "A_BAND" }, { "|",  "A_BOR" }, { "^", "A_BXOR" },
+        { "<<", "A_SHL"  }, { ">>", "A_SHR" },
+        { NULL, NULL }
+    };
     const char* op = e->tk.str;
 
     if (!strcmp(op,"&&") || !strcmp(op,"||")) {
@@ -579,6 +587,12 @@ static Opnd gen_bin (Unit* u, Expr* e) {
             int swap = (OPS[i][2][0] != '\0');
             out_try(u, "%s(&%s, %s, %s)",
                 OPS[i][1], d.c, swap ? y.c : x.c, swap ? x.c : y.c);
+            done = 1;
+        }
+    }
+    for (int i=0; BITS[i][0]!=NULL; i++) {
+        if (!strcmp(BITS[i][0], op)) {
+            out_try(u, "a_bit(%s, &%s, %s, %s)", BITS[i][1], d.c, x.c, y.c);
             done = 1;
         }
     }

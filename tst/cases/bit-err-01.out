@@ -1,0 +1,3 @@
+==> ERROR:
+ v  bit-err-01.atm:1 (throw)
+==> invalid operation '&' : expected integer
