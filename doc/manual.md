@@ -1501,15 +1501,14 @@ Atmos provides the [operators](#operators) as follows:
 
 - equivalence: `==` `!=` `??` `!?`
 - relational: `>` `<` `>=` `<=`
-- arithmetic: `+` `-` `*` `/` `%` `**`
+- arithmetic: `+` `-` `*` `/` `//` `%`
 - logical: `!` `||` `&&`
+- bitwise: `&` `|` `^` `~` `<<` `>>`
 - length: `#`
 - concatenation: `++`
-- membership: `?>` `!>`
-- structural comparison: `===` `=!=` `=>=` `=<=`
 
-Unary operators (`-`, `!` and `#`) use prefix notation, while binary operators
-(all others, including binary `-`) use infix notation:
+Unary operators (`-`, `!`, `~` and `#`) use prefix notation, while binary
+operators (all others, including binary `-`) use infix notation:
 
 ```
 Expr : OP Expr          ;; unary operation
@@ -1522,19 +1521,32 @@ x                   ;; ERR: `x`,`+` not at same line
  + y
 -->
 
-Atmos supports and mimics the semantics of standard
-[Lua operators][lua-operators]:
+Atmos mimics the semantics of standard [Lua operators][lua-operators] for
     (`==` `!=`),
     (`>` `<` `>=` `<=`),
-    (`+` `-` `*` `/` `%` `**`),
-    (`!` `||` `&&`),
-    (`#`), and
-    (`++`).
+    (`+` `-` `*`),
+    (`!` `||` `&&`), and
+    (`#`).
 Note that some operators have a [different syntax](#lua-vs-atmos-subtleties) in
 Lua.
 
+The other arithmetic operators and the bitwise operators follow C:
+
+- `/` is the real division, and always results in a real (`7 / 2` is `3.5`).
+- `//` is the integer division, and truncates towards zero (`-7 // 2` is
+  `-3`).
+- `%` is the remainder of `//`, and has the sign of the dividend (`-7 % 3` is
+  `-1`).
+- `&` `|` `^` `~` `<<` `>>` operate on integers.
+  The operator `^` is the exclusive or, and `>>` preserves the sign.
+
+A division of integers by zero raises an error.
+The exponentiation is the function [`math.pow`](#math).
+
 Next, we decribe the operations that Atmos modifies or introduces:
-    (`??` `!?`), (`#`), (`++`), (`?>` `!>`), and (`===` `=!=` `=>=` `=<=`).
+    (`??` `!?`), (`#`), and (`++`).
+The operations for membership and structural comparison are functions of the
+[library `X`](#x).
 
 Examples:
 
@@ -1544,6 +1556,8 @@ Examples:
 -(1 + 10)           ;; --> -11
 !(true && false)    ;; --> true
 #([1,2,3])          ;; --> 3
+7 // 2              ;; --> 3
+6 & 3               ;; --> 2
 ```
 
 [lua-operators]: https://www.lua.org/manual/5.4/manual.html#3.4
@@ -1558,8 +1572,18 @@ If any of the following conditions are met, then `a ?? b` is true:
 - `type(a) == b` (e.g., `[] ?? :table`)
 - `b` is "dot prefix" of `a` (e.g., `'x.y.z' ?? 'x.y'`)
 - `b` is "dot prefix" of `a.tag` (e.g., `:X.Y [] ?? :X`)
+- `a` and `b` are tables, and every field `k=v` of `b` has a field in `a` such
+  that `a@(k) ?? v` (e.g., `[x=1,y=2] ?? [x=1]`)
+
+In the last rule, the table `b` works as a pattern: `a` may have other fields.
+The field `tag` follows the rule of tags, so that a pattern with a tag also
+matches its subtypes.
 
 The operator `!?` is the negation of `??`.
+
+The operator `??` is the single matching mechanism in Atmos:
+[`match`](#match), [`await`](#await), [`catch`](#exceptions), and
+[`escape`](#escape) all rely on it.
 
 Examples:
 
@@ -1569,7 +1593,9 @@ Examples:
 \{} ?? :function    ;; --> true
 nil ?? nil          ;; --> true
 :X [] ?? :X.Y       ;; --> false
-[] ?? []            ;; --> false
+[] ?? []            ;; --> true
+:P [x=1,y=2] ?? :P [x=1]    ;; --> true
+[x=1] ?? [x=1,y=2]  ;; --> false
 ```
 
 ### Length
@@ -1599,14 +1625,12 @@ print(#ts)      ;; --> 2
 
 The operator `++` ("concat") concatenates its operands into a new value.
 
-For strings, numbers, and values with the `__concat` metamethod, `a ++ b`
-behaves the same as [`a .. b`][lua-concat] in Lua.
-
-<!-- `__` -->
+For strings and numbers, `a ++ b` behaves the same as
+[`a .. b`][lua-concat] in Lua.
 
 Otherwise, `a ++ b` creates a table with key-values resulting from
 [iterations](#loop) over `a` and `b`, favoring `b` in case of duplicate keys.
-If the iterations return numeric indexes starting from `1` with no holes, they
+If the iterations return numeric indexes starting from `0` with no holes, they
 are treated as [vector](#table) values and are put in sequence in the resulting
 table.
 
@@ -1622,115 +1646,21 @@ Examples:
 [x=10] ++ [x=1,y=2]       ;; [x=1, y=2]
 ```
 
-```
-task T () { await(false) }
-pin xs = tasks()
-pin ys = tasks()
-val x = spawn @xs T()
-val y = spawn @ys T()
-val ts = xs ++ ys           ;; [x, y]
-print(#ts, x?>ts, y?>ts)    ;; 2, true, true
-```
-
-### Membership
-
-The operators `?>` and `!>` ("in" and "not in") check the membership of the
-left operand in the right operand.
-
-The expression `a ?> b` compares `a` against each key-value `k`-`v` resulting
-from an [iteration](#loop) over `b`.
-If `a` is equal to `v` or is equal to a non-numeric `k`, then `a ?> b` is true.
-
-The operator `!>` is the negation of `?>`.
-
-Examples:
-
-<!-- exs/exp-10-membership.atm -->
-
-```
-10 ?> [10,20,30]       ;; true
- 1 ?> [10,20,30]       ;; false
-:x ?> [x=10,y=20]      ;; true
-```
-
-### Structural Comparison
-
-Atmos also provides operations to compare values *structurally*, inspecting
-the actual contents of tables recursively.
-They split into deep *ordering* (`=>=` `=<=`) and deep *equality* (`===`
-`=!=`).
-
-#### Deep Ordering
-
-The operators `=>=` and `=<=` ("sup" and "sub") check if one operand is
-structurally more or less general than the other.
-
-They are especially useful to check containment between two tables, i.e., if
-one table holds all fields and values of the other.
-
-To check the result of `a =>= b`, the following tests are made in order:
-
-1. if `type(a) != type(b)`, then `a =>= b` is `false` (e.g., `10 =>= nil`)
-2. if the [Lua metatables][lua-metatables] of `a` and `b` differ, then
-   `a =>= b` is `false`
-3. if `a == b`, then `a =>= b` is `true` (e.g., `10 =>= 10`)
-4. if `a` and `b` are strings, then `a =>= b` is `true` if `a` is a "dot
-   prefix" of `b` (e.g., `'x' =>= 'x.y'`)
-5. if `a` and `b` are tables, then `a =>= b` is `true` if every pair `ka=va` in
-   `a` satisfies `va =>= b[ka]`
-6. otherwise `a =>= b` is `false` (e.g., `10 =>= 20`)
-
-The operator `=<=` is the reverse of `=>=`, i.e., `a =<= b` is equivalent to
-`b =>= a`.
-
-Examples:
-
-<!-- exs/exp-09-deep-ordering.atm -->
-
-```
-10      =>= 10      ;; --> true
-10      =>= 20      ;; --> false (scalars compare by equality)
-:x      =>= :x.y    ;; --> true  (:x supertypes :x.y)
-[]      =>= [1,2,3] ;; --> true  (looser table supertypes richer)
-[1,2,3] =<= []      ;; --> true  (reverse of the above)
-```
-
-#### Deep Equality
-
-The operators `===` and `=!=` ("deep equal" and "not deep equal") check if
-their operands have or not structural equality.
-Therefore, tables are not only compared by reference, but also by their stored
-values.
-
-To check if `a === b` is true, both `a =>= b` and `a =<= b` must be true.
-
-The operator `=!=` is the negation of `===`.
-
-Examples:
-
-<!-- exs/exp-09-deep-equality.atm -->
-
-```
-[1,2,3] === [1,2,3]       ;; --> true
-\{} =!= []                ;; --> true (different types)
-[v=[]] =!= [v=[]]         ;; --> false
-[@([])=1] === [@([])=1]   ;; --> false (keys are not `==`)
-\{} === \{}               ;; --> false (func refs are not `==`)
-```
-
-[lua-metatables]: https://www.lua.org/manual/5.4/manual.html#2.4
+The result is a new table, which is not pinned.
+Therefore, it is an error to concatenate tables that hold
+[pinned values](#pin), such as the tasks of a pool.
 
 ## Indexing
 
 Atmos uses the at (`@`) or dot (`.`) notations to index [tables](#table):
 
 ```
-Expr : Expr At                  ;; t@(e)  t@1  t@i
+Expr : Expr At                  ;; t@(e)  t@0  t@i
      | Expr `@´ (`#´ | `+´)     ;; t@#  t@+
      | Expr `.´ ID              ;; t.x
 
 At   : `@´ `(´ Expr `)´         ;; t@(e)
-     | `@´ (NUM | ID)           ;; t@1  t@i
+     | `@´ (NUM | ID)           ;; t@0  t@i
 ```
 
 The at notation uses parenthesis (instead of brackets) to provide the index
@@ -1739,13 +1669,15 @@ It is possible to omit the parenthesis to index literal numbers and
 identifiers.
 The dot notation is a syntactic sugar to index string keys: `t.x` expands to
 `t@("x")`.
-Finally, the tip markers `#` and `+` refer to the last (`#t`) and append
-(`#t+1`) indexes, respectively.
+Finally, the tip markers `#` and `+` refer to the last (`#t-1`) and append
+(`#t`) indexes, respectively, since the first index of a vector is `0`.
 
 The same `At` rules apply to [table constructors](#table),
 [spawn pools](#tasks), and [emit targets](#emit).
 
 Atmos mimics the semantics of [Lua indexing][lua-indexing] for tables.
+Indexing a task evaluates to `nil`, except for the fields
+[`pub` and `ret`](#pub).
 
 Examples:
 
@@ -1761,10 +1693,10 @@ print(t.y)          ;; --> nil
 
 ```
 val v = [ 1 ]
-set v@1 = 10        ;; [ 10 ]
+set v@0 = 10        ;; [ 10 ]
 set v@+ = 20        ;; [ 10, 20 ]
 print(v@#)          ;; --> 20
-print(v@1)          ;; --> 10
+print(v@0)          ;; --> 10
 print(v@+)          ;; --> nil
 ```
 
@@ -1888,17 +1820,33 @@ precedence priority (from higher to lower):
 3. inner pipe:
     - single pipe:  `v->f` `f<-v`
 4. prefix:
-    - unary:        `-x` `!v` `#t`
+    - unary:        `-x` `!v` `#t` `~n`
 5. infix:
-    - binary        `x*y` `r++s` `a or b`
+    - binary        `x*y` `r++s` `a || b`
 6. outer pipe:
     - double pipe:  `v-->f` `f<--v`
 7. outer where:
     - where:        `v where {...}`
 
 Prefix operations are right associative, all others are left associative.
-Note that all binary operators at the same level have the same precedence.
-Therefore, operators at the same level require parenthesis for disambiguation.
+
+The binary operators follow the precedences of C, from higher to lower:
+
+1. `*` `/` `//` `%`
+2. `+` `-`
+3. `++`
+4. `<<` `>>`
+5. `&`
+6. `^`
+7. `|`
+8. `<` `<=` `>` `>=`
+9. `==` `!=` `??` `!?`
+10. `&&`
+11. `||`
+
+The only difference to C is that the bitwise operators `&` `^` `|` have
+higher precedence than comparisons, such that `x & 1 == 0` reads as
+`(x & 1) == 0`.
 
 Examples:
 
@@ -1906,9 +1854,11 @@ Examples:
 
 ```
 #f(10).x        ;; # ((f(10)) .x)
-x + 10 - 1      ;; ERROR: requires parenthesis
+x + 10 - 1      ;; (x + 10) - 1
+x + y * 2       ;; x + (y * 2)
+a ++ b == c     ;; (a ++ b) == c
 - x + y         ;; (-x) + y
-x || y || z     ;; (x || y) || z
+x || y && z     ;; x || (y && z)
 f :X []         ;; f(:X [])
 ```
 
