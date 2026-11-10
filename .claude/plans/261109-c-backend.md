@@ -672,7 +672,7 @@ exs/        examples
 - [x] M4 tasks core: prototypes, `spawn`, `await` on values and tags,
       default and `:global` emit, main as task, `pin` for tasks,
       `abort`, `pub`, `status`.
-- [ ] M5 structured: transparent blocks, `par`, `par :any`, `par :all`,
+- [x] M5 structured: transparent blocks, `par`, `par :any`, `par :all`,
       `watching`, `loop on`, exit crossing, `await T()`, `await t`.
 - [ ] M6 pools and targets: `tasks(n)`, `spawn @ts`, `:any ts`,
       `:all ts`, emit targets, `toggle` (both forms, `with`).
