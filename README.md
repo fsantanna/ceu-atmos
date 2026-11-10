@@ -1,1 +1,87 @@
 # ceu-atmos
+
+Atmos with a C backend: a from-scratch implementation of the
+[Atmos](https://github.com/atmos-lang/atmos) programming language that
+compiles to C.
+
+- No VM, no interpreter, no Lua.
+- Whole-program compilation to one C file, then `cc`.
+- Stackless tasks with structured, deterministic concurrency.
+- Reference counting, no garbage collector.
+
+The plan, with the settled decisions and the milestones, is in
+[`.claude/plans/261109-c-backend.md`](.claude/plans/261109-c-backend.md).
+
+**Experimental: work in progress.**
+
+## Build
+
+```
+make
+```
+
+It builds the compiler `./atmos` and the runtime libraries in `build/`.
+It requires a C compiler and `make`.
+
+## Use
+
+```
+./atmos hello.atm [args]    # compiles, builds, and runs
+./atmos -c hello.atm        # emits C only
+./atmos -o hello hello.atm  # builds only
+./atmos -t hello.atm        # enables test blocks
+```
+
+```
+spawn {
+    watching :done {
+        par {
+            loop on :tick {
+                print "tick A"
+            }
+        } with {
+            loop on :tick {
+                print "tick B"
+            }
+        }
+    }
+    print "done"
+}
+emit(:tick)     ;; --> tick A, tick B
+emit(:done)     ;; --> done
+```
+
+Environment variables:
+
+- `ATMOS_CC`: C compiler (default `cc`).
+- `ATMOS_CFLAGS`: C flags (default `-O1`).
+- `ATMOS_ASAN`: if set, builds the program with the address sanitizer.
+
+## Test
+
+```
+make test
+```
+
+- `tst/rt/`: unit tests of the runtime, in C.
+- `tst/lex/`, `tst/ast/`: lexer and parser golden cases.
+- `tst/cases/`: golden programs, built with the address sanitizer
+  (leaks included).
+
+## Layout
+
+```
+src/    compiler: lexer, parser, resolver, coder
+rt/     runtime: values, strings, tables, operations, tasks, stdlib
+rt/atmos.h   C API for generated code, natives, and environments
+tst/    tests
+```
+
+## Differences from the current Atmos
+
+- Indexes start at `0`: vectors, numeric loops, and strings.
+- An unknown identifier is a compile error: globals are static.
+- `await` is only valid lexically inside a task body.
+- `catch` only catches `throw`.
+- `break`, `until`, and `while` need a lexically enclosing `loop`.
+- Numbers are doubles, shown without decimals when integral.
