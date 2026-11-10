@@ -676,7 +676,7 @@ exs/        examples
       `watching`, `loop on`, exit crossing, `await T()`, `await t`.
 - [x] M6 pools and targets: `tasks(n)`, `spawn @ts`, `:any ts`,
       `:all ts`, emit targets, `toggle` (both forms, `with`).
-- [ ] M7 time: clock awaits, `:clock`, timers, default driver loop.
+- [x] M7 time: clock awaits, `:clock`, timers, default driver loop.
 - [ ] M8 memory: `pin` for all values, block depths, store checks,
       transfer on exits, deferred abort of blocks on the C stack.
 - [ ] M9 natives and stdlib: C natives, `$x`, native box, stdlib v1, X.
