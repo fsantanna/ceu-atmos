@@ -1,0 +1,4 @@
+do {
+    pin a = []
+    pin b = a
+}

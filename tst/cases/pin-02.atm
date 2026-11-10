@@ -1,0 +1,15 @@
+loop i in 3 {
+    pin t = [i]
+    set t.me = t
+    print(t@0)
+}
+func f () {
+    pin t = [x=1]
+    set t.t = t
+    t.x
+}
+print(f(), f())
+do {
+    pin g = \{ it + 1 }
+    print(g(1))
+}

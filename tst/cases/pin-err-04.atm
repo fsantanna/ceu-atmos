@@ -1,0 +1,2 @@
+val f = \{ it }
+pin g = f

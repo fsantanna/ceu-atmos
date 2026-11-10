@@ -15,17 +15,31 @@ AVal a_tab (void) {
     return a_obj(&t->hdr);
 }
 
-void a_tab_free (ATab* t) {
-    for (uint32_t i=0; i<t->an; i++) {
-        a_dec(t->arr[i]);
-    }
-    for (uint32_t i=0; i<t->en; i++) {
-        a_dec(t->ents[i].k);
-        a_dec(t->ents[i].v);
-    }
-    free(t->arr);
-    free(t->ents);
+void a_tab_clear (ATab* t) {
+    // the table is emptied first: releasing an entry may reach it again
+    AVal*    arr  = t->arr;
+    AEnt*    ents = t->ents;
+    uint32_t an   = t->an;
+    uint32_t en   = t->en;
     free(t->idx);
+    t->arr  = NULL;
+    t->ents = NULL;
+    t->idx  = NULL;
+    t->an = t->acap = 0;
+    t->en = t->ecap = t->elive = t->icap = 0;
+    for (uint32_t i=0; i<an; i++) {
+        a_dec(arr[i]);
+    }
+    for (uint32_t i=0; i<en; i++) {
+        a_dec(ents[i].k);
+        a_dec(ents[i].v);
+    }
+    free(arr);
+    free(ents);
+}
+
+void a_tab_free (ATab* t) {
+    a_tab_clear(t);
 }
 
 ///////////////////////////////////////////////////////////////////////////////

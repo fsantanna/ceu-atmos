@@ -1,0 +1,17 @@
+do {
+    pin t = [1, 2, 3]
+    set t.self = t
+    set t@+ = [inner=t]
+    print(#t, t.self == t)
+}
+do {
+    pin a = []
+    pin b = []
+    set a.b = b
+    set b.a = a
+    print(a.b == b, b.a == a)
+}
+pin n = 10
+pin s = "str"
+pin z = nil
+print(n, s, z)

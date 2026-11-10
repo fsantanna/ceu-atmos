@@ -1170,15 +1170,31 @@ AStatus a_pub (AVal** ref) {
 
 AStatus a_pin (AVal* slot) {
     AVal v = *slot;
-    if (v.type!=A_XTASK && v.type!=A_TASKS) {
-        return A_OK;
-    }
-    if (v.u.o->pinned) {
-        return a_error("invalid assignment : unexpected pinned value");
-    }
-    // taking the running task or an ancestor would abort upwards
-    if (is_up((ANode*)v.u.o)) {
-        return a_error("invalid assignment : unexpected parent task");
+    switch (v.type) {
+        case A_XTASK:
+        case A_TASKS:
+            if (v.u.o->pinned) {
+                return a_error("invalid assignment : unexpected pinned value");
+            }
+            // taking the running task or an ancestor would abort upwards
+            if (is_up((ANode*)v.u.o)) {
+                return a_error("invalid assignment : unexpected parent task");
+            }
+            break;
+        case A_TAB:
+        case A_FUNC:
+        case A_TASK:
+        case A_NAT:
+            if (v.u.o->pinned) {
+                return a_error("invalid assignment : unexpected pinned value");
+            }
+            // the block must hold the only reference
+            if (v.u.o->rc != 1) {
+                return a_error("invalid pin : shared value");
+            }
+            break;
+        default:
+            return A_OK;
     }
     v.u.o->pinned = 1;
     v.u.o->depth  = a_depth;
@@ -1199,6 +1215,19 @@ AStatus a_chk_task (AVal v) {
 
 AStatus a_pin_end (AVal* slot, AStatus st) {
     AVal v = *slot;
+    // only what is still pinned in this very block
+    if (v.type<A_STR || !v.u.o->pinned || v.u.o->depth!=(uint32_t)a_depth) {
+        return st;
+    }
+
+    if (v.type == A_TAB) {
+        a_tab_clear(A_TAB_OF(v));
+        return st;
+    }
+    if (v.type==A_FUNC || v.type==A_TASK) {
+        a_clrs(A_FUNC_OF(v)->caps, A_FUNC_OF(v)->ncap);
+        return st;
+    }
     if (v.type!=A_XTASK && v.type!=A_TASKS) {
         return st;
     }
