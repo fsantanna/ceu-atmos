@@ -455,6 +455,13 @@ static AStatus x_eq (AFunc* self, int argc, AVal* argv) {
     return A_OK;
 }
 
+// X.neq(a, b): structural inequality
+static AStatus x_neq (AFunc* self, int argc, AVal* argv) {
+    (void) self;
+    a_push(a_bool(!a_deq(arg(argc,argv,0), arg(argc,argv,1))));
+    return A_OK;
+}
+
 // X.gte(a, b): `a` is structurally more general than `b`
 static AStatus x_gte (AFunc* self, int argc, AVal* argv) {
     (void) self;
@@ -530,6 +537,7 @@ void atm_std_init (void) {
     field(atm_g_X, "print",    x_print);
     field(atm_g_X, "copy",     x_copy);
     field(atm_g_X, "eq",       x_eq);
+    field(atm_g_X, "neq",      x_neq);
     field(atm_g_X, "gte",      x_gte);
     field(atm_g_X, "xin",      x_xin);
 

@@ -2,3 +2,4 @@ val e = X.eq
 print(e([1,2,3], [1,2,3]), e([1,2], [1,2,3]), !e([v=[]], [v=[]]))
 print(e([@([])=1], [@([])=1]), e(print, print), e(1, 1), !e("a", "b"))
 print(!e([], print), e([x=[y=[1]]], [x=[y=[1]]]), e(:x, :x.y))
+print(X.neq([1], [1]), X.neq([1], [2]), X.neq(1, 1.0), X.neq(:a, :b))
