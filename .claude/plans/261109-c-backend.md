@@ -773,7 +773,15 @@ exs/        examples
 - [x] M8 memory: `pin` for all values, block depths, store checks,
       transfer on exits, deferred abort of blocks on the C stack.
 - [x] M9 natives and stdlib: C natives, `$x`, native box, stdlib v1, X.
-- [ ] M10 parity: golden suite green, `exs/` ported, manual rewritten.
+- [x] M10 parity: golden suite green, `exs/` ported, manual rewritten.
+    - Golden suite: 444 of the 519 cases of the reference, 79 of them
+      adapted (`tst/adapt.py`). The 75 left out are in `tst/dropped/`,
+      each with a reason.
+    - `exs/`: `hello.atm`, and `stdin.atm` with a driver in a native
+      block. The streams and pico-sdl examples depend on what v1 leaves
+      out.
+    - Manual: `doc/manual.md`, the reference manual with the changes of
+      this version.
 
 ## Later (after M10)
 

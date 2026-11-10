@@ -128,11 +128,11 @@ In this sense, tasks in Atmos are treated in the same way as local variables of
 structured programming:
 When a [block](#blocks) of code terminates or goes out of scope, all of its
 [local variables](#local-variables) become inaccessible to enclosing blocks.
-In addition, all of its [pinned tasks](#local-variables) are aborted and
+In addition, all of its [pinned tasks](#pin) are aborted and
 properly finalized by [deferred statements](#defer).
 
-Tasks in Atmos are built on top of [Lua coroutines][lua-coroutines], which
-adhere to a predictable "run-to-completion" semantics:
+Tasks in Atmos are similar to [coroutines][lua-coroutines], and adhere to a
+predictable "run-to-completion" semantics:
 Unlike OS threads, tasks execute uninterruptedly up to explicit [await](#await)
 operations.
 
@@ -169,8 +169,8 @@ For this reason, the second task is aborted before it has the opportunity to
 awake for the 10th time, but its `defer` statement still executes and outputs
 `"I counted 9"`.
 
-Since they are based on coroutines, tasks are expected to yield control
-explicitly, which makes scheduling entirely deterministic.
+Since tasks only yield control explicitly, scheduling is entirely
+deterministic.
 In addition, tasks awake in the order they appear in the source code, which
 makes the scheduling order predictable.
 This rule allows us to infer that the example invariably outputs `9`, no matter
@@ -489,7 +489,7 @@ The following keywords are reserved in Atmos:
     pub                 ;; public variable
     return              ;; escape prototype
     set                 ;; assign expression
-    spawn               ;; spawn coroutine
+    spawn               ;; spawn task
     task                ;; task prototype
     tasks               ;; task pool
     test                ;; test block
@@ -2269,8 +2269,9 @@ Await : `await´ Patt
 Patt  : Bare | `<´ Full `>´                 ;; bare or full patterns
 Bare  : [`:any´ | `:all´] Expr [ Pred ]
       | Pred
-Full  : Full Pred                           ;; (3) lower precedence
-      | Full (`&&´ | `||´) Full             ;; (3)
+Full  : Full Pred                           ;; (5) lower precedence
+      | Full `||´ Full                      ;; (4)
+      | Full `&&´ Full                      ;; (3)
       | `!´ Full                            ;; (2)
       | (`:any´ | `:all´) Expr              ;; (1)
       | Pred                                ;; (1)
@@ -2290,8 +2291,15 @@ predicate:
 
 The full combinators (`!`, `&&`, `||`, and the `until`/`while` suffix) require
 the `<...>` form, with angle brackets (instead of parenthesis) as delimiters.
-Like [expressions](#precedence-and-associativity), combinators share one
-precedence level and require brackets for disambiguation.
+Like in [expressions](#precedence-and-associativity), the combinators follow
+the precedences of C: `!` binds tighter than `&&`, which binds tighter than
+`||`.
+The `until`/`while` suffix applies to the whole combination to its left.
+
+An `await` is only valid in the body of a task, which includes the main chunk
+and [transparent tasks](#tasks).
+It is a compile error to `await` in the body of a [function](#function),
+even if the function is called from a task.
 
 When awaking, an `await` evaluates to its matching event value.
 
@@ -2301,7 +2309,7 @@ A task awakes when an `emit(e)` matches the given await pattern as follows:
 |-----------|---------------|---------------|-----------|
 | Boolean   | `true`        | any event     | `e`       |
 |           | `false`       | never         | —         |
-| Value     | `:T [...]`    | `pat =>= e`   | `e`       |
+| Value     | `:T [...]`    | `e ?? pat`    | `e`       |
 |           | `x`           | `e ?? x`      | `e`       |
 | Time      | `AsBms`       | timeout       | `late`    |
 |           | `:clock`      | clock tick    | `dt,late` |
@@ -2309,22 +2317,20 @@ A task awakes when an `emit(e)` matches the given await pattern as follows:
 |           | `T(...)`      | task end      | `v,t`     |
 |           | `:any ts`     | any pool end  | `v,t,ts`  |
 |           | `:all ts`     | all pool end  | `v,t,ts`  |
-| Stream    | `s`           | `s` ends      | `v,t`     |
 | Condition | `[p] until c` | [p] until `c` | `e / res` |
 |           | `[p] while c` | [p] while `c` | `e`       |
 | Logical   | `!p`          | not `p`       | `e`       |
 |           | `p1 && p2`    | all subs      | `e`       |
 |           | `p1 \|\| p2`  | any sub       | `e`       |
-| Meta      | `meta`        | via `__atmos` | `e / res` |
 
 Note that some patterns may modify the final result:
 
 - Time: `late`: time elapsed past expiry; `dt`: clock tick length
 - Tasks: task result, terminating task, and task pool
-- Condition, Meta: function result (defaults to `e` if `true`)
+- Condition: function result (defaults to `e` if `true`)
 
 A bare call (e.g., `await T()`, or as an operand `await<T() || :X>`)
-[spawns](#spawn) the given task and awaits its termination, evaluating to the
+[spawns](#tasks) the given task and awaits its termination, evaluating to the
 task final value.
 To await the result of a call instead of spawning it, use the value form:
 `await(f())` at top level, or `(f())` as a leaf inside `<>`.
@@ -2342,8 +2348,9 @@ Examples:
 await(false)                    ;; never awakes
 await :Key [:escape]            ;; awakes on a :Key :escape event
 await 1h10min30s                ;; awakes after the given time
-await until (it && (it@1 > 10)) ;; awakes if event index 1 > 10
+await until (it && (it@0 > 10)) ;; awakes if event index 0 > 10
 await <:X && :Y>                ;; awakes after both :X and :Y in any order
+await <:X || :Y && :Z>          ;; awakes on :X, or after both :Y and :Z
 await <!:X>                     ;; awakes on any non-:X event
 await <:X until (it.n==3)>      ;; awaits :X until its field n equals 3
 ```
@@ -2396,6 +2403,12 @@ The optional target between brackets determines the scope of the broadcast:
 - `t: task`: the given task
 - `n: number`: `n`th level up in the task hierarchy (`0` = current task)
 
+An event that is a [pinned value](#pin) can only reach tasks that live inside
+the block of the value.
+Otherwise, a task could keep the event after the block reclaims it.
+Therefore, it is an error to emit a pinned value to `:global`, to `:parent`,
+or to a task attached outside its block.
+
 Examples:
 
 <!-- exs/exp-27-emit.atm -->
@@ -2429,7 +2442,7 @@ In the first format for tasks, a toggle expects the task and a
 - `false`: the task disregards further emits and never awakes
 
 In the second format for blocks, a toggle spawns and awaits a block as a
-[transparent task](#transparent-task).
+[transparent task](#tasks).
 It also specifies a [tag](#literals) to toggle the block when matching an
 [emit](#emit).
 The emit must be in the format `emit(<tag> [<boolean>])`, which sets the
@@ -2459,7 +2472,7 @@ spawn {
     toggle on :T {
         loop {
             val e = await(:E)
-            print(e@1)          ;; --> 1 3
+            print(e@0)          ;; --> 1 3
         }
     }
 }
@@ -2582,250 +2595,214 @@ watching 1s {
 }
 ```
 
-## Asynchronous Execution
+# STANDARD LIBRARIES
 
-### Async
+Atmos provides a small set of libraries, which are modeled after the
+[Lua libraries][lua-libraries] with the same names.
+The main difference is that all positions, in strings and in vectors, start at
+`0`.
 
-`TODO: not implemented`
+A library is a table with functions, which is always available:
+there is no `require`.
 
-### Thread
+[lua-libraries]: https://www.lua.org/manual/5.4/manual.html#6
 
-A `thread` executes a block in a real OS thread, allowing CPU-intensive
-computations to run in parallel with the Atmos scheduler:
+## Basic Functions
 
-```
-Thread : `thread` Block
-```
+- `print(...)`: prints its arguments, separated by tabs
+- `type(v)`: the type of `v` as a string: `nil`, `boolean`, `number`,
+  `string`, `table`, `function`, `task`, `xtask`, `tasks`, or `native`
+- `tostring(v)`: converts `v` to a string
+- `tonumber(v)`: converts `v` to a number, or evaluates to `nil` if `v` is
+  neither a number nor a string with a number
+- `assert(v [, msg])`: raises an error with `msg` if `v` is falsy, and
+  evaluates to its arguments otherwise
+- `next(t [, k])`: the key and value that follow the key `k` in the table
+  `t`, or the first ones if `k` is absent; evaluates to `nil` after the last
 
-The calling task suspends until the thread completes.
-A thread has access to serialized copies of values in the enclosing scope.
-The whole thread evaluates to the final value of the block.
+## Math
 
-Threads are isolated and cannot use Atmos standard primitives like `await`,
-`emit`, or `spawn`.
+- `math.floor(x)`, `math.ceil(x)`: rounds `x` down or up to an integer
+- `math.abs(x)`: the absolute value of `x`
+- `math.min(...)`, `math.max(...)`: the smallest or largest argument
+- `math.sqrt(x)`, `math.sin(x)`, `math.cos(x)`: as in C
+- `math.pow(x, y)`: `x` to the power of `y`, as a real
+- `math.random()`: a random real in `[0,1)`
+- `math.random(n)`: a random integer from `0` to `n-1`
+- `math.random(a, b)`: a random integer from `a` to `b`
+- `math.randomseed(n)`: sets the seed of the random numbers
+- `math.huge`: the infinity
+- `math.pi`: the value of π
+
+## String
+
+A position in a string starts at `0`.
+A negative position counts from the end: `-1` is the last byte.
+
+- `string.len(s)`: the number of bytes in `s` (same as `#s`)
+- `string.sub(s [, i [, j]])`: the substring from positions `i` to `j`, both
+  included, which default to the first and last
+- `string.find(s, x [, i])`: the first and last positions of the first
+  occurrence of the plain string `x` in `s`, from position `i` on; or `nil`
+- `string.split(s [, sep])`: a vector with the pieces of `s` between the
+  occurrences of `sep`, or between blanks if `sep` is absent
+- `string.byte(s [, i [, j]])`: the codes of the bytes from `i` to `j`, which
+  default to the first one only
+- `string.char(...)`: the string with the given byte codes
+- `string.upper(s)`, `string.lower(s)`: converts the letters in `s`
+- `string.rep(s, n [, sep])`: `n` copies of `s`, separated by `sep`
+- `string.format(fmt, ...)`: formats its arguments as `printf` in C, with the
+  conversions `%d` `%i` `%x` `%X` `%o` `%c` (integers), `%f` `%e` `%g`
+  (numbers), `%s` (any value, as `tostring`), and `%%`
 
 Examples:
 
 ```
-val v = thread {
-    ;; non-awaiting heavy computation
-    var sum = 0
-    loop i in 1000000 {
-        set sum = sum + i
-    }
-    sum
-}
-print(v)
+string.sub("hello", 1, 3)           ;; ell
+string.find("hello", "l")           ;; 2, 2
+string.split("a,b,,c", ",")         ;; ["a", "b", "", "c"]
+string.format("%5.2f|%s", 3.14159, :ok)     ;; " 3.14|ok"
 ```
 
-# STANDARD LIBRARIES
+## Vector
 
-In addition to the [standard Lua libraries][lua-libraries], Atmos also provides
-the following modules:
+A vector is a [table](#table) with the keys `0` to `#t-1`.
 
-`TODO: between, to*, remove/insert (vector)`
+- `vector.insert(t, v)`: appends `v` to `t`
+- `vector.insert(t, i, v)`: inserts `v` at position `i`, shifting up the
+  elements from `i` on
+- `vector.remove(t [, i])`: removes and evaluates to the element at position
+  `i`, which defaults to the last, shifting down the elements after it
+- `vector.sort(t [, f])`: sorts `t` in place; `f(a,b)` tells if `a` comes
+  before `b`, and defaults to `a < b`; the sort is stable
+- `vector.join(t [, sep])`: a string with the strings and numbers in `t`,
+  separated by `sep`
 
-- `X`
-    - `X.tostring(v)` -- deep string representation of `v`
-    - `X.print(...)`  -- `print` using `X.tostring` on each argument
-    - `X.copy(v)`     -- deep copy of `v`
+Examples:
 
-[lua-libraries]: https://www.lua.org/manual/5.4/manual.html#6
+```
+val t = [3, 1, 2]
+vector.sort(t)                      ;; [1, 2, 3]
+vector.insert(t, 0, 0)              ;; [0, 1, 2, 3]
+vector.remove(t)                    ;; 3
+vector.join(t, "-")                 ;; 0-1-2
+```
 
-## Lua Standard Libraries
+## Input and Output
 
-All libraries are extracted as is from the [Lua manual][lua-libraries]:
+A file is a [native](#native) value, which closes itself when it is no longer
+referenced, or when its [pin](#pin) block terminates.
 
-### [Basic Functions](https://www.lua.org/manual/5.4/manual.html#6.1)
+- `io.open(path [, mode])`: opens a file, with the modes of C (`"r"` if
+  absent); evaluates to the file, or to `nil` plus an error message
+- `io.close(f)`: closes the file now
+- `io.write(...)`: writes its arguments to the standard output
+- `io.write(f, ...)`: writes its arguments to the file `f`
+- `io.read([f])`: the next line of the standard input, or of the file `f`,
+  with no line break; or `nil` at the end
+- `io.lines(f)`: an iterator over the lines of a file, given as a file or as a
+  path, for [loops](#loop)
 
-Core functions for fundamental operations.
+Examples:
 
-- [`assert(v [, message])`](https://www.lua.org/manual/5.4/manual.html#pdf-assert) - raises an error if its argument is false
-- [`collectgarbage([opt [, arg]])`](https://www.lua.org/manual/5.4/manual.html#pdf-collectgarbage) - controls the automatic garbage collector
-- [`dofile([filename])`](https://www.lua.org/manual/5.4/manual.html#pdf-dofile) - executes a Lua file
-- [`error(message [, level])`](https://www.lua.org/manual/5.4/manual.html#pdf-error) - raises an error with a message
-- [`getmetatable(object)`](https://www.lua.org/manual/5.4/manual.html#pdf-getmetatable) - returns the metatable of an object
-- [`ipairs(t)`](https://www.lua.org/manual/5.4/manual.html#pdf-ipairs) - returns an iterator for integer keys
-- [`load(chunk [, chunkname [, mode [, env]]])`](https://www.lua.org/manual/5.4/manual.html#pdf-load) - loads a chunk of code
-- [`loadfile([filename [, mode [, env]]])`](https://www.lua.org/manual/5.4/manual.html#pdf-loadfile) - loads a file as a chunk
-- [`next(table [, index])`](https://www.lua.org/manual/5.4/manual.html#pdf-next) - returns the next key-value pair
-- [`pairs(t)`](https://www.lua.org/manual/5.4/manual.html#pdf-pairs) - returns an iterator over all key-value pairs
-- [`pcall(f [, arg1, ...])`](https://www.lua.org/manual/5.4/manual.html#pdf-pcall) - calls a function in protected mode
-- [`print(...)`](https://www.lua.org/manual/5.4/manual.html#pdf-print) - prints its arguments
-- [`rawequal(v1, v2)`](https://www.lua.org/manual/5.4/manual.html#pdf-rawequal) - compares two values without metatables
-- [`rawget(table, index)`](https://www.lua.org/manual/5.4/manual.html#pdf-rawget) - gets a value from table without metatables
-- [`rawlen(v)`](https://www.lua.org/manual/5.4/manual.html#pdf-rawlen) - returns the length of a value without metatables
-- [`rawset(table, index, value)`](https://www.lua.org/manual/5.4/manual.html#pdf-rawset) - sets a value in table without metatables
-- [`require(modname)`](https://www.lua.org/manual/5.4/manual.html#pdf-require) - loads a module
-- [`select(index, ...)`](https://www.lua.org/manual/5.4/manual.html#pdf-select) - selects from variadic arguments
-- [`setmetatable(table, metatable)`](https://www.lua.org/manual/5.4/manual.html#pdf-setmetatable) - sets the metatable of a table
-- [`tonumber(e [, base])`](https://www.lua.org/manual/5.4/manual.html#pdf-tonumber) - converts a value to a number
-- [`tostring(v)`](https://www.lua.org/manual/5.4/manual.html#pdf-tostring) - converts a value to a string
-- [`type(v)`](https://www.lua.org/manual/5.4/manual.html#pdf-type) - returns the type of a value
-- [`warn(msg1, ...)`](https://www.lua.org/manual/5.4/manual.html#pdf-warn) - issues a warning
-- [`xpcall(f, msgh [, arg1, ...])`](https://www.lua.org/manual/5.4/manual.html#pdf-xpcall) - calls a function with custom error handling
+```
+loop l in io.lines("data.txt") {
+    print(l)
+}
+```
 
-### [Coroutine Manipulation](https://www.lua.org/manual/5.4/manual.html#6.2)
+## Operating System
 
-Functions for creating and manipulating coroutines.
+- `os.time()`: the current time, in seconds since the epoch
+- `os.clock()`: the CPU time used by the program, in seconds
+- `os.getenv(name)`: the value of an environment variable, or `nil`
+- `os.remove(path)`: deletes a file; evaluates to `true`, or to `nil` plus an
+  error message
+- `os.exit([code])`: terminates the program at once, with no
+  [defers](#defer)
 
-- [`coroutine.close(co)`](https://www.lua.org/manual/5.4/manual.html#pdf-coroutine.close) - closes a coroutine
-- [`coroutine.create(f)`](https://www.lua.org/manual/5.4/manual.html#pdf-coroutine.create) - creates a new coroutine
-- [`coroutine.isyieldable()`](https://www.lua.org/manual/5.4/manual.html#pdf-coroutine.isyieldable) - checks if the current coroutine can yield
-- [`coroutine.resume(co [, val1, ...])`](https://www.lua.org/manual/5.4/manual.html#pdf-coroutine.resume) - resumes a coroutine
-- [`coroutine.running()`](https://www.lua.org/manual/5.4/manual.html#pdf-coroutine.running) - returns the running coroutine
-- [`coroutine.status(co)`](https://www.lua.org/manual/5.4/manual.html#pdf-coroutine.status) - returns the status of a coroutine
-- [`coroutine.wrap(f)`](https://www.lua.org/manual/5.4/manual.html#pdf-coroutine.wrap) - wraps a function to create a coroutine
-- [`coroutine.yield(...)`](https://www.lua.org/manual/5.4/manual.html#pdf-coroutine.yield) - suspends execution of the coroutine
+## X
 
-### [Modules](https://www.lua.org/manual/5.4/manual.html#6.3)
+The library `X` deals with values structurally, inspecting the contents of
+tables recursively.
 
-Functions for managing Lua modules and packages.
+- `X.tostring(v)`: deep string representation of `v`
+- `X.print(...)`: `print` using `X.tostring` on each argument
+- `X.copy(v)`: deep copy of `v`
+- `X.xin(v, t)`: membership ("in")
+- `X.gte(a, b)`: deep ordering ("sup")
+- `X.eq(a, b)`, `X.neq(a, b)`: deep equality
 
-- [`package.config`](https://www.lua.org/manual/5.4/manual.html#pdf-package.config) - package configuration string
-- [`package.cpath`](https://www.lua.org/manual/5.4/manual.html#pdf-package.cpath) - path for native libraries
-- [`package.loaded`](https://www.lua.org/manual/5.4/manual.html#pdf-package.loaded) - table of loaded modules
-- [`package.loadlib(libname, funcname)`](https://www.lua.org/manual/5.4/manual.html#pdf-package.loadlib) - loads a C library function
-- [`package.path`](https://www.lua.org/manual/5.4/manual.html#pdf-package.path) - path for Lua libraries
-- [`package.preload`](https://www.lua.org/manual/5.4/manual.html#pdf-package.preload) - table of module preloaders
-- [`package.searchers`](https://www.lua.org/manual/5.4/manual.html#pdf-package.searchers) - table of module searcher functions
-- [`package.searchpath(name, path)`](https://www.lua.org/manual/5.4/manual.html#pdf-package.searchpath) - searches for a module
+### Membership
 
-### [String Manipulation](https://www.lua.org/manual/5.4/manual.html#6.4)
+The function `X.xin(a, b)` compares `a` against each key-value `k`-`v`
+resulting from an [iteration](#loop) over `b`.
+If `a` is equal to `v` or is equal to a non-numeric `k`, then the result is
+true.
 
-Functions for working with strings, including pattern matching and formatting.
+Examples:
 
-- [`string.byte(s [, i [, j]])`](https://www.lua.org/manual/5.4/manual.html#pdf-string.byte) - returns byte values of characters
-- [`string.char(...)`](https://www.lua.org/manual/5.4/manual.html#pdf-string.char) - creates a string from byte values
-- [`string.dump(function [, strip])`](https://www.lua.org/manual/5.4/manual.html#pdf-string.dump) - serializes a function
-- [`string.find(s, pattern [, init [, plain]])`](https://www.lua.org/manual/5.4/manual.html#pdf-string.find) - finds a pattern in a string
-- [`string.format(formatstring, ...)`](https://www.lua.org/manual/5.4/manual.html#pdf-string.format) - formats a string
-- [`string.gmatch(s, pattern)`](https://www.lua.org/manual/5.4/manual.html#pdf-string.gmatch) - returns an iterator over matches
-- [`string.gsub(s, pattern, repl [, n])`](https://www.lua.org/manual/5.4/manual.html#pdf-string.gsub) - replaces pattern matches
-- [`string.len(s)`](https://www.lua.org/manual/5.4/manual.html#pdf-string.len) - returns the length of a string
-- [`string.lower(s)`](https://www.lua.org/manual/5.4/manual.html#pdf-string.lower) - converts a string to lowercase
-- [`string.match(s, pattern [, init])`](https://www.lua.org/manual/5.4/manual.html#pdf-string.match) - matches a pattern in a string
-- [`string.pack(fmt, ...)`](https://www.lua.org/manual/5.4/manual.html#pdf-string.pack) - packs values into a binary string
-- [`string.packsize(fmt)`](https://www.lua.org/manual/5.4/manual.html#pdf-string.packsize) - returns the size of packed data
-- [`string.rep(s, n [, sep])`](https://www.lua.org/manual/5.4/manual.html#pdf-string.rep) - repeats a string
-- [`string.reverse(s)`](https://www.lua.org/manual/5.4/manual.html#pdf-string.reverse) - reverses a string
-- [`string.sub(s, i [, j])`](https://www.lua.org/manual/5.4/manual.html#pdf-string.sub) - extracts a substring
-- [`string.unpack(fmt, s [, pos])`](https://www.lua.org/manual/5.4/manual.html#pdf-string.unpack) - unpacks values from a binary string
-- [`string.upper(s)`](https://www.lua.org/manual/5.4/manual.html#pdf-string.upper) - converts a string to uppercase
+```
+X.xin(10, [10,20,30])       ;; true
+X.xin( 1, [10,20,30])       ;; false
+X.xin(:x, [x=10,y=20])      ;; true
+```
 
-### [UTF-8 Support](https://www.lua.org/manual/5.4/manual.html#6.5)
+### Deep Ordering
 
-Functions for handling UTF-8 encoded strings.
+The function `X.gte(a, b)` ("sup") checks if `a` is structurally more general
+than `b`.
+It is especially useful to check containment between two tables, i.e., if
+one table holds all fields and values of the other.
 
-- [`utf8.char(...)`](https://www.lua.org/manual/5.4/manual.html#pdf-utf8.char) - creates a UTF-8 string from codepoints
-- [`utf8.charpattern`](https://www.lua.org/manual/5.4/manual.html#pdf-utf8.charpattern) - pattern to match a single UTF-8 character
-- [`utf8.codes(s)`](https://www.lua.org/manual/5.4/manual.html#pdf-utf8.codes) - returns an iterator over UTF-8 codepoints
-- [`utf8.codepoint(s [, i [, j]])`](https://www.lua.org/manual/5.4/manual.html#pdf-utf8.codepoint) - returns codepoints of characters
-- [`utf8.len(s [, i [, j]])`](https://www.lua.org/manual/5.4/manual.html#pdf-utf8.len) - returns the number of UTF-8 characters
-- [`utf8.offset(s, n [, i])`](https://www.lua.org/manual/5.4/manual.html#pdf-utf8.offset) - returns byte offset of the n-th character
+To check the result of `X.gte(a, b)`, the following tests are made in order:
 
-### [Table Manipulation](https://www.lua.org/manual/5.4/manual.html#6.6)
+1. if `type(a) != type(b)`, then the result is `false` (e.g.,
+   `X.gte(10, nil)`)
+2. if `a == b`, then the result is `true` (e.g., `X.gte(10, 10)`)
+3. if `a` and `b` are strings, then the result is `true` if `a` is a "dot
+   prefix" of `b` (e.g., `X.gte('x', 'x.y')`)
+4. if `a` and `b` are tables, then the result is `true` if every pair `ka=va`
+   in `a` satisfies `X.gte(va, b@(ka))`
+5. otherwise the result is `false` (e.g., `X.gte(10, 20)`)
 
-Functions for working with tables as arrays and sequences.
+Examples:
 
-- [`table.concat(list [, sep [, i [, j]]])`](https://www.lua.org/manual/5.4/manual.html#pdf-table.concat) - concatenates table elements into a string
-- [`table.insert(list, [pos,] value)`](https://www.lua.org/manual/5.4/manual.html#pdf-table.insert) - inserts a value into a table
-- [`table.move(a1, f, e, t [, a2])`](https://www.lua.org/manual/5.4/manual.html#pdf-table.move) - moves elements between tables
-- [`table.pack(...)`](https://www.lua.org/manual/5.4/manual.html#pdf-table.pack) - packs arguments into a table
-- [`table.remove(list [, pos])`](https://www.lua.org/manual/5.4/manual.html#pdf-table.remove) - removes an element from a table
-- [`table.sort(list [, comp])`](https://www.lua.org/manual/5.4/manual.html#pdf-table.sort) - sorts a table in place
-- [`table.unpack(list [, i [, j]])`](https://www.lua.org/manual/5.4/manual.html#pdf-table.unpack) - unpacks a table into values
+```
+X.gte(10, 10)           ;; --> true
+X.gte(10, 20)           ;; --> false (scalars compare by equality)
+X.gte(:x, :x.y)         ;; --> true  (:x supertypes :x.y)
+X.gte([], [1,2,3])      ;; --> true  (looser table supertypes richer)
+X.gte([1,2,3], [])      ;; --> false
+```
 
-### [Mathematical Functions](https://www.lua.org/manual/5.4/manual.html#6.7)
+### Deep Equality
 
-Trigonometric, exponential, logarithmic, and other mathematical operations.
+The functions `X.eq(a, b)` and `X.neq(a, b)` check if their operands have or
+not structural equality.
+Therefore, tables are not only compared by reference, but also by their stored
+values.
 
-- [`math.abs(x)`](https://www.lua.org/manual/5.4/manual.html#pdf-math.abs) - returns the absolute value
-- [`math.acos(x)`](https://www.lua.org/manual/5.4/manual.html#pdf-math.acos) - returns the arc cosine
-- [`math.asin(x)`](https://www.lua.org/manual/5.4/manual.html#pdf-math.asin) - returns the arc sine
-- [`math.atan(y [, x])`](https://www.lua.org/manual/5.4/manual.html#pdf-math.atan) - returns the arc tangent
-- [`math.ceil(x)`](https://www.lua.org/manual/5.4/manual.html#pdf-math.ceil) - rounds up to the nearest integer
-- [`math.cos(x)`](https://www.lua.org/manual/5.4/manual.html#pdf-math.cos) - returns the cosine
-- [`math.deg(x)`](https://www.lua.org/manual/5.4/manual.html#pdf-math.deg) - converts radians to degrees
-- [`math.exp(x)`](https://www.lua.org/manual/5.4/manual.html#pdf-math.exp) - returns e raised to power x
-- [`math.floor(x)`](https://www.lua.org/manual/5.4/manual.html#pdf-math.floor) - rounds down to the nearest integer
-- [`math.fmod(x, y)`](https://www.lua.org/manual/5.4/manual.html#pdf-math.fmod) - returns the remainder of division
-- [`math.huge`](https://www.lua.org/manual/5.4/manual.html#pdf-math.huge) - the value of infinity
-- [`math.log(x [, base])`](https://www.lua.org/manual/5.4/manual.html#pdf-math.log) - returns the logarithm
-- [`math.max(...)`](https://www.lua.org/manual/5.4/manual.html#pdf-math.max) - returns the maximum value
-- [`math.maxinteger`](https://www.lua.org/manual/5.4/manual.html#pdf-math.maxinteger) - the maximum integer
-- [`math.min(...)`](https://www.lua.org/manual/5.4/manual.html#pdf-math.min) - returns the minimum value
-- [`math.mininteger`](https://www.lua.org/manual/5.4/manual.html#pdf-math.mininteger) - the minimum integer
-- [`math.pi`](https://www.lua.org/manual/5.4/manual.html#pdf-math.pi) - the value of pi
-- [`math.rad(x)`](https://www.lua.org/manual/5.4/manual.html#pdf-math.rad) - converts degrees to radians
-- [`math.random([m [, n]])`](https://www.lua.org/manual/5.4/manual.html#pdf-math.random) - returns a random number
-- [`math.randomseed(x)`](https://www.lua.org/manual/5.4/manual.html#pdf-math.randomseed) - sets the random seed
-- [`math.sin(x)`](https://www.lua.org/manual/5.4/manual.html#pdf-math.sin) - returns the sine
-- [`math.sqrt(x)`](https://www.lua.org/manual/5.4/manual.html#pdf-math.sqrt) - returns the square root
-- [`math.tan(x)`](https://www.lua.org/manual/5.4/manual.html#pdf-math.tan) - returns the tangent
-- [`math.tointeger(x)`](https://www.lua.org/manual/5.4/manual.html#pdf-math.tointeger) - converts to integer if possible
-- [`math.type(x)`](https://www.lua.org/manual/5.4/manual.html#pdf-math.type) - returns the type of a number
-- [`math.ult(m, n)`](https://www.lua.org/manual/5.4/manual.html#pdf-math.ult) - unsigned integer less-than comparison
+The result of `X.eq(a, b)` is true if both `X.gte(a, b)` and `X.gte(b, a)`
+are true.
+The function `X.neq` is the negation of `X.eq`.
 
-### [Input and Output Facilities](https://www.lua.org/manual/5.4/manual.html#6.8)
+Examples:
 
-Functions for file and stream I/O operations.
+```
+X.eq([1,2,3], [1,2,3])          ;; --> true
+X.neq(\{}, [])                  ;; --> true (different types)
+X.neq([v=[]], [v=[]])           ;; --> false
+X.eq([@([])=1], [@([])=1])      ;; --> false (keys are not `==`)
+X.eq(\{}, \{})                  ;; --> false (func refs are not `==`)
+```
 
-- [`io.close([file])`](https://www.lua.org/manual/5.4/manual.html#pdf-io.close) - closes a file
-- [`io.flush()`](https://www.lua.org/manual/5.4/manual.html#pdf-io.flush) - flushes the output
-- [`io.input([file])`](https://www.lua.org/manual/5.4/manual.html#pdf-io.input) - sets or gets the input file
-- [`io.lines([filename, ...])`](https://www.lua.org/manual/5.4/manual.html#pdf-io.lines) - returns an iterator over file lines
-- [`io.open(filename, mode)`](https://www.lua.org/manual/5.4/manual.html#pdf-io.open) - opens a file
-- [`io.output([file])`](https://www.lua.org/manual/5.4/manual.html#pdf-io.output) - sets or gets the output file
-- [`io.popen(prog [, mode])`](https://www.lua.org/manual/5.4/manual.html#pdf-io.popen) - opens a process
-- [`io.read(...)`](https://www.lua.org/manual/5.4/manual.html#pdf-io.read) - reads from the default input file
-- [`io.stderr`](https://www.lua.org/manual/5.4/manual.html#pdf-io.stderr) - the standard error file
-- [`io.stdin`](https://www.lua.org/manual/5.4/manual.html#pdf-io.stdin) - the standard input file
-- [`io.stdout`](https://www.lua.org/manual/5.4/manual.html#pdf-io.stdout) - the standard output file
-- [`io.tmpfile()`](https://www.lua.org/manual/5.4/manual.html#pdf-io.tmpfile) - returns a handle for a temporary file
-- [`io.type(obj)`](https://www.lua.org/manual/5.4/manual.html#pdf-io.type) - returns the type of a file object
-- [`io.write(...)`](https://www.lua.org/manual/5.4/manual.html#pdf-io.write) - writes to the default output file
+## Atmos
 
-### [Operating System Facilities](https://www.lua.org/manual/5.4/manual.html#6.9)
-
-Functions for interacting with the operating system.
-
-- [`os.clock()`](https://www.lua.org/manual/5.4/manual.html#pdf-os.clock) - returns CPU time in seconds
-- [`os.date([format [, time]])`](https://www.lua.org/manual/5.4/manual.html#pdf-os.date) - formats a date/time
-- [`os.difftime(t2, t1)`](https://www.lua.org/manual/5.4/manual.html#pdf-os.difftime) - returns the difference between two times
-- [`os.execute([command])`](https://www.lua.org/manual/5.4/manual.html#pdf-os.execute) - executes a system command
-- [`os.exit([code [, close]])`](https://www.lua.org/manual/5.4/manual.html#pdf-os.exit) - terminates the program
-- [`os.getenv(varname)`](https://www.lua.org/manual/5.4/manual.html#pdf-os.getenv) - gets an environment variable
-- [`os.remove(filename)`](https://www.lua.org/manual/5.4/manual.html#pdf-os.remove) - deletes a file
-- [`os.rename(oldname, newname)`](https://www.lua.org/manual/5.4/manual.html#pdf-os.rename) - renames a file
-- [`os.setlocale(locale [, category])`](https://www.lua.org/manual/5.4/manual.html#pdf-os.setlocale) - sets the locale
-- [`os.time([table])`](https://www.lua.org/manual/5.4/manual.html#pdf-os.time) - returns the current time in seconds
-- [`os.tmpname()`](https://www.lua.org/manual/5.4/manual.html#pdf-os.tmpname) - returns a temporary filename
-
-### [The Debug Library](https://www.lua.org/manual/5.4/manual.html#6.10)
-
-Functions for debugging and introspection.
-
-- [`debug.debug()`](https://www.lua.org/manual/5.4/manual.html#pdf-debug.debug) - enters an interactive debugger
-- [`debug.gethook([thread])`](https://www.lua.org/manual/5.4/manual.html#pdf-debug.gethook) - returns hook function and mask
-- [`debug.getinfo([thread,] f [, what])`](https://www.lua.org/manual/5.4/manual.html#pdf-debug.getinfo) - returns information about a function
-- [`debug.getlocal([thread,] f, local)`](https://www.lua.org/manual/5.4/manual.html#pdf-debug.getlocal) - gets a local variable
-- [`debug.getmetatable(v)`](https://www.lua.org/manual/5.4/manual.html#pdf-debug.getmetatable) - gets the metatable bypassing `__metatable`
-- [`debug.getregistry()`](https://www.lua.org/manual/5.4/manual.html#pdf-debug.getregistry) - returns the registry table
-- [`debug.getupvalue(f, up)`](https://www.lua.org/manual/5.4/manual.html#pdf-debug.getupvalue) - gets an upvalue of a function
-- [`debug.getuservalue(u [, n])`](https://www.lua.org/manual/5.4/manual.html#pdf-debug.getuservalue) - gets the user value of a userdata
-- [`debug.sethook([thread,] hook [, mask [, count]])`](https://www.lua.org/manual/5.4/manual.html#pdf-debug.sethook) - sets a debug hook
-- [`debug.setlocal([thread,] level, local, value)`](https://www.lua.org/manual/5.4/manual.html#pdf-debug.setlocal) - sets a local variable
-- [`debug.setmetatable(v, table)`](https://www.lua.org/manual/5.4/manual.html#pdf-debug.setmetatable) - sets the metatable
-- [`debug.setupvalue(f, up, v)`](https://www.lua.org/manual/5.4/manual.html#pdf-debug.setupvalue) - sets an upvalue
-- [`debug.setuservalue(udata, value [, n])`](https://www.lua.org/manual/5.4/manual.html#pdf-debug.setuservalue) - sets the user value of a userdata
-- [`debug.traceback([thread] [, message [, level]])`](https://www.lua.org/manual/5.4/manual.html#pdf-debug.traceback) - returns a stack traceback
-- [`debug.upvalueid(f, up)`](https://www.lua.org/manual/5.4/manual.html#pdf-debug.upvalueid) - gets the unique ID of an upvalue
-- [`debug.upvaluejoin(f1, up1, f2, up2)`](https://www.lua.org/manual/5.4/manual.html#pdf-debug.upvaluejoin) - joins two upvalues
-
-## Atmos Standard Libraries
-
-`TODO`
+- `atmos.status(t)`: the state of the task `t`: `running`, `suspended`, or
+  `dead`
+- `atmos.next()`: the time until the nearest [timer](#await) expires, in
+  microseconds, or `nil` if there are no timers
 
 # SYNTAX
 
@@ -2850,6 +2827,7 @@ Expr  : `do´[TAG]  Block                            ;; explicit block
       | `return´ `(´ Expr* `)´                      ;; return from function
 
       | `set´ Expr* `=´ Expr                        ;; assignment
+      | `set´ Expr OP`=´ Expr                       ;; compound assignment
 
       | `nil´ | `false´ | `true´                    ;; literals
       | TAG | NUM | STR | CLK | NAT
@@ -2872,7 +2850,7 @@ Expr  : `do´[TAG]  Block                            ;; explicit block
       | `(´ Expr+ `)´                               ;; parenthesis
 
       | Expr `.´ ID                                 ;; table field
-      | Expr At                                     ;; index t@(e) t@1 t@i
+      | Expr At                                     ;; index t@(e) t@0 t@i
       | Expr `@´ (`#´ | `+´)                        ;; tip index t@# t@+
 
       | Expr `(´ Expr* `)´                          ;; call
@@ -2916,15 +2894,15 @@ Expr  : `do´[TAG]  Block                            ;; explicit block
             Block { `with´ Block }
       | `watching´ Patt Block                       ;; watching pattern block
 
-      | `thread´ Block                              ;; OS thread
 
 At    : `@´ (`(´ Expr `)´ | NUM | ID)   ;; @-qualifier (index/key/pool/target)
 
 Patt  : Bare | `<´ Full `>´             ;; bare or full pattern
 Bare  : [`:any´|`:all´] Expr [Pred]     ;; bare: one primary + predicate
       | Pred                            ;; base-less predicate
-Full  : Full Pred                       ;; <> combinators (one level)
-      | Full (`&&´|`||´) Full
+Full  : Full Pred                       ;; <> combinators, by precedence
+      | Full `||´ Full
+      | Full `&&´ Full
       | `!´ Full
       | (`:any´|`:all´) Expr
       | Pred
@@ -2937,7 +2915,7 @@ TAG   : :[A-Za-z0-9_\.]+            ;; tag
 NUM   : [0-9][0-9A-Za-z\.]*         ;; number
 STR   : '.*' | ".*"                 ;; string
 CLK   : ([0-9\.]+(us|ms|s|min|h|day))+  ;; duration
-NAT   : `.*`                        ;; native expression
+NAT   : `.*`                        ;; native code
 ```
 
 ## Ambiguities

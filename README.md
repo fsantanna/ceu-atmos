@@ -9,6 +9,9 @@ compiles to C.
 - Stackless tasks with structured, deterministic concurrency.
 - Reference counting, no garbage collector.
 
+The language is described in the [manual](doc/manual.md), and there are
+a few [examples](exs/).
+
 The plan, with the settled decisions and the milestones, is in
 [`.claude/plans/261109-c-backend.md`](.claude/plans/261109-c-backend.md).
 
@@ -82,6 +85,8 @@ src/    compiler: lexer, parser, resolver, coder
 rt/     runtime: values, strings, tables, operations, tasks, stdlib
 rt/atmos.h   C API for generated code, natives, and environments
 tst/    tests
+doc/    manual
+exs/    examples
 ```
 
 ## Differences from the current Atmos
