@@ -1,0 +1,8 @@
+print(math.floor(1.5), math.ceil(1.5), math.abs(-2), math.sqrt(16))
+print(math.pow(2, 10), math.pow(9, 1/2), math.min(3, 1, 2), math.max(3, 1, 2))
+print(math.huge, -math.huge, math.pi > 3.14, math.sin(0), math.cos(0))
+math.randomseed(1)
+val r = math.random()
+val n = math.random(10)
+val m = math.random(5, 6)
+print(r >= 0 && r < 1, n >= 0 && n < 10, m == 5 || m == 6)

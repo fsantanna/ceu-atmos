@@ -1,5 +1,6 @@
 // Standard library.
 
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -13,6 +14,7 @@ AVal atm_g_tonumber;
 AVal atm_g_assert;
 AVal atm_g_X;
 AVal atm_g_atmos;
+AVal atm_g_math;
 
 ///////////////////////////////////////////////////////////////////////////////
 // AUX
@@ -117,6 +119,120 @@ static AStatus std_assert (AFunc* self, int argc, AVal* argv) {
     for (int i=0; i<argc; i++) {
         a_pushc(argv[i]);
     }
+    return A_OK;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// MATH
+///////////////////////////////////////////////////////////////////////////////
+
+// Argument `i` as a number.
+static AStatus argn (int argc, AVal* argv, int i, const char* f, double* n) {
+    AVal v = arg(argc, argv, i);
+    if (v.type != A_NUM) {
+        return a_error("invalid argument to '%s' : expected number : got %s",
+            f, a_typename(v));
+    }
+    *n = v.u.n;
+    return A_OK;
+}
+
+#define MATH1(name, expr)                                               \
+    static AStatus math_##name (AFunc* self, int argc, AVal* argv) {    \
+        (void) self;                                                    \
+        double x;                                                       \
+        if (argn(argc, argv, 0, #name, &x) != A_OK) {                   \
+            return A_ERROR;                                             \
+        }                                                               \
+        a_push(a_num(expr));                                            \
+        return A_OK;                                                    \
+    }
+
+MATH1(floor, floor(x))
+MATH1(ceil,  ceil(x))
+MATH1(abs,   fabs(x))
+MATH1(sqrt,  sqrt(x))
+MATH1(sin,   sin(x))
+MATH1(cos,   cos(x))
+
+// math.pow(x, y)
+static AStatus math_pow (AFunc* self, int argc, AVal* argv) {
+    (void) self;
+    double x, y;
+    if (argn(argc,argv,0,"pow",&x)!=A_OK || argn(argc,argv,1,"pow",&y)!=A_OK) {
+        return A_ERROR;
+    }
+    a_push(a_num(pow(x, y)));
+    return A_OK;
+}
+
+// math.min(...) / math.max(...)
+static AStatus math_minmax (int max, int argc, AVal* argv) {
+    const char* f = max ? "max" : "min";
+    double ret;
+    if (argn(argc, argv, 0, f, &ret) != A_OK) {
+        return A_ERROR;
+    }
+    for (int i=1; i<argc; i++) {
+        double x;
+        if (argn(argc, argv, i, f, &x) != A_OK) {
+            return A_ERROR;
+        }
+        if (max ? x>ret : x<ret) {
+            ret = x;
+        }
+    }
+    a_push(a_num(ret));
+    return A_OK;
+}
+
+static AStatus math_min (AFunc* self, int argc, AVal* argv) {
+    (void) self;
+    return math_minmax(0, argc, argv);
+}
+
+static AStatus math_max (AFunc* self, int argc, AVal* argv) {
+    (void) self;
+    return math_minmax(1, argc, argv);
+}
+
+// math.random(): [0,1)
+// math.random(n): 0..n-1
+// math.random(a, b): a..b
+static AStatus math_random (AFunc* self, int argc, AVal* argv) {
+    (void) self;
+    double r = rand() / (RAND_MAX + 1.0);
+    if (argc == 0) {
+        a_push(a_num(r));
+        return A_OK;
+    }
+    double a = 0;
+    double b;
+    if (argn(argc, argv, 0, "random", &b) != A_OK) {
+        return A_ERROR;
+    }
+    if (argc > 1) {
+        a = b;
+        if (argn(argc, argv, 1, "random", &b) != A_OK) {
+            return A_ERROR;
+        }
+        b = b + 1;
+    }
+    if (b <= a) {
+        return a_error("invalid argument to 'random' : empty interval");
+    }
+    a_push(a_num(a + floor(r * (b - a))));
+    return A_OK;
+}
+
+// math.randomseed(n)
+static AStatus math_randomseed (AFunc* self, int argc, AVal* argv) {
+    (void) self;
+    double n;
+    if (argn(argc, argv, 0, "randomseed", &n) != A_OK) {
+        return A_ERROR;
+    }
+    srand((unsigned) n);
     return A_OK;
 }
 
@@ -321,6 +437,12 @@ static void field (AVal t, const char* name, AFn fn) {
     a_dec(f);
 }
 
+static void konst (AVal t, const char* name, AVal v) {
+    AVal k = a_strz(name);
+    a_tab_set(A_TAB_OF(t), k, v);
+    a_dec(k);
+}
+
 void atm_std_init (void) {
     atm_g_print    = a_func(std_print, 0);
     atm_g_type     = a_func(std_type, 0);
@@ -332,6 +454,21 @@ void atm_std_init (void) {
     field(atm_g_X, "tostring", x_tostring);
     field(atm_g_X, "print",    x_print);
     field(atm_g_X, "copy",     x_copy);
+
+    atm_g_math = a_tab();
+    field(atm_g_math, "floor",      math_floor);
+    field(atm_g_math, "ceil",       math_ceil);
+    field(atm_g_math, "abs",        math_abs);
+    field(atm_g_math, "sqrt",       math_sqrt);
+    field(atm_g_math, "sin",        math_sin);
+    field(atm_g_math, "cos",        math_cos);
+    field(atm_g_math, "pow",        math_pow);
+    field(atm_g_math, "min",        math_min);
+    field(atm_g_math, "max",        math_max);
+    field(atm_g_math, "random",     math_random);
+    field(atm_g_math, "randomseed", math_randomseed);
+    konst(atm_g_math, "huge", a_num(INFINITY));
+    konst(atm_g_math, "pi",   a_num(3.14159265358979323846));
 
     atm_g_atmos = a_tab();
     field(atm_g_atmos, "status", atmos_status);
@@ -346,4 +483,5 @@ void atm_std_quit (void) {
     a_clr(&atm_g_assert);
     a_clr(&atm_g_X);
     a_clr(&atm_g_atmos);
+    a_clr(&atm_g_math);
 }

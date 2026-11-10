@@ -35,6 +35,7 @@ static int   NGLOBALS = 0;
 // Global variables provided by the runtime.
 static const char* BUILTINS[][2] = {
     { "atmos",    "atm_g_atmos"    },
+    { "math",     "atm_g_math"     },
     { "print",    "atm_g_print"    },
     { "type",     "atm_g_type"     },
     { "tostring", "atm_g_tostring" },

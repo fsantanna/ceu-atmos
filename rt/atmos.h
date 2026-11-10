@@ -807,6 +807,7 @@ extern AVal atm_g_tostring;
 extern AVal atm_g_tonumber;
 extern AVal atm_g_assert;
 extern AVal atm_g_X;
+extern AVal atm_g_math;
 
 // Deep string representation: tables as `:Tag [v, k=v]`, with sorted
 // keys (owned). Fails on keys that are neither numbers nor strings.
