@@ -362,7 +362,7 @@ const char* a_typename (AVal v) {
     return "?";
 }
 
-static const char* ARITH[] = { "+", "-", "*", "/", "//", "%", "**" };
+static const char* ARITH[] = { "+", "-", "*", "/", "//", "%" };
 
 AStatus a_arith (AArith op, AVal* dst, AVal a, AVal b) {
     if (a.type!=A_NUM || b.type!=A_NUM) {
@@ -379,7 +379,6 @@ AStatus a_arith (AArith op, AVal* dst, AVal a, AVal b) {
         case A_MUL:  r = x * y;         break;
         case A_DIV:  r = x / y;         break;
         case A_IDIV: r = floor(x / y);  break;
-        case A_POW:  r = pow(x, y);     break;
         case A_MOD:
             // as in Lua: the result has the sign of the divisor
             if (isinf(y)) {

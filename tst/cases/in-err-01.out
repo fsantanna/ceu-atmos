@@ -1,3 +1,0 @@
-==> ERROR:
- v  in-err-01.atm:1 (throw)
-==> invalid operation '?>' : unexpected nil

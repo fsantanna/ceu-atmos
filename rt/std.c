@@ -399,6 +399,31 @@ static AStatus x_copy (AFunc* self, int argc, AVal* argv) {
     return A_OK;
 }
 
+// X.eq(a, b): structural equality
+static AStatus x_eq (AFunc* self, int argc, AVal* argv) {
+    (void) self;
+    a_push(a_bool(a_deq(arg(argc,argv,0), arg(argc,argv,1))));
+    return A_OK;
+}
+
+// X.gte(a, b): `a` is structurally more general than `b`
+static AStatus x_gte (AFunc* self, int argc, AVal* argv) {
+    (void) self;
+    a_push(a_bool(a_gte(arg(argc,argv,0), arg(argc,argv,1))));
+    return A_OK;
+}
+
+// X.xin(v, t): membership
+static AStatus x_xin (AFunc* self, int argc, AVal* argv) {
+    (void) self;
+    AVal ret = a_nil();
+    AStatus st = a_in(&ret, arg(argc,argv,0), arg(argc,argv,1));
+    if (st == A_OK) {
+        a_push(ret);
+    }
+    return st;
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // ATMOS
 ///////////////////////////////////////////////////////////////////////////////
@@ -455,6 +480,9 @@ void atm_std_init (void) {
     field(atm_g_X, "tostring", x_tostring);
     field(atm_g_X, "print",    x_print);
     field(atm_g_X, "copy",     x_copy);
+    field(atm_g_X, "eq",       x_eq);
+    field(atm_g_X, "gte",      x_gte);
+    field(atm_g_X, "xin",      x_xin);
 
     atm_g_math = a_tab();
     field(atm_g_math, "floor",      math_floor);

@@ -1,0 +1,4 @@
+==> ERROR:
+ |  xin-err-01.atm:1 (call)
+ v  xin-err-01.atm:1 (throw)
+==> invalid argument to 'xin' : unexpected nil

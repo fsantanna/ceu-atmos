@@ -59,12 +59,12 @@ int a_is (AVal v, AVal x) {
     return 0;
 }
 
-AStatus a_in (AVal* dst, AVal v, AVal t, int neg) {
+AStatus a_in (AVal* dst, AVal v, AVal t) {
     int ret = 0;
     if (t.type == A_TASKS) {
         // the tasks of a pool
         AVal x = a_tasks_tab(t);
-        AStatus st = a_in(dst, v, x, neg);
+        AStatus st = a_in(dst, v, x);
         a_dec(x);
         return st;
     }
@@ -81,10 +81,10 @@ AStatus a_in (AVal* dst, AVal v, AVal t, int neg) {
             ret = a_gte(v, a_num(i));
         }
     } else {
-        return a_error("invalid operation '%s' : unexpected %s",
-            neg ? "!>" : "?>", a_typename(t));
+        return a_error("invalid argument to 'xin' : unexpected %s",
+            a_typename(t));
     }
-    a_set(dst, a_bool(neg ? !ret : ret));
+    a_set(dst, a_bool(ret));
     return A_OK;
 }
 

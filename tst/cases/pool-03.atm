@@ -16,6 +16,6 @@ loop _, t in ts {
 }
 print(sum)
 val a = spawn @ts T(40)
-print(a ?> ts, 99 ?> ts, #(ts ++ ts))
+print(X.xin(a, ts), X.xin(99, ts), #(ts ++ ts))
 abort(ts)
 print(#ts)

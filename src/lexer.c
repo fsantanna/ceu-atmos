@@ -23,15 +23,13 @@ static const char* OPCS = "+-*/%><=|&?!#~";
 static const char* OPS[] = {
     "#",
     "=", "=>",
-    "==", "!=", "===", "=!=", "=>=", "=<=",
+    "==", "!=",
     ">", "<", ">=", "<=",
     "||", "&&",
-    "+", "-", "*", "**", "/", "//", "%",
+    "+", "-", "*", "/", "//", "%",
     "!",
     "++",
-    "~~", "!~",
     "??", "!?",
-    "?>", "!>",
     "->", "-->", "<-", "<--",
     NULL
 };
@@ -298,9 +296,6 @@ int lexer_token (Tk* tk) {
                 m--;
             }
             *tk = mk(TK_OP, SRC+i0, m, LIN, SEP);
-            if (!strcmp(tk->str,"~~") || !strcmp(tk->str,"!~")) {
-                err(*tk, "operator not implemented");
-            }
             return 1;
 
         // tags:  :X  :a.b.c

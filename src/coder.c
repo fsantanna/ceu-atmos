@@ -529,7 +529,7 @@ static Opnd gen_bin (Unit* u, Expr* e) {
         { "+",  "a_add",  "" }, { "-",  "a_sub", ""  },
         { "*",  "a_mul",  "" }, { "/",  "a_div", ""  },
         { "//", "a_idiv", "" }, { "%",  "a_mod", ""  },
-        { "**", "a_pow",  "" }, { "++", "a_cat", ""  },
+        { "++", "a_cat",  "" },
         { "<",  "a_lt",   "" }, { "<=", "a_le",  ""  },
         { ">",  "a_lt",  "x" }, { ">=", "a_le",  "x" },
         { NULL, NULL, NULL }
@@ -538,8 +538,6 @@ static Opnd gen_bin (Unit* u, Expr* e) {
     static const char* PREDS[][4] = {
         { "==",  "a_eq",  "",  ""  }, { "!=",  "a_eq",  "!", ""  },
         { "??",  "a_is",  "",  ""  }, { "!?",  "a_is",  "!", ""  },
-        { "===", "a_deq", "",  ""  }, { "=!=", "a_deq", "!", ""  },
-        { "=>=", "a_gte", "",  ""  }, { "=<=", "a_gte", "",  "x" },
         { NULL, NULL, NULL, NULL }
     };
     const char* op = e->tk.str;
@@ -569,10 +567,6 @@ static Opnd gen_bin (Unit* u, Expr* e) {
                 OPS[i][1], d.c, swap ? y.c : x.c, swap ? x.c : y.c);
             done = 1;
         }
-    }
-    if (!strcmp(op,"?>") || !strcmp(op,"!>")) {
-        out_try(u, "a_in(&%s, %s, %s, %d)", d.c, x.c, y.c, op[0]=='!');
-        done = 1;
     }
     if (!done) {
         err(e->tk, "operator not implemented");

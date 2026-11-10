@@ -4,6 +4,6 @@ pin ys = tasks()
 val x = spawn @xs T()
 val y = spawn @ys T()
 val ts = xs ++ ys
-print(#ts, x ?> ts, y ?> ts, x ?> ys)
+print(#ts, X.xin(x, ts), X.xin(y, ts), X.xin(x, ys))
 val both = [1] ++ xs
 print(#both, both@1 == x)

@@ -684,7 +684,7 @@ double a_clock_next (void);
 ///////////////////////////////////////////////////////////////////////////////
 
 typedef enum {
-    A_ADD, A_SUB, A_MUL, A_DIV, A_IDIV, A_MOD, A_POW
+    A_ADD, A_SUB, A_MUL, A_DIV, A_IDIV, A_MOD
 } AArith;
 
 // Slow path of arithmetic: computes or raises.
@@ -710,10 +710,6 @@ static inline AStatus a_idiv (AVal* dst, AVal a, AVal b) {
 
 static inline AStatus a_mod (AVal* dst, AVal a, AVal b) {
     return a_arith(A_MOD, dst, a, b);
-}
-
-static inline AStatus a_pow (AVal* dst, AVal a, AVal b) {
-    return a_arith(A_POW, dst, a, b);
 }
 
 // a == b: by value for nil, booleans, and numbers; by reference for
@@ -759,16 +755,21 @@ AStatus a_cat (AVal* dst, AVal a, AVal b);
 // of `v` or of its tag.
 int a_is (AVal v, AVal x);
 
-// a =>= b: `a` is structurally more general than `b`.
+// X.gte(a, b): `a` is structurally more general than `b`.
+//  - equal values
+//  - strings: `a` is a dot prefix of `b`
+//  - tables: every field of `a` is more general than the same field
+//    of `b`
 int a_gte (AVal a, AVal b);
 
-// a === b
+// X.eq(a, b): structural equality.
 static inline int a_deq (AVal a, AVal b) {
     return a_gte(a, b) && a_gte(b, a);
 }
 
-// v ?> t (or v !> t, if `neg`)
-AStatus a_in (AVal* dst, AVal v, AVal t, int neg);
+// X.xin(v, t): `v` is a value or a non-numeric key of a table, a task
+// of a pool, or a number in a range.
+AStatus a_in (AVal* dst, AVal v, AVal t);
 
 // Advances an iteration, with the cursor in `pos` (initially nil):
 //  - table: its pairs, array part first
