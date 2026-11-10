@@ -1,0 +1,11 @@
+        spawn (task () {
+            val v = await(true)
+            X.print(v@0)
+            await(false)
+        }) (nil)
+        do {
+            val e = []
+            emit(:t [e])
+        }
+        print(:ok)
+    

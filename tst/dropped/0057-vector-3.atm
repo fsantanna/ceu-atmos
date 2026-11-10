@@ -1,8 +1,0 @@
-        val t = []
-        val x = t
-        print(#x)
-        set t@(#t+1) = 1
-        print(#x)
-        set t@(#t) = nil
-        print(#x)
-    

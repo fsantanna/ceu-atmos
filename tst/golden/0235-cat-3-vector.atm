@@ -1,0 +1,7 @@
+        val x = [1,2,3]
+        val t = []
+        set t@(#t) = 4
+        set t@(#t) = 5
+        set t@(#t-1) = nil
+        X.print(x ++ t ++ [5,6,7])
+    

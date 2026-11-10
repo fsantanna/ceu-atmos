@@ -1,0 +1,9 @@
+        val T = task (v) {
+            val x = await(true)
+            X.print(x@0)
+        }
+        spawn T(10)
+        (func () {
+            emit :t [[]]
+        }) ()
+    

@@ -1,5 +1,0 @@
-        val t = task () {
-        }
-        var co = if true => spawn t() => nil
-        print(co)
-    

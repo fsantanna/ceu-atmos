@@ -1,0 +1,9 @@
+        task tsk () {
+            var e = await until (func (e) { (e && (e.tag==:X) && (e@(0)==10), e) })
+            print(e.tag, e@(0))
+        }
+        spawn tsk()
+        emit :X [99]
+        emit :X [10]
+        emit :X [99]
+    

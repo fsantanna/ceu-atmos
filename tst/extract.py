@@ -16,6 +16,10 @@
 #
 # Equivalent means equal after the differences in the error traces of
 # the two implementations are set aside.
+#
+# Before it runs, a case may be adapted to this language according to
+# `tst/adapt.py`. The adapted cases are listed in
+# `tst/golden/ADAPTED.md`.
 
 import os
 import re
@@ -23,6 +27,8 @@ import subprocess
 import sys
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
+
+from adapt import adapt
 
 HERE  = os.path.dirname(os.path.abspath(__file__))
 ATMOS = os.path.join(HERE, '..', 'atmos')
@@ -344,6 +350,7 @@ DESIGN = [
     (r'\b(string|table|io|os)\s*\.',     'Lua library'),
     (r'\btrim\b',                       'global of the test harness'),
     (r'\bxtask\s*\(',                   'xtask constructor'),
+    (r'\batmos\s*\.\s*(stop|gc)\b',     'scheduler API of lua-atmos'),
     (r'\b(thread|async)\b',             'thread or async'),
     (r'\bS\s*\.',                       'streams'),
     (r'\*\*|\?>|!>|===|=!=|=>=|=<=',    'operator that became a function'),
@@ -399,10 +406,28 @@ def main ():
             c['file'] = f
             all.append(c)
 
+    for i, c in enumerate(all):
+        c['num'] = '%04d' % (i+1)
+
     def one (c):
         c['flags'] = ['-t'] if c['test'] else []
-        c['out'] = None if c['src'] is None else run(c['src'], 'anon', c['flags'])
+        c['how'] = c['acc'] = None
+        if c['src'] is None:
+            c['out'] = None
+            c['why'] = verdict(c, None)
+            return
+        # the reference source is kept for a case that is dropped
+        ref = c['src']
+        c['src'], c['how'], c['acc'] = adapt(c['num'], ref)
+        c['out'] = run(c['src'], 'anon', c['flags'])
         c['why'] = verdict(c, c['out'])
+        if c['why'] is not None and c['acc'] is not None and \
+           c['why'] not in ('timeout', 'sanitizer'):
+            c['why'] = None
+        else:
+            c['acc'] = None
+        if c['why'] is not None:
+            c['src'] = ref
     with ThreadPoolExecutor(workers) as ex:
         list(ex.map(one, all))
 
@@ -411,6 +436,7 @@ def main ():
     os.makedirs(golden,  exist_ok=True)
     os.makedirs(dropped, exist_ok=True)
     index = []
+    notes = []
     n = { None: 0 }
     kept = set(f[:4] for f in os.listdir(golden) if f.endswith('.atm'))
     for i, c in enumerate(all):
@@ -427,6 +453,9 @@ def main ():
             open(os.path.join(golden, name+'.out'), 'w').write(out.rstrip('\n') + '\n')
             if c['flags']:
                 open(os.path.join(golden, name+'.flags'), 'w').write(' '.join(c['flags']) + '\n')
+            if c['how'] or c['acc']:
+                notes.append('| `%s` | %s | %s |' %
+                    (name, c['how'] or '', c['acc'] or ''))
         else:
             open(os.path.join(dropped, name+'.atm'), 'w').write(src)
             exp = [e for _,e in c['exact']] + c['find']
@@ -442,7 +471,18 @@ def main ():
         f.write('| Case | Origin | Reason |\n|---|---|---|\n')
         f.write('\n'.join(index) + '\n')
 
+    with open(os.path.join(golden, 'ADAPTED.md'), 'w') as f:
+        f.write('# Adapted cases\n\n')
+        f.write('Cases of the reference suite that were adapted to this\n')
+        f.write('language, according to `tst/adapt.py`.\n\n')
+        f.write('- Rewritten: the source changed, and the output is the one\n')
+        f.write('  the reference expects.\n')
+        f.write('- Accepted: the output differs from the reference by design.\n\n')
+        f.write('| Case | Rewritten | Accepted |\n|---|---|---|\n')
+        f.write('\n'.join(notes) + '\n')
+
     print('cases   %d' % len(all))
+    print('adapted %d' % len(notes))
     print('golden  %d' % n[None])
     for k, v in sorted(n.items(), key=lambda kv: -kv[1]):
         if k is not None:

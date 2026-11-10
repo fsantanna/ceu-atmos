@@ -1,0 +1,7 @@
+        val t = []
+        print(#t)
+        set t@(#t) = 10
+        print(#t)
+        set t@(#t-1) = nil
+        print(#t)
+    

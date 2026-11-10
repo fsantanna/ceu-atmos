@@ -1,0 +1,23 @@
+        var T = task (n) {
+            set pub = n
+            await((tostring(n)))
+        }
+        pin ts = tasks(2)
+        spawn @ts T(1)
+        spawn @ts T(2)
+        loop _,t in ts {
+            print(:t, t.pub)
+            val ok1 = spawn @ts T(99)  ;; full: fails
+            emit(:2)                    ;; kills T(2), not removed yet
+            val ok2 = spawn @ts T(99)  ;; dead slot is free: passes
+            print(ok1 != nil, ok2 != nil)
+            break()                     ;; T(99) would be visited
+        }
+        loop _,t in ts {                ;; dead T(2) still in ts
+            print(:t, t.pub)
+        }
+                              ;; removes dead T(2)
+        loop _,t in ts {
+            print(:t, t.pub)
+        }
+    

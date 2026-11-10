@@ -1,0 +1,7 @@
+        val t = []
+        set t@(#t) = 1
+        set t@(#t) = 2
+        set t@(#t) = 3
+        print(t@(1))
+        X.print(t)
+    

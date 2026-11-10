@@ -1,4 +1,0 @@
-==> ERROR:
-|  [C]:-1 (loop)
-v  [string "anon.atm"]:2 (throw)
-==> attempt to call a table value (local 'T')

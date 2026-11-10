@@ -1,0 +1,7 @@
+        print(X.gte(10, 10))
+        print(X.gte(10, 20))
+        print(X.gte(:x, :x.y))
+        print(X.gte(:x.y, :x))
+        print(X.gte([], [1,2,3]))
+        print(X.gte([1,2,3], []))
+    

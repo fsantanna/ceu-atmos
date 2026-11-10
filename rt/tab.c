@@ -282,9 +282,14 @@ AStatus a_index (AVal* dst, AVal t, AVal k) {
         a_cpy(dst, A_TASK_OF(t)->pub);
         return A_OK;
     }
-    // the value a task terminated with
-    if (t.type==A_XTASK && k.type==A_STR && !strcmp(A_STR_OF(k)->s,"ret")) {
-        a_cpy(dst, A_TASK_OF(t)->ret);
+    // the value a task terminated with; it has no other fields, but
+    // it is often inspected as an event, like a table
+    if (t.type == A_XTASK) {
+        if (k.type==A_STR && !strcmp(A_STR_OF(k)->s,"ret")) {
+            a_cpy(dst, A_TASK_OF(t)->ret);
+        } else {
+            a_clr(dst);
+        }
         return A_OK;
     }
     if (t.type != A_TAB) {

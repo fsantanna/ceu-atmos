@@ -66,8 +66,12 @@ make test
 - `tst/rt/`: unit tests of the runtime, in C.
 - `tst/lex/`, `tst/ast/`: lexer and parser golden cases.
 - `tst/golden/`: the cases of the reference implementation that this
-  compiler reproduces, extracted by `tst/extract.py`. Those it does
-  not are in `tst/dropped/`, with the reasons in `INDEX.md`.
+  compiler reproduces, extracted by `tst/extract.py`.
+    - Some are adapted to this language (base 0, operators that
+      became functions), as `tst/adapt.py` tells. `ADAPTED.md` lists
+      them.
+    - Those left out are in `tst/dropped/`, with the reasons in
+      `INDEX.md`.
 - `tst/cases/`: golden programs, built with the address sanitizer
   (leaks included).
 

@@ -1,6 +1,0 @@
-        val t = []
-        print(#t)
-        set t@(#t+1) = 10
-        print(t@1)
-        print(#t)
-    

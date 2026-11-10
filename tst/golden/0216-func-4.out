@@ -1,0 +1,4 @@
+==> ERROR:
+ |  0216-func-4.atm:6 (call)
+ v  0216-func-4.atm:3 (throw)
+==> invalid operation '+' : expected number : got nil

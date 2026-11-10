@@ -1,0 +1,13 @@
+        val S = task () {
+            val e = await(:X)
+            print(e@0 ?? :xtask)
+            print((e@0).pub)
+        }
+        val T = task () {
+            set pub = 10
+            emit @(:global) (:X [task])
+            await(false)
+        }
+        spawn S()
+        spawn T()
+    

@@ -1,0 +1,16 @@
+        var T = task () {
+            val v = await(true)
+            X.print(v@0)
+        }
+        pin t = spawn T()
+        do {
+            val a
+            do {
+                val b
+                do {
+                    var e = []
+                    emit(:t [e])
+                }
+            }
+        }
+    

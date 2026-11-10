@@ -1,0 +1,6 @@
+        spawn {
+            val e = await(true)
+            print(e.tag, e@(0))
+        }
+        emit :10 [:20]
+    

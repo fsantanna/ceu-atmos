@@ -1,0 +1,5 @@
+        print([]  ==  [])
+        print(X.eq([1], [1]))
+        print([1] !=  [1])
+        print(X.neq([], []))
+    

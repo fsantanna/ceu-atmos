@@ -1,0 +1,13 @@
+;; a task reads as nil in any field but `pub` and `ret`
+task T () { await(:X) ; 10 }
+pin t = spawn T()
+spawn {
+    ;; the termination of `t` is also an event
+    val e = await until (\{ (type(it) != 'string') && it && (it.tag == :Y) })
+    print(:got, e.tag)
+}
+print(t.x, t@0, t.tag, t.pub, t.ret)
+emit(:X)
+print(t.ret)
+emit(:Y [])
+print(catch true { set t.x = 1 })

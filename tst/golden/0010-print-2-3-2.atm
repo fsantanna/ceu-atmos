@@ -1,0 +1,1 @@
+print(math.pow(math.pow(2,3), 2))

@@ -1,0 +1,3 @@
+==> ERROR:
+ v  0262-spawn-neg-direct-call-proto-fails.atm:2 (throw)
+==> invalid call : expected function : got task
