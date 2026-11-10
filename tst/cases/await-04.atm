@@ -5,7 +5,7 @@ task T (v) {
 spawn (task () {
     val v, t = await T(10)
     print(v, t ?? :xtask)
-    print(await T(1))
+    print((await T(1)))
 })()
 emit(:go)
 emit(:go)
