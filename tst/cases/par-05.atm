@@ -1,0 +1,15 @@
+spawn {
+    par :any {
+        defer { print(:a_abort) }
+        await(false)
+    } with {
+        defer { print(:b_end) }
+        await(:X)
+        print(:b)
+    } with {
+        defer { print(:c_abort) }
+        await(false)
+    }
+    print(:after)
+}
+emit(:X)

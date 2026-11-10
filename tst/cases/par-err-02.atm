@@ -1,0 +1,11 @@
+spawn {
+    par :all {
+        await(:X)
+        throw(:E, 1)
+    } with {
+        defer { print(:other) }
+        await(false)
+    }
+}
+emit(:X)
+print(:no)

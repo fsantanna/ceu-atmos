@@ -1,0 +1,23 @@
+spawn {
+    watching <:X || :Y> {
+        await(:Z)
+        print(:no)
+    }
+    print(:ok)
+}
+print(:antes)
+emit(:Y)
+print(:depois)
+spawn {
+    loop on <:A || :B> {
+        print(:tick)
+    }
+}
+emit(:A)
+emit(:B)
+emit(:A)
+spawn {
+    par :any { await <:X || :Y> } with { await(:Z) }
+    print(:ok2)
+}
+emit(:Y)

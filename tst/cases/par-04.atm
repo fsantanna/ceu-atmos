@@ -1,0 +1,13 @@
+spawn {
+    val x,y = par :all {
+        await :X
+    } with {
+        await :Y
+    }
+    print(x, y)
+    val a, b, c = par :all { 1 } with { await(:Z) ; (2, 9) } with { 3 }
+    print(a, b, c)
+}
+emit(:Y)
+emit(:X)
+emit(:Z)

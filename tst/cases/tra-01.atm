@@ -1,0 +1,17 @@
+print(:1)
+do {
+    print(:2)
+    spawn {
+        defer {
+            print(:defer)
+        }
+        await(true)
+    }
+    print(:3)
+}
+print(:4)
+spawn {
+    val e = await(:X)
+    print(:got, e)
+}
+emit(:X)

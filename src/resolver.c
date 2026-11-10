@@ -253,9 +253,6 @@ static void hoist (Expr* e) {
         case E_PAR:
             hoist_list(&e->u.par.blks);
             break;
-        case E_WATCHING:
-            hoist(e->u.watching.blk);
-            break;
         default:
             break;
     }
@@ -450,9 +447,6 @@ static void res (Expr* e) {
             break;
 
         case E_LOOP:
-            if (e->u.loop.on != NULL) {
-                err(e->tk, "loop on : not implemented");
-            }
             res(e->u.loop.itr);
             scope_push();
             e->vars = xalloc(e->u.loop.n * sizeof(Var*));
@@ -495,10 +489,20 @@ static void res (Expr* e) {
             break;
 
         case E_SPAWN_BLK:
+            // a transparent block shares the frame of its task
+            chk_await(e->tk, "spawn");
+            res_block(e->u.sblk.blk);
+            break;
+
+        case E_PAR:
+            chk_await(e->tk, "par");
+            for (int i=0; i<e->u.par.blks.n; i++) {
+                res_block(e->u.par.blks.v[i]);
+            }
+            break;
+
         case E_TOGGLE:
         case E_TOGGLE_ON:
-        case E_PAR:
-        case E_WATCHING:
             err(e->tk, "tasks : not implemented");
             break;
 

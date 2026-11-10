@@ -1,0 +1,6 @@
+catch :z {
+    spawn {
+        throw(:x)
+    }
+}
+print(10)

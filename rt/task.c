@@ -6,6 +6,7 @@
 #include "atmos.h"
 
 ATask* a_cur = NULL;
+void*  a_join_key = NULL;
 
 // Root of the task tree.
 static ATasks ROOT;
@@ -461,14 +462,22 @@ static void node_trav (ANode* n, int inc) {
     }
 }
 
+// Releases the frame of a task that terminated.
+static void frame_dec (ATask* t) {
+    AFrame* f = t->frame;
+    t->frame = NULL;
+    t->L = NULL;
+    if (f!=NULL && --f->rc==0) {
+        a_clrs(f->L, f->n);
+        free(f);
+    }
+}
+
 void a_node_free (ANode* n) {
     if (n->hdr.type == A_XTASK) {
         ATask* t = (ATask*) n;
         patt_free(t->awt);
-        if (t->L != NULL) {
-            a_clrs(t->L, t->proto->task->nslots);
-            free(t->L);
-        }
+        frame_dec(t);
         if (t->proto != NULL) {
             a_dec(a_obj(&t->proto->hdr));
         }
@@ -518,10 +527,9 @@ static AStatus task_end (ATask* t, AStatus st) {
     }
     node_trav(&t->node, -1);
 
-    // the frame goes, the header stays
-    a_clrs(t->L, t->proto->task->nslots);
-    free(t->L);
-    t->L = NULL;
+    // the frame goes with the last task that shares it; the header
+    // stays
+    frame_dec(t);
     a_dec(a_obj(&t->proto->hdr));
     t->proto = NULL;
 
@@ -553,7 +561,7 @@ static AStatus task_resume (ATask* t, AKind k) {
     a_cur = t;
     t->status = T_RUNNING;
     int lin = a_lin;
-    AStatus st = t->proto->task->resume(t, k);
+    AStatus st = t->desc->resume(t, k);
     a_lin = lin;
     a_cur = prev;
     if (st == A_AWAIT) {
@@ -723,9 +731,13 @@ static ATask* task_new (AFunc* f, ANode* up, int base) {
     const AProto* p = f->task;
     ATask* t = calloc(1, sizeof(ATask));
     node_init(&t->node, A_XTASK);
+    t->desc  = p;
     t->proto = f;
     a_inc(a_obj(&f->hdr));
-    t->L = calloc(p->nslots, sizeof(AVal));
+    t->frame = calloc(1, sizeof(AFrame) + p->nslots*sizeof(AVal));
+    t->frame->rc = 1;
+    t->frame->n  = p->nslots;
+    t->L = t->frame->L;
     t->status = T_RUNNING;
 
     // parameters, then a table with the extra arguments
@@ -772,6 +784,22 @@ AStatus a_spawn (AVal* dst, AVal proto, AVal pool, int base) {
         t->node.hdr.pinned = 1;
         t->pool = A_TASKS_OF(pool);
     }
+    a_cpy(dst, a_obj(&t->node.hdr));
+    return chk_aborted(task_resume(t, R_START));
+}
+
+AStatus a_spawn_tra (AVal* dst, ATask* owner, const AProto* p) {
+    ATask* t = calloc(1, sizeof(ATask));
+    node_init(&t->node, A_XTASK);
+    t->tra   = 1;
+    t->desc  = p;
+    t->proto = owner->proto;
+    a_inc(a_obj(&t->proto->hdr));
+    t->frame = owner->frame;
+    t->frame->rc++;
+    t->L = owner->L;
+    t->status = T_RUNNING;
+    node_add(&owner->node, &t->node);
     a_cpy(dst, a_obj(&t->node.hdr));
     return chk_aborted(task_resume(t, R_START));
 }

@@ -1,0 +1,14 @@
+spawn {
+    par {
+        loop on :tick {
+            print "tick A"
+        }
+    } with {
+        loop on :tick {
+            print "tick B"
+        }
+    }
+}
+emit(:tick)
+emit(:tick)
+print "end"

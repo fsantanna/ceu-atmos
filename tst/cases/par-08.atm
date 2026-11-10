@@ -1,0 +1,19 @@
+spawn {
+    val r = watching :X {
+        par :any {
+            await(:Y)
+            :inner_y
+        } with {
+            await(:Z)
+            :inner_z
+        }
+    }
+    print(r)
+    val s = watching :X {
+        await(:W)
+        :body
+    }
+    X.print(s)
+}
+emit(:Z)
+emit(:X [1])

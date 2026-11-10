@@ -1,0 +1,22 @@
+spawn {
+    loop e on :X {
+        print(e.v)
+    }
+}
+emit(:X [v=10])
+emit(:X [v=20])
+spawn {
+    val n = loop i on :T {
+        until(i.n > 1, i.n)
+    }
+    print(:n, n)
+}
+emit(:T [n=1])
+emit(:T [n=5])
+spawn {
+    watching :stop {
+        emit(:stop)
+        print(:no)
+    }
+    print(:stopped)
+}

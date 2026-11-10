@@ -1,0 +1,23 @@
+task T (v) {
+    await(:go)
+    v
+}
+spawn {
+    val a, b = par :all { await T(1) } with { (await T(2)) }
+    print(a, b)
+}
+emit(:go)
+spawn {
+    par :any {
+        await T(3)
+    } with {
+        loop {
+            await(:tick)
+            print(:t)
+        }
+    }
+    print(:done)
+}
+emit(:tick)
+emit(:go)
+emit(:tick)

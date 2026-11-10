@@ -1,0 +1,18 @@
+spawn {
+    watching :done {
+        par {
+            loop on :tick {
+                print "tick A"
+            }
+        } with {
+            loop on :tick {
+                print "tick B"
+            }
+        }
+    }
+    print "done"
+}
+emit(:tick)
+emit(:tick)
+emit(:done)
+print "end"

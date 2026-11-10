@@ -1,4 +1,4 @@
-(watching :done { (call f) })
-(watching (|| :X :Y) { })
-(watching 1s { })
-(watching (spawn T) { })
+(par :any { (await :done) } { (call f) })
+(par :any { (await (|| :X :Y)) } { })
+(par :any { (await 1s) } { })
+(par :any { (await (spawn T)) } { })

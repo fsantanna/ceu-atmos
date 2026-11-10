@@ -1,0 +1,14 @@
+spawn {
+    val v = par :any {
+        await :Y
+        :y
+    } with {
+        await :X
+        print(":X occurred first")
+        :ok
+    }
+    print(v)
+    val a, b = par :any { (1, 2) } with { print(:no) }
+    print(a, b)
+}
+emit(:X)

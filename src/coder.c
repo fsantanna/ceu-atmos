@@ -52,6 +52,8 @@ typedef struct Unit {
     int npar;
     // task: resumable, with the slots in its frame
     int task;
+    // transparent block: shares the slots of the unit of its task
+    struct Unit* root;
     // number of resumption points
     int npcs;
     // number of slots in `L`
@@ -110,6 +112,15 @@ static void out_try (Unit* u, const char* fmt, ...) {
     vsnprintf(call, sizeof(call), fmt, ap);
     va_end(ap);
     out(u, "if ((st = %s) != A_OK) goto CL_%d;", call, u->cleanup);
+}
+
+// Slot counter of a unit.
+static int* nslots (Unit* u) {
+    return (u->root != NULL) ? &u->root->nslots : &u->nslots;
+}
+
+static int slot_new (Unit* u) {
+    return (*nslots(u))++;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -242,7 +253,7 @@ typedef struct Opnd {
 
 static Opnd opnd_tmp (Unit* u) {
     Opnd o;
-    o.tmp = u->nslots++;
+    o.tmp = slot_new(u);
     o.c   = xfmt("L[%d]", o.tmp);
     return o;
 }
@@ -374,7 +385,7 @@ static const char* var_raw (Unit* u, Var* v) {
         return xfmt("G%d_%s", v->id, v->tk.str);
     } else if (v->proto == u->proto) {
         if (v->slot < 0) {
-            v->slot = u->nslots++;
+            v->slot = slot_new(u);
         }
         return xfmt("L[%d]", v->slot);
     } else {
@@ -420,6 +431,7 @@ static int is_multi (Expr* e) {
         case E_CATCH:
         case E_WHERE:
         case E_AWAIT:
+        case E_PAR:
             return 1;
         default:
             return 0;
@@ -644,6 +656,7 @@ static Opnd gen_index (Unit* u, Expr* e) {
 //  - return: the body of a lambda expanded in place
 //  - error: the body of a catch, which only diverts to its label
 //  - escape: a `do :X` block, if the tag matches constant `esck`
+//  - join: a `par :any`, identified by slot `joink`
 typedef struct Hnd {
     int brk;
     Dst brkd;
@@ -653,6 +666,9 @@ typedef struct Hnd {
     int esc;
     int esck;
     Dst escd;
+    int join;
+    int joink;
+    Dst joind;
 } Hnd;
 
 static Hnd hnd_none (void) {
@@ -661,41 +677,45 @@ static Hnd hnd_none (void) {
     return h;
 }
 
-static void gen_block_x (Unit* u, List* es, Dst d, Hnd h) {
-    int up = u->cleanup;
-    int lo = u->nslots;
-    u->cleanup = ++u->nlabels;
-    int cl = u->cleanup;
+// An open block: its cleanup label, first slot, and what it suspends
+// of the enclosing block.
+typedef struct Blk {
+    int up;
+    int lo;
+    int cl;
+    Defer* defs;
+    int ndefs;
+} Blk;
 
-    Defer* defs  = u->defs;
-    int    ndefs = u->ndefs;
+static Blk blk_open (Unit* u) {
+    Blk b;
+    b.up = u->cleanup;
+    b.lo = *nslots(u);
+    b.cl = ++u->nlabels;
+    b.defs  = u->defs;
+    b.ndefs = u->ndefs;
+    u->cleanup = b.cl;
     u->defs  = NULL;
     u->ndefs = 0;
-
     out(u, "{");
     u->ind++;
-    for (int i=0; i<es->n; i++) {
-        // C diagnostics and debuggers point to the source line
-        out0(u, "#line %d %s", es->v[i]->tk.lin,
-            quote(FILENAME, strlen(FILENAME)));
-        out(u, "a_lin = %d;", es->v[i]->tk.lin);
-        gen(u, es->v[i], (i == es->n-1) ? d : dst_none());
-    }
-    if (es->n == 0) {
-        store_void(u, d);
-    }
+    return b;
+}
+
+// Closes a block: runs its finalizers, releases its slots, and then
+// handles or propagates a pending exit.
+static void blk_close (Unit* u, Blk b, Hnd h) {
     u->ind--;
-    out0(u, "CL_%d:", cl);
+    out0(u, "CL_%d:", b.cl);
     u->ind++;
 
-    // defers that were reached run in reverse order, whatever the
-    // exit. The pending exit is set aside meanwhile, and replaced if
-    // a defer exits itself.
+    // pins are aborted and defers that were reached run, in reverse
+    // order, whatever the exit. The pending exit is set aside
+    // meanwhile, and replaced if a defer exits itself.
     Defer* mine = u->defs;
     int   nmine = u->ndefs;
     for (int i=nmine-1; i>=0; i--) {
         if (mine[i].pin != NULL) {
-            // aborts the pinned task or pool
             out(u, "st = a_pin_end(&%s, st);", mine[i].pin);
             continue;
         }
@@ -724,12 +744,12 @@ static void gen_block_x (Unit* u, List* es, Dst d, Hnd h) {
         u->ind--;
         out(u, "}");
     }
-    u->cleanup = cl;
-    u->defs  = defs;
-    u->ndefs = ndefs;
+    u->cleanup = b.cl;
+    u->defs  = b.defs;
+    u->ndefs = b.ndefs;
 
-    if (u->nslots > lo) {
-        out(u, "a_clrs(&L[%d], %d);", lo, u->nslots-lo);
+    if (*nslots(u) > b.lo) {
+        out(u, "a_clrs(&L[%d], %d);", b.lo, *nslots(u)-b.lo);
     }
     if (h.brk > 0) {
         out(u, "if (st == A_BREAK) {");
@@ -762,17 +782,42 @@ static void gen_block_x (Unit* u, List* es, Dst d, Hnd h) {
         u->ind--;
         out(u, "}");
     }
+    if (h.join > 0) {
+        out(u, "if (st==A_JOIN && a_join_key==&L[%d]) {", h.joink);
+        u->ind++;
+        out(u, "st = A_OK;");
+        out(u, "a_settop(base);");
+        store_pay(u, h.joind);
+        out(u, "goto LE_%d;", h.join);
+        u->ind--;
+        out(u, "}");
+    }
     out(u, "if (st != A_OK) {");
     out(u, "    a_settop(base);");
     if (h.err > 0) {
         out(u, "    if (st == A_ERROR) goto LC_%d;", h.err);
     }
-    out(u, "    goto CL_%d;", up);
+    out(u, "    goto CL_%d;", b.up);
     out(u, "}");
     u->ind--;
     out(u, "}");
 
-    u->cleanup = up;
+    u->cleanup = b.up;
+}
+
+static void gen_block_x (Unit* u, List* es, Dst d, Hnd h) {
+    Blk b = blk_open(u);
+    for (int i=0; i<es->n; i++) {
+        // C diagnostics and debuggers point to the source line
+        out0(u, "#line %d %s", es->v[i]->tk.lin,
+            quote(FILENAME, strlen(FILENAME)));
+        out(u, "a_lin = %d;", es->v[i]->tk.lin);
+        gen(u, es->v[i], (i == es->n-1) ? d : dst_none());
+    }
+    if (es->n == 0) {
+        store_void(u, d);
+    }
+    blk_close(u, b, h);
 }
 
 static void gen_block (Unit* u, List* es, Dst d) {
@@ -797,7 +842,7 @@ static void gen_do (Unit* u, Expr* e, Dst d) {
 
 // defer {...}: registers the body to run when the block exits.
 static void gen_defer (Unit* u, Expr* e) {
-    int flag = u->nslots++;
+    int flag = slot_new(u);
     u->defs = realloc(u->defs, (u->ndefs+1) * sizeof(Defer));
     u->defs[u->ndefs].flag = flag;
     u->defs[u->ndefs].e    = e;
@@ -806,15 +851,20 @@ static void gen_defer (Unit* u, Expr* e) {
     out(u, "a_set(&L[%d], a_bool(1));", flag);
 }
 
-// The value in `slot` becomes owned by the enclosing block, which
-// aborts it on exit, if it is a task or a pool.
-static void gen_pin (Unit* u, const char* slot) {
-    out_try(u, "a_pin(&%s)", slot);
+// The enclosing block aborts the task or pool in `slot` on exit.
+static void gen_pin_end (Unit* u, const char* slot) {
     u->defs = realloc(u->defs, (u->ndefs+1) * sizeof(Defer));
     u->defs[u->ndefs].flag = -1;
     u->defs[u->ndefs].e    = NULL;
     u->defs[u->ndefs].pin  = slot;
     u->ndefs++;
+}
+
+// The value in `slot` becomes owned by the enclosing block, which
+// aborts it on exit, if it is a task or a pool.
+static void gen_pin (Unit* u, const char* slot) {
+    out_try(u, "a_pin(&%s)", slot);
+    gen_pin_end(u, slot);
 }
 
 // e where { x = e1 ; y = e2 }
@@ -1524,6 +1574,132 @@ static void gen_spawn (Unit* u, Expr* e, Dst d) {
     }
 }
 
+// Number of transparent units generated.
+static int NTRA = 0;
+
+// Compiles a transparent block to a resume function that shares the
+// slots of its task. Returns the name of its static description.
+//
+// As a branch of a `par :any`, its values are raised as a join for
+// the par identified by slot `key`. Any other exit crosses to the
+// owner unchanged.
+static const char* gen_tra (Unit* up, List* body, ParMode mode, int key,
+                            int lin)
+{
+    Unit u;
+    memset(&u, 0, sizeof(u));
+    u.proto = up->proto;
+    u.npar  = up->npar;
+    u.task  = 1;
+    u.root  = (up->root != NULL) ? up->root : up;
+
+    if (mode == PAR_ANY) {
+        Dst m = dst_multi(&u);
+        gen_block(&u, body, m);
+        out(&u, "a_pay_pull(%s);", m.n);
+        out(&u, "a_join_key = &L[%d];", key);
+        out(&u, "st = A_JOIN;");
+    } else {
+        gen_block(&u, body, dst_slot("t->ret"));
+    }
+
+    int id = ++NTRA;
+    const char* name = xfmt("T%d_%d", u.proto->id, id);
+    const char* sig = xfmt("static AStatus %s (ATask* t, AKind k)", name);
+    buf_add(&DECLS, xfmt("%s;\n", sig));
+
+    Buf* c = &FUNCS;
+    buf_add(c, xfmt("// line %d\n%s {\n", lin, sig));
+    unit_emit(&u, c);
+    buf_add(c, "    return st;\n");
+    buf_add(c, "}\n\n");
+    buf_add(c, xfmt("static const AProto P%d_%d = { %s, 0, 0, 0 };\n\n",
+        u.proto->id, id, name));
+    return xfmt("P%d_%d", u.proto->id, id);
+}
+
+// Spawns a transparent block into `slot`, which a block must abort on
+// exit.
+static void gen_spawn_tra (Unit* u, Expr* blk, ParMode mode, int key,
+                           const char* slot)
+{
+    const char* p = gen_tra(u, &blk->u.block.es, mode, key, blk->tk.lin);
+    out(u, "a_lin = %d;", blk->tk.lin);
+    out_try(u, "a_spawn_tra(&%s, t, &%s)", slot, p);
+    out_try(u, "a_pin(&%s)", slot);
+}
+
+static void gen_suspend (Unit* u, Dst d);
+
+// par {...} with {...}: never rejoins
+// par :any: rejoins when a branch terminates, with its values
+// par :all: rejoins when all terminate, with the first value of each
+static void gen_par (Unit* u, Expr* e, Dst d) {
+    int k = e->u.par.blks.n;
+    ParMode mode = e->u.par.mode;
+    Hnd h = hnd_none();
+
+    // the results outlive the block of the branches
+    Opnd* rs = xalloc(k * sizeof(Opnd));
+    if (mode == PAR_ALL) {
+        for (int i=0; i<k; i++) {
+            rs[i] = opnd_tmp(u);
+        }
+    }
+    if (mode == PAR_ANY) {
+        h.join  = ++u->nlabels;
+        h.joink = slot_new(u);
+        h.joind = d;
+    }
+
+    Blk b = blk_open(u);
+    // on exit, the branches are aborted in spawn order
+    const char** ts = xalloc(k * sizeof(char*));
+    for (int i=0; i<k; i++) {
+        ts[i] = opnd_tmp(u).c;
+    }
+    for (int i=k-1; i>=0; i--) {
+        gen_pin_end(u, ts[i]);
+    }
+    for (int i=0; i<k; i++) {
+        gen_spawn_tra(u, e->u.par.blks.v[i], mode, h.joink, ts[i]);
+    }
+    if (mode == PAR_ALL) {
+        for (int i=0; i<k; i++) {
+            out(u, "st = a_await(t, a_pt_val(%s));", ts[i]);
+            gen_suspend(u, dst_slot(rs[i].c));
+        }
+    } else {
+        out(u, "st = a_await(t, a_pt_val(a_bool(0)));");
+        gen_suspend(u, dst_none());
+    }
+    blk_close(u, b, h);
+
+    if (mode == PAR_ALL) {
+        switch (d.kind) {
+            case D_NONE:
+                break;
+            case D_SLOT:
+                out(u, "a_cpy(&%s, %s);", d.slot, rs[0].c);
+                break;
+            case D_MULTI:
+                for (int i=0; i<k; i++) {
+                    out(u, "a_pushc(%s);", rs[i].c);
+                }
+                out(u, "%s = %d;", d.n, k);
+                break;
+        }
+        for (int i=0; i<k; i++) {
+            opnd_rel(u, rs[i]);
+        }
+    } else {
+        store_void(u, d);
+    }
+    if (mode == PAR_ANY) {
+        out0(u, "LE_%d: ;", h.join);
+    }
+}
+
 // Suspends the task until it is resumed, then continues with the
 // status of the resumption. The results arrive in the payload.
 static void gen_suspend (Unit* u, Dst d) {
@@ -1791,13 +1967,21 @@ static void gen (Unit* u, Expr* e, Dst d) {
             gen_emit(u, e);
             store_void(u, d);
             break;
+        case E_SPAWN_BLK: {
+            // pinned to the enclosing block
+            const char* slot = opnd_tmp(u).c;
+            gen_pin_end(u, slot);
+            gen_spawn_tra(u, e->u.sblk.blk, PAR_NONE, 0, slot);
+            store_void(u, d);
+            break;
+        }
+        case E_PAR:
+            gen_par(u, e, d);
+            break;
         case E_NAT:
         case E_MET:
-        case E_SPAWN_BLK:
         case E_TOGGLE:
         case E_TOGGLE_ON:
-        case E_PAR:
-        case E_WATCHING:
             err(e->tk, "expression not implemented");
             break;
         default:

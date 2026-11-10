@@ -73,8 +73,9 @@ static inline int a_truthy (AVal v) {
 
 // Non-local exits propagate as a returned status, never longjmp.
 // A_AWAIT is internal: a task suspended at an await.
+// A_JOIN is internal: a branch of a `par :any` terminated.
 typedef enum {
-    A_OK, A_ERROR, A_ESCAPE, A_BREAK, A_RETURN, A_ABORT, A_AWAIT
+    A_OK, A_ERROR, A_ESCAPE, A_BREAK, A_RETURN, A_ABORT, A_AWAIT, A_JOIN
 } AStatus;
 
 // Raises an error with a formatted message as its value.
@@ -533,9 +534,20 @@ typedef enum {
 
 // Task instance. The frame is freed at termination; the header lives
 // while referenced, so `await t` and `t.pub` keep working.
+// Frame of a task, shared with its transparent blocks. It is freed
+// when the last of them terminates: a block that is aborted while
+// running only unwinds when control returns to it.
+typedef struct AFrame {
+    int  rc;
+    int  n;
+    AVal L[];
+} AFrame;
+
 typedef struct ATask {
     ANode    node;
+    const AProto* desc;
     AFunc*   proto;
+    AFrame*  frame;
     AVal*    L;
     int      pc;
     uint8_t  status;
@@ -569,6 +581,13 @@ extern struct ATask* a_cur;
 // spawn T(...): arguments at `[base,a_top)`. The pool is nil for none;
 // a full pool gives nil.
 AStatus a_spawn (AVal* dst, AVal proto, AVal pool, int base);
+
+// spawn {...}: a transparent task that shares the frame and the
+// captures of its owner.
+AStatus a_spawn_tra (AVal* dst, struct ATask* owner, const AProto* p);
+
+// Identity of the `par :any` whose branch raised the pending A_JOIN.
+extern void* a_join_key;
 
 // tasks(n)
 AStatus a_tasks (AVal* dst, AVal max);

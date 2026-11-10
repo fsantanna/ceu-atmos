@@ -1,0 +1,23 @@
+task T (n) {
+    set pub = n
+    spawn {
+        set pub = n*2
+        print(task.pub)
+    }
+    print(pub)
+    await(false)
+}
+pin t = spawn T(10)
+print(t.pub)
+task U () {
+    var x = 1
+    spawn {
+        await(:X)
+        set x = x + 1
+        emit(:Y)
+    }
+    await(:Y)
+    print(:x, x)
+}
+spawn U()
+emit(:X)

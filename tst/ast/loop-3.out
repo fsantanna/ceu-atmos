@@ -1,4 +1,4 @@
-(loop on :tick { (call f) })
-(loop e on :X { (call g e) })
-(loop on 1s { })
-(loop on (|| :A :B) { })
+(loop { (await :tick) (call f) })
+(loop { (val e = (await :X)) (call g e) })
+(loop { (await 1s) })
+(loop { (await (|| :A :B)) })

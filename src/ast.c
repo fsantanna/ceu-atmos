@@ -208,10 +208,6 @@ void ast_dump (Expr* e) {
                 printf(" in ");
                 ast_dump(e->u.loop.itr);
             }
-            if (e->u.loop.on != NULL) {
-                printf(" on ");
-                dump_patt(e->u.loop.on);
-            }
             printf(" ");
             ast_dump(e->u.loop.blk);
             printf(")");
@@ -304,13 +300,6 @@ void ast_dump (Expr* e) {
             printf("(par%s", (e->u.par.mode == PAR_ANY) ? " :any" :
                              (e->u.par.mode == PAR_ALL) ? " :all" : "");
             dump_list(&e->u.par.blks);
-            printf(")");
-            break;
-        case E_WATCHING:
-            printf("(watching ");
-            dump_patt(e->u.watching.p);
-            printf(" ");
-            ast_dump(e->u.watching.blk);
             printf(")");
             break;
     }

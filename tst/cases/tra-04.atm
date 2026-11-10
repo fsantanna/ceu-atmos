@@ -1,0 +1,24 @@
+val T = task () {
+    val v = loop {
+        spawn {
+            break(10)
+        }
+        await(false)
+    }
+    print(v)
+}
+spawn T()
+print(:end)
+val U = task () {
+    val v = loop {
+        spawn {
+            await(:go)
+            break(20)
+        }
+        await(false)
+    }
+    print(v)
+}
+spawn U()
+emit(:go)
+print(:end)

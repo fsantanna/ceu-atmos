@@ -508,7 +508,22 @@ static Expr* parser_loop (void) {
         loop->u.loop.n = parser_ids(&loop->u.loop.ids);
     }
     if (accept_str("on")) {
-        loop->u.loop.on = parser_await();
+        // loop e on P {...} is loop { val e = await P ; ... }
+        Tk tk = TK0;
+        Expr* awt = mk(E_AWAIT, tk);
+        awt->u.await.p = parser_await();
+        Expr* fst = awt;
+        if (loop->u.loop.n > 0) {
+            fst = mk(E_DCL, tk);
+            fst->tk.str = "val";
+            fst->u.dcl.n   = loop->u.loop.n;
+            fst->u.dcl.ids = loop->u.loop.ids;
+            fst->u.dcl.set = awt;
+            loop->u.loop.n = 0;
+        }
+        loop->u.loop.blk = parser_block();
+        list_ins(&loop->u.loop.blk->u.block.es, 0, fst);
+        return loop;
     } else if (accept_str("in")) {
         loop->u.loop.itr = parser();
     }
@@ -951,11 +966,15 @@ static Expr* parser_1_prim (void) {
         } while (accept_str("with"));
         return e;
 
-    // watching P {...}
+    // watching P {...} is par :any { await P } with {...}
     } else if (accept_str("watching")) {
-        Expr* e = mk(E_WATCHING, TK0);
-        e->u.watching.p   = parser_await();
-        e->u.watching.blk = parser_block();
+        Tk tk = TK0;
+        Expr* awt = mk(E_AWAIT, tk);
+        awt->u.await.p = parser_await();
+        Expr* e = mk(E_PAR, tk);
+        e->u.par.mode = PAR_ANY;
+        list_add(&e->u.par.blks, block1(awt));
+        list_add(&e->u.par.blks, parser_block());
         return e;
 
     // until(...)  while(...)

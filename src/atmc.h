@@ -102,8 +102,8 @@ typedef enum {
     E_AWAIT,
     // toggle t(b) with P  toggle on :T with P {...}
     E_TOGGLE, E_TOGGLE_ON,
-    // par {...} with {...}  watching P {...}
-    E_PAR, E_WATCHING,
+    // par {...} with {...}
+    E_PAR,
 } ETag;
 
 typedef struct Expr  Expr;
@@ -204,8 +204,7 @@ struct Expr {
         struct { Expr* blk; }                           defer;
         // head: match expression, or NULL
         struct { Expr* head; int n; Case* cases; }      ifs;
-        // on: pattern of an event loop, or NULL
-        struct { int n; Tk* ids; Expr* itr; Expr* blk; Patt* on; } loop;
+        struct { int n; Tk* ids; Expr* itr; Expr* blk; } loop;
         // pool: destination pool, or NULL
         struct { Expr* pool; Expr* f; List args; }      spawn;
         struct { Expr* blk; }                           sblk;
@@ -217,7 +216,6 @@ struct Expr {
         // tk is the tag
         struct { int nf; Patt** fs; Expr* blk; }        toggle_on;
         struct { ParMode mode; List blks; }             par;
-        struct { Patt* p; Expr* blk; }                  watching;
         struct { Expr* cnd; Expr* blk; }                xcatch;
         // inl: lambda of an if/ifs/match, expanded in place
         struct { int task; int dots; int n; Tk* pars; Expr* blk; int inl; }
