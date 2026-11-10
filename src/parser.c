@@ -1116,22 +1116,49 @@ static Expr* parser_4_pre (Expr* pre) {
     return e;
 }
 
-static Expr* parser_5_bin (Expr* pre) {
-    Expr* e1 = pre ? pre : parser_4_pre(NULL);
-    int chain = 0;
-    while (check_op(BINS)) {
-        next();
-        Tk op = TK0;
-        if (chain && strcmp(e1->tk.str,op.str)) {
-            err(op, "operation error : use parentheses to disambiguate");
+// Binary operators follow the precedence of C, from the weakest
+// level, and associate to the left.
+static const char* LEVELS[][8] = {
+    { "||", NULL },
+    { "&&", NULL },
+    { "==", "!=", "??", "!?", "===", "=!=", "=>=", "=<=" },
+    { "<", "<=", ">", ">=", "?>", "!>", NULL },
+    { "++", NULL },
+    { "+", "-", NULL },
+    { "*", "/", "//", "%", "**", NULL },
+};
+
+#define NLEVELS ((int)(sizeof(LEVELS) / sizeof(LEVELS[0])))
+
+static int check_level (int lvl) {
+    if (!check_tag(TK_OP)) {
+        return 0;
+    }
+    for (int i=0; i<8 && LEVELS[lvl][i]!=NULL; i++) {
+        if (!strcmp(LEVELS[lvl][i], TK1.str)) {
+            return 1;
         }
-        Expr* e = mk(E_BIN, op);
+    }
+    return 0;
+}
+
+static Expr* parser_5_lvl (int lvl, Expr* pre) {
+    if (lvl == NLEVELS) {
+        return parser_4_pre(pre);
+    }
+    Expr* e1 = parser_5_lvl(lvl+1, pre);
+    while (check_level(lvl)) {
+        next();
+        Expr* e = mk(E_BIN, TK0);
         e->u.bin.e1 = e1;
-        e->u.bin.e2 = parser_4_pre(NULL);
+        e->u.bin.e2 = parser_5_lvl(lvl+1, NULL);
         e1 = e;
-        chain = 1;
     }
     return e1;
+}
+
+static Expr* parser_5_bin (Expr* pre) {
+    return parser_5_lvl(0, pre);
 }
 
 static void check_mix (Expr* pre, const char* op) {
