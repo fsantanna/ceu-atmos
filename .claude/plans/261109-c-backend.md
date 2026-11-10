@@ -60,9 +60,36 @@ structured, deterministic concurrency.
 - **Compiler written in C.**
     - One self-contained binary, no runtime dependency.
     - Self-hosting in Atmos may come later.
-- **Numbers are a single `double`.**
-    - `print`/`tostring` show integral values without decimals (`1`,
-      not `1.0`), to keep current outputs.
+- **Numbers are integers or reals, as in Lua 5.3.**
+    - One type `number` with two subtypes: 64-bit integers and
+      doubles. `1` and `0xFF` are integers; `1.5` and `1e3` are reals.
+    - Integer with integer gives an integer, wrapping on overflow; any
+      mix gives a real.
+    - `/` is always real. `//` is the integer division, and it
+      truncates, to pair with the `%` of C: `(a//b)*b + a%b == a`.
+    - Integer division or remainder by zero is an error.
+    - `1 == 1.0`, and both are the same table key.
+    - `print`/`tostring` show `5` for an integer and `5.0` for a real.
+    - Where only an integer fits (bitwise, string positions), a real
+      with an integral value is accepted; any other is an error.
+- **Operators follow C.**
+    - Precedence, from the strongest: prefix `-` `!` `#` `~`; then
+      `*` `/` `//` `%`; `+` `-`; `++`; `<<` `>>`; `&`; `^`; `|`;
+      `<` `<=` `>` `>=`; `==` `!=` `??` `!?`; `&&`; `||`.
+        - Bitwise operators bind stronger than comparisons, unlike C.
+        - Binary operators associate to the left.
+    - `%` is the remainder of C, with the sign of the dividend
+      (`fmod` for reals).
+    - Bitwise on integers: `&` `|` `^` (xor) `~` (not) `<<` `>>`.
+        - `>>` is arithmetic. A shift of 64 or more gives `0` (or
+          `-1`), and a negative one shifts the other way.
+    - `&&` and `||` still yield the deciding operand.
+    - Compound assignment: `set x += 1`, with `+=` `-=` `*=` `/=`
+      `//=` `%=` `++=` `&=` `|=` `^=` `<<=` `>>=` `&&=` `||=`.
+        - A single destination, evaluated once.
+    - Removed: `**` (use `math.pow`), `?>` `!>` (`X.xin`), `=>=`
+      `=<=` (`X.gte`), `===` `=!=` (`X.eq`).
+    - `->` and `<-` stay, as do `-->` and `<--`.
 - **Multiple values and varargs are kept, exactly as in Lua 5.4.**
     - `catch`, `await`, `escape`, `par :all`, and `val a,b = ...` rely
       on them.
@@ -104,7 +131,8 @@ structured, deterministic concurrency.
 - Blocks, `do :X`, `escape`, `defer`, `test`.
 - `if`, `ifs`, `match`, all four `loop` forms, `break`, `until`, `while`.
 - `throw`, `catch` (with `true`, `false`, function, and `??` matching).
-- All operators: `??` `!?` `#` `++` `?>` `!>` `===` `=!=` `=>=` `=<=`.
+- Operators `??` `!?` `#` `++`, and the arithmetic, relational, and
+  logical ones.
 - Indexing: `t@(e)`, `t@1`, `t.x`, `t@#`, `t@+`.
 - Calls with single constructor argument, pipes, parenthesis lists.
 - `func`, lambdas (`\{ it }`), prototypes, `o::f()` as sugar for `o.f(o)`.
@@ -128,6 +156,13 @@ structured, deterministic concurrency.
 - Native blocks contain C, not Lua.
 - Globals are static (see Settled decisions).
 - Deep ordering drops the metatable rule (rule 2).
+- Operators follow C (see Settled decisions).
+    - Today all binary operators share one level and cannot be mixed
+      without parentheses; `%` follows Lua; there are no bitwise
+      operators and no compound assignment.
+    - `**`, `?>`, `!>`, `=>=`, `=<=`, `===`, and `=!=` become
+      functions.
+- `//` truncates. Today it floors, as in Lua.
 - Indexes are 0-based (see Settled decisions).
     - Today vectors, numeric loops, and strings start at `1`.
 - `catch` only catches `throw`.
@@ -158,7 +193,7 @@ structured, deterministic concurrency.
 
 ```c
 typedef enum {
-    A_NIL, A_BOOL, A_NUM, A_STR,
+    A_NIL, A_BOOL, A_INT, A_NUM, A_STR,
     A_TAB, A_FUNC, A_TASK, A_XTASK, A_TASKS, A_NAT
 } AType;
 
@@ -166,6 +201,7 @@ typedef struct {
     uint8_t type;
     union {
         int     b;
+        int64_t i;
         double  n;
         AObj*   o;      // STR, TAB, FUNC, TASK, TASKS, NAT
     } u;
@@ -319,8 +355,8 @@ carry a value `v` with depth `p` to a destination at depth `d`:
 - `tag` field is an ordinary string key.
 - User types (`:Pos [x=10, y=20]`) are plain tables with a `tag` key.
     - No type declarations and no fixed layouts.
-- Runtime helpers: `++` on tables, `?>`, `===`, `=>=`, `X.copy`,
-  `X.tostring`.
+- Runtime helpers: `++` on tables, `X.xin`, `X.eq`, `X.gte`,
+  `X.copy`, `X.tostring`.
 
 ### Functions and closures
 
@@ -443,7 +479,7 @@ typedef AStatus (*AResume) (ATask* t, AKind k, AVal evt);
 - **Await.** Build the pattern once, eagerly (including spawned task
   arguments); `until`/`while` predicates stay closures, called on each
   candidate event.
-    - Patterns: boolean, value (`??`), tagged table (`=>=`), clock,
+    - Patterns: boolean, value (`??`), tagged table (`X.gte`), clock,
       `:clock`, task, `T(...)`, `:any ts`, `:all ts`, `until`, `while`,
       `!`, `&&`, `||`.
     - `&&` keeps per-operand state inside the pattern.
@@ -530,15 +566,15 @@ void    atm_quit  (void);
 ### Stdlib (v1)
 
 - **base:** `print`, `type`, `tostring`, `tonumber`, `assert`, `next`.
-- **math:** `floor`, `ceil`, `abs`, `min`, `max`, `sqrt`, `sin`, `cos`,
-  `random`, `randomseed`, `huge`, `pi`.
+- **math:** `floor`, `ceil`, `abs`, `min`, `max`, `sqrt`, `pow`, `sin`,
+  `cos`, `random`, `randomseed`, `huge`, `pi`.
 - **string:** `sub`, `find` (plain), `split`, `byte`, `char`, `upper`,
   `lower`, `rep`, `format` (`%d %s %f %g %x %%`).
     - Positions are 0-based, and `sub(s, i, j)` includes both ends.
 - **vector:** `insert`, `remove`, `sort` (with comparator), `join`.
 - **io:** `write`, `read` (line), `open`/`close`/`lines` as native box.
 - **os:** `time`, `clock`, `exit`, `getenv`.
-- **X:** `tostring`, `print`, `copy`.
+- **X:** `tostring`, `print`, `copy`, `eq`, `gte`, `xin`.
 - **atmos:** `status(t)`.
 
 ## Compiler
@@ -714,6 +750,22 @@ Agreed after `atmos-lang/atmos@5977b07`.
   decisions).
 - `#t` exactly as in Lua, shifted to base `0` (Tables).
 - User types stay plain tagged tables (Tables).
+- Operators follow C: precedence, `%`, bitwise, compound assignment
+  (Settled decisions).
+- Integers and reals as in Lua 5.3, replacing the single `double`
+  (Settled decisions).
+- `**`, `?>`, `!>`, `=>=`, `=<=`, `===`, `=!=` removed in favor of
+  functions (Settled decisions).
+
+### Open
+
+- **`??` over tables.** With `=>=` gone, `a ?? b` could gain a fourth
+  rule: if both are tables, every field of `b` matches the same field
+  of `a`, recursively with `??`.
+    - `await`, `match`, `catch`, and `escape` would then share one
+      matching operator, always as `value ?? pattern`.
+    - Not decided: `??` keeps its three rules for now, and `await` on
+      a table keeps using `X.gte`.
 
 ### Rejected
 
