@@ -9,6 +9,7 @@
 //   ATMOS_HOME     root with `rt/` and `build/` (default: build dir)
 //   ATMOS_CC       C compiler (default: cc)
 //   ATMOS_CFLAGS   C flags (default: -O1)
+//   ATMOS_LDFLAGS  linker flags, after the program (e.g. -lSDL2)
 //   ATMOS_ASAN     if set, builds with the address sanitizer
 
 #include <stdio.h>
@@ -65,12 +66,13 @@ static int build (const char* c, const char* exe) {
     const char* home = env("ATMOS_HOME", ATMOS_HOME);
     int asan = (getenv("ATMOS_ASAN") != NULL);
     char* cmd = xfmt(
-        "%s %s %s -w -I%s/rt %s %s/build/libatmos%s.a -lm -o %s",
+        "%s %s %s -w -I%s/rt %s %s/build/libatmos%s.a -lm %s -o %s",
         env("ATMOS_CC", "cc"),
         env("ATMOS_CFLAGS", "-O1"),
         asan ? "-fsanitize=address -fno-omit-frame-pointer -g" : "",
         home, c, home,
         asan ? "-asan" : "",
+        env("ATMOS_LDFLAGS", ""),
         exe
     );
     return system(cmd);

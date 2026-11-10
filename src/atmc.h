@@ -16,14 +16,14 @@ char* xfmt (const char* fmt, ...);
 
 // Kinds of native literals, given by a leading tag:
 //      `stmts`         C statements, evaluates to nil
-//      `:pre decls`    C declarations at file scope
+//      `:prelude decls`    C declarations at file scope
 //      `:number e`     C expression converted to a number: an integer
 //                      or a real, according to its type in C
 //      `:number.integer e`     ... always to an integer
 //      `:number.float e`       ... always to a real
 //      `:boolean e`    ... to a boolean
 //      `:string e`     ... to a string (NULL gives nil)
-//      `:val e`        C expression of type AVal (owned)
+//      `:value e`      C expression of type AVal (owned)
 typedef enum {
     NAT_STMT, NAT_PRE, NAT_INT, NAT_NUM, NAT_BOOL, NAT_STR, NAT_VAL,
     NAT_NUMBER, NAT_ERR

@@ -588,13 +588,13 @@ typedef AStatus (*AResume) (ATask* t, AKind k, AVal evt);
 | Literal        | Meaning                                         |
 |----------------|-------------------------------------------------|
 | `` `stmts` ``      | C statements, evaluates to `nil`            |
-| `` `:pre decls` `` | C declarations at file scope (`#include`)   |
+| `` `:prelude decls` `` | C declarations at file scope (`#include`)   |
 | `` `:number e` ``  | C number: integer or real, by its C type    |
 | `` `:number.integer e` `` | C number, always as an integer       |
 | `` `:number.float e` ``   | C number, always as a real           |
 | `` `:boolean e` `` | C expression converted to a boolean         |
 | `` `:string e` ``  | C string copied, `NULL` gives `nil`         |
-| `` `:val e` ``     | C expression of type `AVal`, owned          |
+| `` `:value e` ``   | C expression of type `AVal`, owned          |
 
 - The tags are the full names of the types, as in Lua. The subtypes
   of a number use the dot of hierarchical tags, with the names of

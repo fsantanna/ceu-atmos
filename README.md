@@ -58,6 +58,8 @@ Environment variables:
 
 - `ATMOS_CC`: C compiler (default `cc`).
 - `ATMOS_CFLAGS`: C flags (default `-O1`).
+- `ATMOS_LDFLAGS`: linker flags, which go after the program
+  (e.g. `-lSDL2`).
 - `ATMOS_ASAN`: if set, builds the program with the address sanitizer.
 
 ## Test
@@ -121,8 +123,8 @@ exs/    examples
   `print(val x = 1)`, is a compile error.
 - Native literals are C code, not Lua: `` `:number strlen("abc")` ``.
     - A leading tag converts the expression: `:number`, `:boolean`,
-      `:string`, `:val`. With no tag, the code is a statement.
-    - `` `:pre ...` `` declares at file scope, as in `#include`.
+      `:string`, `:value`. With no tag, the code is a statement.
+    - `` `:prelude ...` `` declares at file scope, as in `#include`.
     - `$x` refers to the variable `x`.
 - The libraries are `string`, `vector`, `math`, `io`, and `os`, with
   0-based positions, instead of the libraries of Lua.

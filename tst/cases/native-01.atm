@@ -1,4 +1,4 @@
-```:pre
+```:prelude
 #include <math.h>
 #include <string.h>
 static int twice (int x) {
@@ -12,7 +12,7 @@ print(`:number sqrt(a_dbl($y) + 4)`)
 print(`:boolean $x.u.i > 5`, `:boolean 0`)
 val s = "hello"
 print(`:string A_STR_OF($s)->s + 1`, `:string NULL`)
-print(`:val a_strz("owned")`)
+print(`:value a_strz("owned")`)
 
 ;; statements
 var n = 0

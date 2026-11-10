@@ -51,8 +51,8 @@ void err (Tk tk, const char* fmt, ...) {
 NatKind nat_kind (const char* s, const char** code) {
     // in the order of `NatKind`
     static const char* TAGS[] = {
-        "", "pre", "number.integer", "number.float", "boolean", "string",
-        "val", "number", NULL
+        "", "prelude", "number.integer", "number.float", "boolean",
+        "string", "value", "number", NULL
     };
     while (*s==' ' || *s=='\t' || *s=='\n') {
         s++;

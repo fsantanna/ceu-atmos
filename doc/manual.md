@@ -335,7 +335,7 @@ Atmos compiles to C, and a program can embed C code in
 [native literals](#native-literals), which are enclosed by backquotes:
 
 ```
-```:pre
+```:prelude
 #include <math.h>
 ```
 val x = 9
@@ -425,6 +425,8 @@ The following environment variables affect the build:
 
 - `ATMOS_CC`: the C compiler (default `cc`).
 - `ATMOS_CFLAGS`: the flags for the C compiler (default `-O1`).
+- `ATMOS_LDFLAGS`: the flags for the linker, which go after the program
+  (e.g., `-lSDL2`).
 - `ATMOS_ASAN`: if set, builds the program with the address sanitizer, which
   also reports memory leaks when the program terminates.
 
@@ -455,7 +457,7 @@ atm_quit();
 ```
 
 An environment may be part of the program itself, in a
-[native literal](#native-literals) with the tag `:pre`.
+[native literal](#native-literals) with the tag `:prelude`.
 The example `exs/stdin.atm` emits each line of the standard input as an event.
 
 # LEXICON
@@ -641,11 +643,11 @@ A tag in the beginning of the literal gives its kind:
 
 ```
 `stmts`             ;; C statements, evaluates to nil
-`:pre decls`        ;; C declarations in the beginning of the file
+`:prelude decls`    ;; C declarations in the beginning of the file
 `:number e`         ;; C expression converted to a number
 `:boolean e`        ;; C expression converted to a boolean
 `:string e`         ;; C string, which is copied (NULL becomes nil)
-`:val e`            ;; C expression that is already an Atmos value
+`:value e`          ;; C expression that is already an Atmos value
 ```
 
 The tags are the names of the [types](#types--values).
@@ -662,7 +664,7 @@ a string, and `a_int(i)`, `a_num(d)`, and `a_strz(s)` to create values.
 Examples:
 
 ```
-```:pre
+```:prelude
 #include <string.h>
 ```
 val s = "hello"

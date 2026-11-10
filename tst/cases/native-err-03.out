@@ -1,1 +1,1 @@
-native-err-03.atm : line 2 : near ':pre int y = $x;' : invalid native : unexpected variable
+native-err-03.atm : line 2 : near ':prelude int y = $x;' : invalid native : unexpected variable
