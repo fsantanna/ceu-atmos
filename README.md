@@ -84,4 +84,13 @@ tst/    tests
 - `await` is only valid lexically inside a task body.
 - `catch` only catches `throw`.
 - `break`, `until`, and `while` need a lexically enclosing `loop`.
-- Numbers are doubles, shown without decimals when integral.
+- Numbers are 64-bit integers or reals, as in Lua 5.3: `7 / 2` is
+  `3.5`, `7 // 2` is `3`, and a real always shows as one (`5.0`).
+- Operators follow C:
+    - precedence: `a + b * c` needs no parentheses;
+    - `%` has the sign of the dividend, and `//` truncates;
+    - bitwise `&` `|` `^` `~` `<<` `>>` on integers, binding stronger
+      than comparisons;
+    - compound assignment: `set x += 1`.
+- `**`, `?>`, `!>`, `=>=`, `=<=`, `===`, and `=!=` are functions:
+  `math.pow`, `X.xin`, `X.gte`, and `X.eq`.
