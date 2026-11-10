@@ -74,6 +74,8 @@ typedef struct Unit {
     // finalizers of the enclosing block
     struct Defer* defs;
     int ndefs;
+    // constructor that initializes a `pin`: pinned before it is filled
+    Expr* born;
 } Unit;
 
 // Finalizer of a block: a defer (flag slot and body), or a pin (the
@@ -390,7 +392,8 @@ static const char* var_raw (Unit* u, Var* v) {
         return xfmt("G%d_%s", v->id, v->tk.str);
     } else if (v->proto == u->proto) {
         if (v->slot < 0) {
-            v->slot = slot_new(u);
+            v->slot  = slot_new(u);
+            v->level = (u->level > 0) ? u->level : 0;
         }
         return xfmt("L[%d]", v->slot);
     } else {
@@ -615,6 +618,11 @@ static Opnd gen_bin (Unit* u, Expr* e) {
 static Opnd gen_table (Unit* u, Expr* e) {
     Opnd d = opnd_tmp(u);
     out(u, "a_set(&%s, a_tab());", d.c);
+    if (u->born == e) {
+        // pinned from birth, so it may hold other pinned values
+        u->born = NULL;
+        out_try(u, "a_pin(&%s)", d.c);
+    }
     int n = 0;
     int last = e->u.table.vs.n - 1;
     for (int i=0; i<=last; i++) {
@@ -623,10 +631,10 @@ static Opnd gen_table (Unit* u, Expr* e) {
         if (key==NULL && i==last && is_multi(val)) {
             Dst m = dst_multi(u);
             gen(u, val, m);
-            out(u, "a_tab_fill(%s, %d, %s);", d.c, n, m.n);
+            out_try(u, "a_tab_fill(%s, %d, %s, 1)", d.c, n, m.n);
         } else if (key == NULL) {
             Opnd v = gen_expr(u, val);
-            out(u, "a_tab_set(A_TAB_OF(%s), a_int(%d), %s);", d.c, n++, v.c);
+            out_try(u, "a_setindex(%s, a_int(%d), %s)", d.c, n++, v.c);
             opnd_rel(u, v);
         } else {
             Opnd k = gen_expr(u, key);
@@ -940,6 +948,10 @@ static void gen_dcl_chk (Unit* u, Expr* e) {
             gen_pin(u, v);
         } else {
             out_try(u, "a_chk(%s)", v);
+            // a box outlives any pin block
+            if (e->vars[i]->boxed) {
+                out_try(u, "a_chk_store(%s, 0)", v);
+            }
         }
     }
 }
@@ -953,10 +965,19 @@ static void gen_dcl (Unit* u, Expr* e) {
             var_c(u, e->vars[i]);
         }
     } else if (k == 1) {
+        // pin x = [...]
+        int born = (e->vars[0]->kind==V_PIN && e->u.dcl.set->tag==E_TABLE);
+        if (born) {
+            u->born = e->u.dcl.set;
+        }
         Opnd o = gen_expr(u, e->u.dcl.set);
         gen_boxes(u, e);
         opnd_mov(u, o, var_c(u,e->vars[0]));
-        gen_dcl_chk(u, e);
+        if (born) {
+            gen_pin_end(u, var_c(u,e->vars[0]));
+        } else {
+            gen_dcl_chk(u, e);
+        }
         return;
     } else {
         Dst m = dst_multi(u);
@@ -1002,15 +1023,22 @@ static Loc gen_loc (Unit* u, Expr* dst) {
 static void gen_assign (Unit* u, Loc l, Opnd v) {
     out_try(u, "a_chk(%s)", v.c);
     if (l.e->tag == E_ACC) {
-        opnd_mov(u, v, var_c(u,l.e->var));
+        // a pinned value cannot go to a variable that outlives its
+        // pin block: a box, a top-level variable, or an outer block
+        Var* x = l.e->var;
+        const char* dst = var_c(u, x);
+        if (x->boxed) {
+            out_try(u, "a_chk_store(%s, 0)", v.c);
+        } else if (x->global) {
+            out_try(u, "a_chk_store(%s, 1)", v.c);
+        } else if (x->level < u->level) {
+            out_try(u, "a_chk_store(%s, D + %d)", v.c, x->level);
+        }
+        opnd_mov(u, v, dst);
         return;
     }
     if (l.e->tag == E_PUB) {
-        out(u, "{");
-        out(u, "    AVal* pub;");
-        out(u, "    if ((st = a_pub(&pub)) != A_OK) goto CL_%d;", u->cleanup);
-        out(u, "    a_cpy(pub, %s);", v.c);
-        out(u, "}");
+        out_try(u, "a_pub_set(NULL, %s)", v.c);
         opnd_rel(u, v);
         return;
     }
@@ -1537,7 +1565,8 @@ static const char* gen_task (Proto* p, Var** pars, int npar, List* body,
     u.task  = 1;
     u.level = -1;
     for (int i=0; i<npar; i++) {
-        pars[i]->slot = u.nslots++;
+        pars[i]->slot  = u.nslots++;
+        pars[i]->level = 0;
     }
     if (p->dots) {
         u.nslots++;
@@ -1836,7 +1865,7 @@ static void patt_eval (Unit* u, Patt* p, Opnd* os, int* n) {
             out(u, "a_set(&%s, a_tab());", t.c);
             Dst m = dst_multi(u);
             gen_args(u, &p->args, m.n, NULL);
-            out(u, "a_tab_fill(%s, 0, %s);", t.c, m.n);
+            out(u, "a_tab_fill(%s, 0, %s, 0);", t.c, m.n);
             os[(*n)++] = t;
             break;
         }

@@ -1,7 +1,8 @@
 do {
     pin t = [1, 2, 3]
     set t.self = t
-    set t@+ = [inner=t]
+    pin u = [inner=t]
+    set t@+ = u
     print(#t, t.self == t)
 }
 do {

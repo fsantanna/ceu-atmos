@@ -1,0 +1,27 @@
+;; tables
+pin a = [1]
+pin b = [2]
+set a.b = b
+print(a.b@0)
+do {
+    pin c = [3]
+    set c.a = a
+    set c@+ = b
+    print(c.a.b@0, #c)
+    print(catch true { set a.c = c })
+    print(catch true { set a@(c) = 1 })
+    pin d = [c, x=c, (c)]
+    print(#d, d.x == c)
+}
+val u = []
+print(catch true { set u.a = a })
+print(catch true { [a] })
+print(catch true { [x=a] })
+print(catch true { [1, (a,b)] })
+print(catch true { u ++ a })
+print(catch true { a ++ u })
+print(catch true { X.copy([a]) })
+val v = X.copy(a)
+print(v@0, v.b@0, v.b == b)
+set u@+ = v
+print(#u, #a)

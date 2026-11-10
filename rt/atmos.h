@@ -455,7 +455,8 @@ AStatus a_setindex_next (AVal t, AVal v);
 AStatus a_tag (AVal t, AVal tag);
 
 // Moves the top `n` values of the stack into the keys `i, i+1, ...`.
-void a_tab_fill (AVal t, int i, int n);
+// If `chk`, fails on a pinned value that the table cannot hold.
+AStatus a_tab_fill (AVal t, int i, int n, int chk);
 
 // Pushes the values of the array part. Returns how many.
 int a_tab_unpack (AVal t);
@@ -600,6 +601,11 @@ typedef struct ATask {
     // depth of the body block, and of the block of the current await
     int      depth;
     int      adepth;
+    // depth of the outermost block: the same as `depth`, except for a
+    // transparent block, which is nested somewhere in its owner
+    int      bdepth;
+    // depth of the deepest pinned argument: the task cannot leave it
+    int      mindepth;
     struct APatt* awt;
     AVal     pub;
     AVal     ret;
@@ -715,6 +721,32 @@ AStatus a_pin_end (AVal* slot, AStatus st);
 
 // Releases all entries of a table.
 void a_tab_clear (ATab* t);
+
+// Depth of the pin block of a value: the block where it is pinned, or
+// the deepest block of what it holds (a task with pinned arguments).
+// Zero if the value is free to go anywhere.
+int a_pdepth (AVal v);
+
+// Raises "invalid escape : pinned value".
+AStatus a_err_pinned (void);
+
+// A pinned value may only be stored where it cannot outlive its pin
+// block: here, into something that lives at depth `d`.
+static inline AStatus a_chk_store (AVal v, int d) {
+    if (v.type>=A_TAB && a_pdepth(v)>d) {
+        return a_err_pinned();
+    }
+    return A_OK;
+}
+
+// A table only holds a pinned value if it is itself pinned, at the
+// same depth or deeper.
+static inline AStatus a_chk_tab (ATab* t, AVal v) {
+    return a_chk_store(v, t->hdr.pinned ? (int)t->hdr.depth : 0);
+}
+
+// Sets the pub of a task, or of the running task if NULL.
+AStatus a_pub_set (ATask* t, AVal v);
 
 // Starts the main chunk as a task, with the program arguments: runs
 // it until it suspends or terminates.
@@ -888,8 +920,8 @@ extern AVal atm_g_math;
 // keys (owned). Fails on keys that are neither numbers nor strings.
 AStatus a_xtostring (AVal* dst, AVal v);
 
-// Deep copy of tables (owned).
-AVal a_xcopy (AVal v);
+// Deep copy of tables. Fails on a pinned value that is not a table.
+AStatus a_xcopy (AVal* dst, AVal v);
 
 ///////////////////////////////////////////////////////////////////////////////
 // DRIVER

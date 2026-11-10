@@ -262,8 +262,9 @@ struct Var {
     Proto*  proto;
     // mutable and captured by a closure: lives in a shared box
     int     boxed;
-    // coder: slot in `L`
+    // coder: slot in `L`, and nesting level of its block
     int     slot;
+    int     level;
 };
 
 // A function being compiled: the main chunk, or a prototype that is

@@ -36,7 +36,19 @@ AStatus a_throw (void) {
     TRACE_THROW = a_lin;
     TRACE_N = 0;
     TRACE_MORE = 0;
+    // an error unwinds the pin blocks before it is caught
+    for (int i=0; i<a_pay_n; i++) {
+        if (a_pay[i].type>=A_TAB && a_pdepth(a_pay[i])>0) {
+            a_pay_clear();
+            a_pay_add(a_strz("invalid escape : pinned value"));
+            break;
+        }
+    }
     return A_ERROR;
+}
+
+AStatus a_err_pinned (void) {
+    return a_error("invalid escape : pinned value");
 }
 
 AStatus a_escape (void) {

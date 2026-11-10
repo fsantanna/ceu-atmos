@@ -1,0 +1,24 @@
+;; pub
+task T (v) {
+    set pub = v
+    await(:X)
+    print(catch true {
+        pin t = [1]
+        set pub = t
+    })
+    await(:X)
+}
+pin a = [10]
+pin x = spawn T(a)
+print(x.pub@0)
+do {
+    pin b = [20]
+    print(catch true { set x.pub = b })
+    pin y = spawn T(b)
+    print(y.pub@0)
+    set y.pub = a
+    print(y.pub@0)
+}
+emit(:X)
+set x.pub = [30]
+print(x.pub@0)

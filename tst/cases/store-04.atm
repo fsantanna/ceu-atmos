@@ -1,0 +1,35 @@
+;; emit
+task T (id) {
+    loop {
+        val e = await(:E)
+        print(id, e.v)
+    }
+}
+pin x = spawn T(:x)
+pin a = [tag=:E, v=1]
+print(catch true { emit @:global (a) })
+emit @:task (a)
+emit @x (a)
+do {
+    pin y = spawn T(:y)
+    pin b = [tag=:E, v=2]
+    emit @y (b)
+    print(catch true { emit @x (b) })
+    print(catch true { emit @:task (b) })
+    print(catch true { emit(b) })
+    emit @x (a)
+}
+task U () {
+    pin c = [tag=:E, v=3]
+    pin z = spawn T(:z)
+    emit @:task (c)
+    emit @z (c)
+    print(catch true { emit @:parent (c) })
+    print(catch true { emit @x (c) })
+    do {
+        pin d = [tag=:E, v=4]
+        print(catch true { emit @:task (d) })
+        print(catch true { emit @z (d) })
+    }
+}
+spawn U()

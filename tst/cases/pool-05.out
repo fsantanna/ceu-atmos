@@ -1,2 +1,4 @@
-2	true	true	false
-2	true
+true	false	true
+2	true	true
+false	invalid escape : pinned value
+false	invalid escape : pinned value

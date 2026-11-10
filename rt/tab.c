@@ -270,8 +270,7 @@ AStatus a_index (AVal* dst, AVal t, AVal k) {
 
 AStatus a_setindex (AVal t, AVal k, AVal v) {
     if (is_pub(t, k)) {
-        a_cpy(&A_TASK_OF(t)->pub, v);
-        return A_OK;
+        return a_pub_set(A_TASK_OF(t), v);
     }
     if (t.type != A_TAB) {
         return a_error("invalid index : expected table : got %s",
@@ -280,6 +279,9 @@ AStatus a_setindex (AVal t, AVal k, AVal v) {
     if (k.type==A_NIL || (k.type==A_NUM && k.u.n!=k.u.n)) {
         return a_error("invalid index : unexpected %s",
             (k.type == A_NIL) ? "nil" : "nan");
+    }
+    if (a_chk_tab(A_TAB_OF(t),k)!=A_OK || a_chk_tab(A_TAB_OF(t),v)!=A_OK) {
+        return A_ERROR;
     }
     a_tab_set(A_TAB_OF(t), k, v);
     return A_OK;
@@ -342,11 +344,19 @@ AStatus a_tag (AVal t, AVal tag) {
     return A_OK;
 }
 
-void a_tab_fill (AVal t, int i, int n) {
-    for (int j=0; j<n; j++) {
-        a_tab_set(A_TAB_OF(t), a_int(i+j), a_stk[a_top-n+j]);
+AStatus a_tab_fill (AVal t, int i, int n, int chk) {
+    AStatus st = A_OK;
+    for (int j=0; j<n && st==A_OK; j++) {
+        AVal v = a_stk[a_top-n+j];
+        if (chk) {
+            st = a_chk_tab(A_TAB_OF(t), v);
+        }
+        if (st == A_OK) {
+            a_tab_set(A_TAB_OF(t), a_int(i+j), v);
+        }
     }
     a_settop(a_top - n);
+    return st;
 }
 
 int a_tab_unpack (AVal t) {

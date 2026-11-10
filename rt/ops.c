@@ -138,17 +138,26 @@ AStatus a_cat (AVal* dst, AVal a, AVal b) {
             a_typename((a.type==A_TAB || str_a) ? b : a));
     }
 
+    // the result is a fresh table: it cannot hold pinned values
     AVal ret = a_tab();
     ATab* t = A_TAB_OF(ret);
     uint32_t pos = 0;
     AVal k, v;
     while (a_tab_next(A_TAB_OF(a), &pos, &k, &v)) {
+        if (a_chk_tab(t,k)!=A_OK || a_chk_tab(t,v)!=A_OK) {
+            a_dec(ret);
+            return A_ERROR;
+        }
         a_tab_set(t, k, v);
     }
     // keys 0,1,... of `b` in sequence are appended
     int64_t n = 0;
     pos = 0;
     while (a_tab_next(A_TAB_OF(b), &pos, &k, &v)) {
+        if (a_chk_tab(t,k)!=A_OK || a_chk_tab(t,v)!=A_OK) {
+            a_dec(ret);
+            return A_ERROR;
+        }
         if (k.type==A_INT && k.u.i==n) {
             a_tab_set(t, a_int(t->an), v);
             n++;

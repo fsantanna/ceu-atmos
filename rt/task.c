@@ -607,6 +607,20 @@ static ATask* task_of (ANode* n) {
     return NULL;
 }
 
+// Depth of the block that a task or pool is attached to: its pin
+// block, or the block of the spawn while it is not pinned.
+static int node_adepth (ANode* n) {
+    if (n->hdr.type==A_XTASK && ((ATask*)n)->tra) {
+        return ((ATask*)n)->bdepth - 1;
+    } else if (n->hdr.pinned) {
+        return n->hdr.depth;
+    } else if (n->hdr.type == A_XTASK) {
+        return ((ATask*)n)->depth - 1;
+    } else {
+        return 0;
+    }
+}
+
 // `n` is the running task or one of its ancestors.
 static int is_up (ANode* n) {
     for (ANode* x=(ANode*)a_cur; x!=NULL; x=x->up) {
@@ -954,6 +968,40 @@ static AStatus emit_tick (double us) {
     return st;
 }
 
+// A pinned event only reaches tasks that live inside its pin block.
+// Depths only compare along a chain of blocks, so the target must be
+// in the subtree of the task that owns the pin block.
+static AStatus emit_chk (ANode* n, AVal evt) {
+    int p = a_pdepth(evt);
+    if (p == 0) {
+        return A_OK;
+    }
+    // owner: the first task upwards that starts outside the pin block
+    ANode* own = (ANode*) a_cur;
+    while (own != NULL) {
+        if (own->hdr.type==A_XTASK && ((ATask*)own)->bdepth<=p) {
+            break;
+        }
+        own = own->up;
+    }
+    if (own == NULL) {
+        return a_err_pinned();
+    }
+    // the owner itself: only if pinned in its outermost block
+    if (n == own) {
+        return (((ATask*)own)->bdepth == p) ? A_OK : a_err_pinned();
+    }
+    // otherwise, a subtree attached inside the pin block
+    ANode* c = n;
+    while (c!=NULL && c->up!=own) {
+        c = c->up;
+    }
+    if (c==NULL || node_adepth(c)<p) {
+        return a_err_pinned();
+    }
+    return A_OK;
+}
+
 AStatus a_emit (AVal to, AVal evt) {
     ANode* n = NULL;
     AStatus st = emit_to(&n, to);
@@ -966,6 +1014,9 @@ AStatus a_emit (AVal to, AVal evt) {
             return a_error("invalid emit : expected global");
         }
         return chk_aborted(emit_tick(a_dbl(evt)));
+    }
+    if (emit_chk(n,evt) != A_OK) {
+        return A_ERROR;
     }
     return chk_aborted(emit_top(n, evt));
 }
@@ -1032,6 +1083,13 @@ static ATask* task_new (AFunc* f, ANode* up, int base) {
                 a_stk[base+i]);
         }
     }
+    // a task that receives pinned arguments cannot leave their blocks
+    for (int i=0; i<argc; i++) {
+        int d = a_pdepth(a_stk[base+i]);
+        if (d > t->mindepth) {
+            t->mindepth = d;
+        }
+    }
     a_settop(base);
 
     node_add(up, &t->node);
@@ -1048,6 +1106,13 @@ AStatus a_spawn (AVal* dst, AVal proto, AVal pool, int base) {
     if (pool.type == A_TASKS) {
         ATasks* ts = A_TASKS_OF(pool);
         up = &ts->node;
+        // the task lives as long as the pool: so must its arguments
+        for (int i=base; i<a_top; i++) {
+            if (a_chk_store(a_stk[i], a_pdepth(pool)) != A_OK) {
+                a_settop(base);
+                return A_ERROR;
+            }
+        }
         if (ts->max>=0 && a_tasks_len(ts)>=ts->max) {
             a_settop(base);
             a_clr(dst);
@@ -1070,6 +1135,7 @@ AStatus a_spawn (AVal* dst, AVal proto, AVal pool, int base) {
             t->depth = pool.u.o->depth + 1;
         }
     }
+    t->bdepth = t->depth;
     a_cpy(dst, a_obj(&t->node.hdr));
     return chk_aborted(task_resume(t, R_START));
 }
@@ -1085,7 +1151,8 @@ AStatus a_spawn_tra (AVal* dst, ATask* owner, const AProto* p) {
     t->frame->rc++;
     t->L = owner->L;
     // a transparent block is a nested block of its owner
-    t->depth = owner->depth;
+    t->depth  = owner->depth;
+    t->bdepth = a_depth + 1;
     t->status = T_RUNNING;
     node_add(&owner->node, &t->node);
     a_cpy(dst, a_obj(&t->node.hdr));
@@ -1168,6 +1235,32 @@ AStatus a_pub (AVal** ref) {
     return A_OK;
 }
 
+AStatus a_pub_set (ATask* t, AVal v) {
+    if (t == NULL) {
+        t = task_of((ANode*)a_cur);
+        if (t == NULL) {
+            return a_error("invalid pub : expected enclosing task");
+        }
+    }
+    // the pub is visible wherever the task is
+    if (a_chk_store(v, node_adepth(&t->node)) != A_OK) {
+        return A_ERROR;
+    }
+    a_cpy(&t->pub, v);
+    return A_OK;
+}
+
+int a_pdepth (AVal v) {
+    if (v.type < A_TAB) {
+        return 0;
+    }
+    int d = v.u.o->pinned ? (int)v.u.o->depth : 0;
+    if (v.type==A_XTASK && A_TASK_OF(v)->mindepth>d) {
+        d = A_TASK_OF(v)->mindepth;
+    }
+    return d;
+}
+
 AStatus a_pin (AVal* slot) {
     AVal v = *slot;
     switch (v.type) {
@@ -1179,6 +1272,9 @@ AStatus a_pin (AVal* slot) {
             // taking the running task or an ancestor would abort upwards
             if (is_up((ANode*)v.u.o)) {
                 return a_error("invalid assignment : unexpected parent task");
+            }
+            if (a_pdepth(v) > a_depth) {
+                return a_err_pinned();
             }
             break;
         case A_TAB:
@@ -1269,7 +1365,8 @@ AStatus a_main (const AProto* p) {
         a_push(a_strz(ARGV[i]));
     }
     MAIN = task_new(A_FUNC_OF(proto), &ROOT.node, base);
-    MAIN->depth = 1;
+    MAIN->depth  = 1;
+    MAIN->bdepth = 1;
     a_inc(a_obj(&MAIN->node.hdr));
     a_dec(proto);
     return task_resume(MAIN, R_START);

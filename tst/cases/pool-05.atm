@@ -3,7 +3,10 @@ pin xs = tasks()
 pin ys = tasks()
 val x = spawn @xs T()
 val y = spawn @ys T()
-val ts = xs ++ ys
-print(#ts, X.xin(x, ts), X.xin(y, ts), X.xin(x, ys))
-val both = [1] ++ xs
-print(#both, both@1 == x)
+print(X.xin(x, xs), X.xin(y, xs), X.xin(y, ys))
+;; tasks of a pool are pinned with it
+pin ts = [x]
+set ts@+ = y
+print(#ts, ts@0 == x, ts@1 == y)
+print(catch true { xs ++ ys })
+print(catch true { [1] ++ xs })

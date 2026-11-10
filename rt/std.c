@@ -395,20 +395,36 @@ AStatus a_xtostring (AVal* dst, AVal v) {
     return st;
 }
 
-AVal a_xcopy (AVal v) {
+AStatus a_xcopy (AVal* dst, AVal v) {
     if (v.type != A_TAB) {
-        a_inc(v);
-        return v;
+        // the copy is free to go anywhere
+        if (a_chk_store(v, 0) != A_OK) {
+            return A_ERROR;
+        }
+        a_cpy(dst, v);
+        return A_OK;
     }
     AVal ret = a_tab();
     uint32_t pos = 0;
     AVal k, x;
-    while (a_tab_next(A_TAB_OF(v), &pos, &k, &x)) {
-        AVal c = a_xcopy(x);
-        a_tab_set(A_TAB_OF(ret), k, c);
+    AStatus st = A_OK;
+    while (st==A_OK && a_tab_next(A_TAB_OF(v), &pos, &k, &x)) {
+        AVal c = a_nil();
+        st = a_xcopy(&c, x);
+        if (st == A_OK) {
+            st = a_chk_store(k, 0);
+        }
+        if (st == A_OK) {
+            a_tab_set(A_TAB_OF(ret), k, c);
+        }
         a_dec(c);
     }
-    return ret;
+    if (st == A_OK) {
+        a_set(dst, ret);
+    } else {
+        a_dec(ret);
+    }
+    return st;
 }
 
 // X.tostring(v)
@@ -444,8 +460,12 @@ static AStatus x_print (AFunc* self, int argc, AVal* argv) {
 // X.copy(v)
 static AStatus x_copy (AFunc* self, int argc, AVal* argv) {
     (void) self;
-    a_push(a_xcopy(arg(argc,argv,0)));
-    return A_OK;
+    AVal ret = a_nil();
+    AStatus st = a_xcopy(&ret, arg(argc,argv,0));
+    if (st == A_OK) {
+        a_push(ret);
+    }
+    return st;
 }
 
 // X.eq(a, b): structural equality

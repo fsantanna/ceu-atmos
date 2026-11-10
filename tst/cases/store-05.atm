@@ -1,0 +1,32 @@
+;; spawn, boxes, throw
+task T (v) {
+    await(:X)
+    print(v@0)
+}
+pin ts = tasks()
+pin a = [1]
+spawn @ts T(a)
+do {
+    pin b = [2]
+    print(catch true { spawn @ts T(b) })
+    pin us = tasks()
+    spawn @us T(b)
+    spawn @us T(a)
+    spawn T(b)
+    emit(:X)
+}
+print(#ts)
+func f () {
+    var x = 1
+    val g = func () { set x = x + 1 ; x }
+    print(catch true { set x = a })
+    print(g())
+}
+f()
+print(catch true {
+    var y = a
+    func () { set y = 1 }
+})
+print(catch true { throw(a) })
+print(catch true { throw(:X, a) })
+print(catch :X { throw(:X, 1) })
