@@ -1,0 +1,21 @@
+val t = [10, 20, x=1, y=2]
+var k, v = next(t)
+loop {
+    until(k == nil)
+    print(k, v)
+    set k, v = next(t, k)
+}
+print(next([]), next([5]))
+print(next(t, 1), next(t, :y))
+print(catch true { next(t, :z) })
+print(catch true { next(1) })
+
+val t0 = os.time()
+print(type(t0), t0 > 1700000000)
+val c0 = os.clock()
+print(type(c0), c0 >= 0)
+print(os.getenv("ATMOS_NOPE"), type(os.getenv("PATH")))
+defer { print(:never) }
+print(:bye)
+os.exit(3)
+print(:never)

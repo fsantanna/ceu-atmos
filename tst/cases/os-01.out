@@ -1,0 +1,12 @@
+0	10
+1	20
+x	1
+y	2
+nil	0	5
+x	nil
+false	invalid argument to 'next' : unknown key
+false	invalid argument to 'next' : expected table : got number
+number	true
+number	true
+nil	string
+bye

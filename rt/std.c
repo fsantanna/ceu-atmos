@@ -13,6 +13,7 @@ AVal atm_g_type;
 AVal atm_g_tostring;
 AVal atm_g_tonumber;
 AVal atm_g_assert;
+AVal atm_g_next;
 AVal atm_g_X;
 AVal atm_g_atmos;
 AVal atm_g_math;
@@ -105,6 +106,29 @@ static AStatus std_assert (AFunc* self, int argc, AVal* argv) {
     }
     for (int i=0; i<argc; i++) {
         a_pushc(argv[i]);
+    }
+    return A_OK;
+}
+
+// next(t, k): the key and value that follow key `k` in table `t`, or
+// the first ones if `k` is nil. Gives nil after the last.
+static AStatus std_next (AFunc* self, int argc, AVal* argv) {
+    (void) self;
+    AVal t = arg(argc, argv, 0);
+    if (t.type != A_TAB) {
+        return a_error("invalid argument to 'next' : expected table : got %s",
+            a_typename(t));
+    }
+    uint32_t pos;
+    if (!a_tab_after(A_TAB_OF(t), arg(argc,argv,1), &pos)) {
+        return a_error("invalid argument to 'next' : unknown key");
+    }
+    AVal k, v;
+    if (a_tab_next(A_TAB_OF(t), &pos, &k, &v)) {
+        a_pushc(k);
+        a_pushc(v);
+    } else {
+        a_push(a_nil());
     }
     return A_OK;
 }
@@ -535,6 +559,7 @@ void atm_std_init (void) {
     atm_g_tostring = a_func(std_tostring, 0);
     atm_g_tonumber = a_func(std_tonumber, 0);
     atm_g_assert   = a_func(std_assert, 0);
+    atm_g_next     = a_func(std_next, 0);
 
     atm_g_X = a_tab();
     field(atm_g_X, "tostring", x_tostring);
@@ -566,6 +591,7 @@ void atm_std_init (void) {
 
     atm_lib_string_init();
     atm_lib_vector_init();
+    atm_lib_os_init();
 }
 
 void atm_std_quit (void) {
@@ -574,9 +600,11 @@ void atm_std_quit (void) {
     a_clr(&atm_g_tostring);
     a_clr(&atm_g_tonumber);
     a_clr(&atm_g_assert);
+    a_clr(&atm_g_next);
     a_clr(&atm_g_X);
     a_clr(&atm_g_atmos);
     a_clr(&atm_g_math);
     atm_lib_string_quit();
     atm_lib_vector_quit();
+    atm_lib_os_quit();
 }

@@ -433,6 +433,10 @@ void a_tab_set (ATab* t, AVal k, AVal v);
 // Starts with `*pos == 0`. Returns 0 at the end.
 int a_tab_next (ATab* t, uint32_t* pos, AVal* k, AVal* v);
 
+// Position of the iteration right after key `k`, or its start if nil.
+// Returns 0 if the table has no such key.
+int a_tab_after (ATab* t, AVal k, uint32_t* pos);
+
 // t@k
 AStatus a_index (AVal* dst, AVal t, AVal k);
 
@@ -936,6 +940,8 @@ extern AVal atm_g_X;
 extern AVal atm_g_math;
 extern AVal atm_g_string;
 extern AVal atm_g_vector;
+extern AVal atm_g_os;
+extern AVal atm_g_next;
 
 // Deep string representation: tables as `:Tag [v, k=v]`, with sorted
 // keys (owned). Fails on keys that are neither numbers nor strings.

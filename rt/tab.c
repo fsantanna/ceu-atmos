@@ -248,6 +248,28 @@ int a_tab_next (ATab* t, uint32_t* pos, AVal* k, AVal* v) {
     return 0;
 }
 
+int a_tab_after (ATab* t, AVal k, uint32_t* pos) {
+    if (k.type == A_NIL) {
+        *pos = 0;
+        return 1;
+    }
+    k = norm(k);
+    int64_t i = aidx(k);
+    if (i>=0 && i<t->an) {
+        *pos = i + 1;
+        return 1;
+    }
+    if (t->elive == 0) {
+        return 0;
+    }
+    int32_t e = t->idx[probe(t, k)];
+    if (e == EMPTY) {
+        return 0;
+    }
+    *pos = t->an + e + 1;
+    return 1;
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 
 // A task only has the field `pub`.
