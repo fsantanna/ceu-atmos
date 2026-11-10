@@ -15,6 +15,11 @@ print(string.len(c.text), string.find(c.text, '"quoted"'))
 print(c.esc)
 X.print(c.neg)
 
+;; clocks are numbers of microseconds, as in the language
+print(X.load("1s"), X.load("1h30min") == 1h30min, X.load("[t=500ms, 2.5s]").t, X.load("10us"))
+print(catch true { X.load("1x") })
+print(catch true { X.load("-1s") })
+
 ;; the result is a regular value
 set c.size@+ = 32
 print(#c.size)

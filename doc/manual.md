@@ -2869,13 +2869,16 @@ The value is written with the constructors of the language only:
 
 ```
 Value : `nil´ | `true´ | `false´
-      | [`-´] NUM | STR | TAG
+      | [`-´] NUM | CLK | STR | TAG
       | [TAG] `[´ { Entry `,´ } `]´
 Entry : ID `=´ Value
       | `@´ Key `=´ Value
       | Value
 Key   : `(´ Value `)´ | NUM | STR | TAG
 ```
+
+A clock duration, such as `1h30min`, is a number of microseconds, as in the
+language.
 
 There are no variables, operations, functions, or calls: a text with any of
 them is an error.

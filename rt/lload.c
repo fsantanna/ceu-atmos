@@ -1,7 +1,7 @@
 // X.load: reads a value written with the constructors of the language.
 //
 //      Value : `nil´ | `true´ | `false´
-//            | [`-´] NUM | STR | TAG
+//            | [`-´] NUM | CLK | STR | TAG
 //            | [TAG] `[´ { Entry `,´ } `]´
 //      Entry : ID `=´ Value
 //            | `@´ Key `=´ Value
@@ -103,6 +103,43 @@ static int accept (Load* l, char c) {
 
 static AStatus value (Load* l, AVal* dst);
 
+// CLK: digits and units in descending order (day h min s ms us), as
+// in `1h30min`. Returns the duration in microseconds, or -1 if the
+// text is not a clock.
+static double clock_us (const char* s) {
+    static const char*  US[] = { "day", "h", "min", "s", "ms", "us" };
+    static const double VS[] = { 864e8, 36e8, 6e7, 1e6, 1e3, 1 };
+    double ret = 0;
+    int ok = 0;
+    for (int u=0; u<6; u++) {
+        const char* p = s;
+        while (isdigit((unsigned char)*p)) {
+            p++;
+        }
+        if (p == s) {
+            continue;
+        }
+        if (*p == '.') {
+            p++;
+        }
+        while (isdigit((unsigned char)*p)) {
+            p++;
+        }
+        size_t n = strlen(US[u]);
+        if (strncmp(p, US[u], n) != 0) {
+            continue;
+        }
+        // "s" must not shadow a longer unit
+        if (isalpha((unsigned char)p[n])) {
+            continue;
+        }
+        ret += strtod(s, NULL) * VS[u];
+        ok = 1;
+        s = p + n;
+    }
+    return (ok && *s=='\0') ? ret : -1;
+}
+
 // NUM: as a literal of the language, plus an exponent with a sign.
 static AStatus number (Load* l, int neg, AVal* dst) {
     const char* s = l->s;
@@ -132,6 +169,18 @@ static AStatus number (Load* l, int neg, AVal* dst) {
     }
     memcpy(buf, s, n);
     buf[n] = '\0';
+
+    // a clock is a number of microseconds
+    double us = neg ? -1 : clock_us(buf);
+    if (us >= 0) {
+        if (us==(double)(long long)us && us<9e18) {
+            a_set(dst, a_int((int64_t)us));
+        } else {
+            a_set(dst, a_num(us));
+        }
+        l->s = p;
+        return A_OK;
+    }
 
     char* stop;
     if (!real) {

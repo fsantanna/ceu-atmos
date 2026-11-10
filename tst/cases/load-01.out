@@ -10,6 +10,9 @@ ten	-3	255
 17	8	15
 tab	here\ AA
 [-1, -2.5, 1000.0, 0.02]
+1000000	true	500000	10
+false	invalid load : line 1 : invalid number
+false	invalid load : line 1 : invalid number
 3
 false	invalid load : line 1 : expected ',' or ']'
 false	invalid load : line 1 : expected ',' or ']'
