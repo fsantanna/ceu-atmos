@@ -12,6 +12,9 @@ printf 'one\ntwo\nquit\nthree\n' | ./atmos exs/stdin.atm
   block defines the driver, which emits each line of the standard
   input as an event.
 
+- `rocks/`: the "Rocks!" game, over the SDL environment in
+  `lib/sdl.atm`. See its `README.md`.
+
 The examples of the reference implementation that are not here depend
 on what this version leaves out: the functional streams (`rx.atm`,
 `rx-behavior.atm`) and the `pico-sdl` environment (`clicks.atm`,

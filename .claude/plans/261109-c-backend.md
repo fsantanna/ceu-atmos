@@ -815,7 +815,7 @@ exs/        examples
 
 - Error trace with the tree of tasks (lines of `emit` and `spawn`),
   as in the reference. Skipped for now.
-- An SDL environment, to port the graphical examples. Waiting.
+- The `pico-sdl` examples (`clicks.atm`, `click-drag-cancel.atm`).
 
 ## Revisions
 
@@ -886,6 +886,12 @@ Agreed after `atmos-lang/atmos@5977b07`.
       errors and traces name the right file.
     - A module as a value (`val m = import "m"`) is left for later.
 - `ATMOS_LDFLAGS` gives the linker flags, after the program.
+- `lib/sdl.atm` is a basic SDL environment: a `:prelude` with the
+  driver and the wrappers, and a table `sdl` with the functions.
+  Textures and fonts are native boxes. It has a test mode with no
+  screen (fixed frames, scripted keys, screenshots).
+- `exs/rocks/` is the "Rocks!" game, ported from
+  `atmos-lang/sdl-rocks` and verified in the test mode.
 - Memory refinements found while implementing M8 (Pin, Stores, Exits):
   pin at birth for constructors, two-phase block end, lateral check on
   `emit`, confinement after a transfer, abort of confined tasks that

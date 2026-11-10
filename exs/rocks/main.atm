@@ -1,0 +1,135 @@
+;; The "Rocks!" game: a spaceship shooter for 2 simultaneous players.
+;;
+;; Ported from https://github.com/atmos-lang/sdl-rocks (v0.5).
+;;
+;;      cd exs/rocks
+;;      ATMOS_LDFLAGS="-lSDL2 -lSDL2_image -lSDL2_ttf -lSDL2_mixer" ../../atmos main.atm
+
+include "../../lib/sdl.atm"
+
+;; SKIP TO "START HERE"
+
+val W, H = 640, 480
+sdl.window [
+    title  = "The Battle of Ships",
+    width  = W,
+    height = H,
+]
+
+val PP = sdl.pct_to_pos
+val rect_vs_rect = sdl.rect_vs_rect
+val FNT = sdl.font("tiny.ttf", H//15) --> assert
+
+math.randomseed(os.time())
+
+include "ts.atm"        ;; task prototypes for Ship, Shot, Meteor
+include "battle.atm"    ;; actual battle gameplay
+
+;; START HERE
+
+spawn {    ;; BACKGROUND
+    ;;;
+    ;; This task is the first to spawn, which makes the background image to
+    ;; always be rendered first.
+    ;;;
+    pin tex = sdl.image("imgs/bg.png") --> assert
+    loop on :sdl.draw {
+        sdl.copy(tex)
+    }
+}
+
+val points = [ L=0, R=0 ]
+
+spawn {    ;; POINTS
+    ;;;
+    ;; Spawns the players points and place them at the bottom of the screen, in
+    ;; opposite sides.
+    ;; Points are incremented when the ship of the opponent is destroyed.
+    ;; Since points must outlive each individual battle, we spawn them here,
+    ;; outside the main game loop.
+    ;;;
+    val l = PP(10, 90)
+    val r = PP(90, 90)
+    loop on :sdl.draw {
+        sdl.color(0xFFFFFF)
+        sdl.write(FNT, tostring(points.L), l)
+        sdl.write(FNT, tostring(points.R), r)
+    }
+}
+
+;; MAIN-LOOP
+;;;
+;; Starts the main game loop:
+;;  - Shows the "press to start" message.
+;;  - Runs the next battle with the actual gameplay.
+;;  - Restarts whenever one of the ships is destroyed.
+;;;
+loop {
+    ;; ENTER-TO-START
+    watching :sdl.key.dn [name='Return'] {
+        ;;;
+        ;; Spawns the blinking message, and awaits a :Return press.
+        ;;;
+        loop {
+            ;; 500ms on
+            watching 500ms {
+                val pt = PP(50, 50)
+                loop on :sdl.draw {
+                    sdl.color(0xFFFFFF)
+                    sdl.write(FNT, "= PRESS ENTER TO START =", pt)
+                }
+            }
+            ;; 500ms off
+            await 500ms
+        }
+    }
+
+    ;; Plays the restart sound.
+    sdl.play "snds/start.wav"
+
+    ;; spawns the actual battle
+    pin battle = spawn Battle()
+
+    ;; Pause with 'P':
+    ;;  * awaits 'P' to toggle battle off
+    ;;  * shows a "paused" image
+    ;;  * awaits 'P' to toggle battle on
+    spawn {
+        loop {
+            await :sdl.key.dn [name='P']
+            toggle battle(false)
+            spawn {
+                pin tex = sdl.image("imgs/pause.png") --> assert
+                val w, h = sdl.size(tex)
+                val pt = PP(50, 50)
+                val r = [
+                    x = pt.x - (w/2),
+                    y = pt.y - (h/2),
+                    w = w,
+                    h = h,
+                ]
+                loop on :sdl.draw {
+                    sdl.copy(tex, nil, r)
+                }
+            }
+            await :sdl.key.dn [name='P']
+            toggle battle(true)
+        }
+    }
+
+    ;; Battle terminates:
+    ;;  * awaits battle to return winner
+    ;;  * increments winner points
+    ;;  * awaits 1s before next battle
+    val winner = await(battle)
+    set points@(winner) += 1
+    await 1s
+
+    ;;;
+    ;; Restarts the main loop.
+    ;; Due to lexical memory management, only the points are preserved
+    ;; between loop iterations.
+    ;; All other tasks are guaranteed to abort and be reclaimed after this
+    ;; point.
+    ;;;
+}

@@ -89,6 +89,7 @@ rt/atmos.h   C API for generated code, natives, and environments
 tst/    tests
 doc/    manual
 exs/    examples
+lib/    libraries in Atmos: sdl.atm
 ```
 
 ## Differences from the current Atmos

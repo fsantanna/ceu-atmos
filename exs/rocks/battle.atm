@@ -1,0 +1,128 @@
+;; Left/Right ship constant parameters
+
+val V = [
+    l = [                           ;; left ship
+        tag = :L,
+        pos = PP(10, 50),           ;; x,y initial position
+        ctl = [                     ;; key controls
+            move  = [ l='A', r='D', u='W', d='S'],
+            frame = [ l=0, r=1, u=2, d=3 ],
+            shot  = 'Left Shift',
+        ],
+        lim = [ x1=0, x2=W/2 ],     ;; x limits (half of screen)
+        shot = [ tag=:l, x=1 ],     ;; shot tag, x direction
+        img = "imgs/ship-L.gif",    ;; ship image
+    ],
+    r = [
+        tag = :R,
+        pos = PP(90, 50),
+        ctl = [
+            move = [ l='Left', r='Right', u='Up', d='Down' ],
+            frame = [ l=1, r=0, u=2, d=3 ],
+            shot = 'Right Shift',
+        ],
+        lim = [ x1=W/2, x2=W ],
+        shot = [ tag=:r, x= -1 ],
+        img = "imgs/ship-R.gif",    ;; ship image
+    ],
+]
+
+;; Appends the tasks of a pool to a table.
+func collect (ts, pool) {
+    loop _,t in pool {
+        set ts@+ = t
+    }
+}
+
+;;;
+;; Declares and spawns the game objects:
+;;  - Meteors live in an unbounded pool of tasks and are spawned periodically.
+;;  - Ships live in a 2-size pool.
+;;  - Shots also live in pools, but one for each ship with only 3 slots.
+;; Pools control the lifecycle of tasks by releasing them from memory
+;; automatically on termination.
+;;;
+
+task Battle () {
+    ;; holds all meteors
+    pin meteors = tasks()
+
+    ;; holds all l/r shots (max of 3 simultaneous)
+    pin shots_l = tasks(3)
+    pin shots_r = tasks(3)
+
+    ;; holds l/r ships
+    pin ships = tasks(2)
+    spawn @ships Ship(V.l, shots_l)
+    spawn @ships Ship(V.r, shots_r)
+
+    ;; `s` becomes the tag of a collided ship within ships
+
+    val s = watching :any ships {     ;; GAMEPLAY
+        ;;;
+        ;; Runs the gameplay until one of the two ships is destroyed:
+        ;;  - Spawns new meteors periodically.
+        ;;  - Checks collisions between all objects.
+        ;;;
+        par {                   ;; METEORS
+            ;; Spawns new meteros in the game every period:
+            loop {
+                val dt = math.random(1000, 5000)
+                await (dt * 1ms)
+                spawn @meteors Meteor()
+            }
+        } with {
+            loop on :clock { ;; COLLISIONS
+                ;;;
+                ;; Checks collisions between objects:
+                ;;  1. Collects all references to ships, shots, and meteors.
+                ;;  2. Checks all pairs of colliding objects:
+                ;;      - ignores innocuous collisions
+                ;;  3. Signals colliding objects.
+                ;; A ship collision will eventually terminate the enclosing
+                ;; `watching`, also terminating the current battle.
+                ;;;
+
+                ;; The tasks belong to their pools, so the table that
+                ;; refers to them must be pinned too: it does not outlive
+                ;; this iteration.
+                pin ts = []
+                collect(ts, ships)
+                collect(ts, shots_l)
+                collect(ts, shots_r)
+                collect(ts, meteors)
+
+                ;; check valid collisions within `ts` and emit 'collided'
+                ;; (ignore ship 'R'/'r' shot, ship 'L'/'l' shot, 'M'/'M' meteors)
+                loop _,t1 in ts {
+                    loop _,t2 in ts {
+                        val no = (
+                            (t1 == t2) ||
+                            ((t1.pub.tag==:R) && (t2.pub.tag==:r)) ||
+                            ((t1.pub.tag==:r) && (t2.pub.tag==:R)) ||
+                            ((t1.pub.tag==:L) && (t2.pub.tag==:l)) ||
+                            ((t1.pub.tag==:l) && (t2.pub.tag==:L)) ||
+                            ((t1.pub.tag==:M) && (t2.pub.tag==:M))
+                        )
+                        if (!no) && rect_vs_rect(t1.pub.rect, t2.pub.rect) {
+                            emit @t1 :collided ;; will terminate t1
+                            emit @t2 :collided ;; will terminate t2
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    sdl.play "snds/explosion.wav"
+
+    ;;;
+    ;; Returns the winner index to the main game loop:
+    ;;  - :R, if ship==:L is dead
+    ;;  - :L, if ship==:R is dead
+    ;;;
+    match s {
+        :L => :R
+        :R => :L
+    }
+}
