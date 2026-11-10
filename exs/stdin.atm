@@ -1,0 +1,49 @@
+;; An environment written in the program itself: the driver below
+;; replaces the default one, and emits each line of the standard
+;; input as an event `:Line [text]`.
+;;
+;;      printf 'one\ntwo\nquit\nthree\n' | atmos exs/stdin.atm
+
+```:pre
+#include <stdio.h>
+#include <string.h>
+
+int main (int argc, char** argv) {
+    atm_init(argc, argv);
+    AStatus st = atm_main();
+
+    char line[256];
+    while (st==A_OK && atm_alive() && fgets(line,sizeof(line),stdin)!=NULL) {
+        line[strcspn(line, "\n")] = '\0';
+
+        // :Line [text]
+        AVal evt  = a_tab();
+        AVal tag  = a_strz("Line");
+        AVal text = a_strz(line);
+        a_tag(evt, tag);
+        a_setindex(evt, a_int(0), text);
+        st = atm_emit(evt);
+        a_dec(text);
+        a_dec(tag);
+        a_dec(evt);
+    }
+
+    if (st == A_OK) {
+        st = atm_stop();
+    }
+    if (st != A_OK) {
+        a_error_dump();
+    }
+    atm_quit();
+    return (st == A_OK) ? 0 : 1;
+}
+```
+
+var n = 0
+watching :Line ["quit"] {
+    loop e on :Line {
+        set n += 1
+        print(n, e@0)
+    }
+}
+print("lines", n)

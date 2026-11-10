@@ -1,0 +1,10 @@
+;; Prints twice a second, for two seconds.
+;; The default driver follows the real clock.
+
+val t0 = os.time()
+watching 2s {
+    loop on 500ms {
+        print("Hello World!")
+    }
+}
+print("elapsed", os.time() - t0)
