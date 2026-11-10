@@ -1,0 +1,15 @@
+task T (...) {
+    print(...)
+    val a, b = ...
+    await(:X)
+    print(a, b, #[...])
+}
+spawn T(1, 2, 3)
+emit(:X)
+task M () {
+    val me = task
+    print(me ?? :xtask, me == task)
+    await(false)
+}
+pin m = spawn M()
+print(task ?? :xtask)

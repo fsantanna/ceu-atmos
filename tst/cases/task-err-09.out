@@ -1,0 +1,3 @@
+==> ERROR:
+ v  task-err-09.atm:1 (throw)
+==> invalid await : invalid event pattern

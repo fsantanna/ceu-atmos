@@ -1,0 +1,16 @@
+var n = 0
+task T () {
+    set n = n + 1
+    val k = n
+    await(:X)
+    print(:awake, k)
+}
+spawn T()
+spawn (task () {
+    await(:X)
+    spawn T()
+    emit(:X)
+    print(:mid)
+})()
+emit(:X)
+print(n)

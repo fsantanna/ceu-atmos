@@ -1,0 +1,12 @@
+task T () {
+    await(:X)
+    throw(:Boom)
+}
+task P () {
+    spawn T()
+    defer { print(:p_defer) }
+    await(false)
+}
+spawn P()
+print(catch :Boom { emit(:X) ; :no })
+print(:end)

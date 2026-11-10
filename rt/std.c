@@ -12,6 +12,7 @@ AVal atm_g_tostring;
 AVal atm_g_tonumber;
 AVal atm_g_assert;
 AVal atm_g_X;
+AVal atm_g_atmos;
 
 ///////////////////////////////////////////////////////////////////////////////
 // AUX
@@ -282,6 +283,25 @@ static AStatus x_copy (AFunc* self, int argc, AVal* argv) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+// ATMOS
+///////////////////////////////////////////////////////////////////////////////
+
+// atmos.status(t): :running, :suspended, or :dead.
+static AStatus atmos_status (AFunc* self, int argc, AVal* argv) {
+    (void) self;
+    AVal t = arg(argc, argv, 0);
+    if (t.type != A_XTASK) {
+        return a_error("invalid status : expected task");
+    }
+    switch (A_TASK_OF(t)->status) {
+        case T_RUNNING:   a_push(a_strz("running"));   break;
+        case T_SUSPENDED: a_push(a_strz("suspended")); break;
+        default:          a_push(a_strz("dead"));      break;
+    }
+    return A_OK;
+}
+
+///////////////////////////////////////////////////////////////////////////////
 
 static void field (AVal t, const char* name, AFn fn) {
     AVal k = a_strz(name);
@@ -302,6 +322,9 @@ void atm_std_init (void) {
     field(atm_g_X, "tostring", x_tostring);
     field(atm_g_X, "print",    x_print);
     field(atm_g_X, "copy",     x_copy);
+
+    atm_g_atmos = a_tab();
+    field(atm_g_atmos, "status", atmos_status);
 }
 
 void atm_std_quit (void) {
@@ -311,4 +334,5 @@ void atm_std_quit (void) {
     a_clr(&atm_g_tonumber);
     a_clr(&atm_g_assert);
     a_clr(&atm_g_X);
+    a_clr(&atm_g_atmos);
 }

@@ -1,0 +1,13 @@
+val T = task (a) {
+    print(a)
+    val b = await(:X)
+    print(b)
+}
+spawn T(10)
+emit(:Y)
+emit(:X)
+print(T ?? :task, type(T))
+pin t = spawn T(20)
+print(t ?? :xtask, type(t), atmos.status(t))
+emit(:X)
+print(atmos.status(t))

@@ -72,8 +72,9 @@ static inline int a_truthy (AVal v) {
 ///////////////////////////////////////////////////////////////////////////////
 
 // Non-local exits propagate as a returned status, never longjmp.
+// A_AWAIT is internal: a task suspended at an await.
 typedef enum {
-    A_OK, A_ERROR, A_ESCAPE, A_BREAK, A_RETURN, A_ABORT
+    A_OK, A_ERROR, A_ESCAPE, A_BREAK, A_RETURN, A_ABORT, A_AWAIT
 } AStatus;
 
 // Raises an error with a formatted message as its value.
@@ -422,6 +423,9 @@ AStatus a_tag (AVal t, AVal tag);
 // Moves the top `n` values of the stack into the keys `i, i+1, ...`.
 void a_tab_fill (AVal t, int i, int n);
 
+// Pushes the values of the array part. Returns how many.
+int a_tab_unpack (AVal t);
+
 ///////////////////////////////////////////////////////////////////////////////
 // FUNCTIONS
 ///////////////////////////////////////////////////////////////////////////////
@@ -432,9 +436,13 @@ struct AFunc;
 // pushes its results and returns a status.
 typedef AStatus (*AFn) (struct AFunc* self, int argc, AVal* argv);
 
+struct AProto;
+
+// A function, or a task prototype (type A_TASK, with `task` set).
 typedef struct AFunc {
     AObj hdr;
     AFn  fn;
+    const struct AProto* task;
     int  ncap;
     AVal caps[];
 } AFunc;
@@ -469,6 +477,139 @@ static inline int a_dots (int argc, AVal* argv, int npar) {
 // On success, the results replace the arguments at `[base,a_top)`.
 // Otherwise, the stack is unwound to `base`.
 AStatus a_call (AVal f, int base);
+
+///////////////////////////////////////////////////////////////////////////////
+// TASKS
+///////////////////////////////////////////////////////////////////////////////
+
+struct ATask;
+struct APatt;
+
+// Why a task is resumed:
+//  - R_START: first execution
+//  - R_EVENT: an emit matched its await; the results are the payload
+//  - R_EXIT:  a child delivered a non-local exit, raised at its await
+//  - R_ABORT: it unwinds from its await
+typedef enum {
+    R_START, R_EVENT, R_EXIT, R_ABORT
+} AKind;
+
+// Generated: runs a task from its resumption point until it awaits
+// (A_AWAIT) or terminates (any other status).
+typedef AStatus (*AResume) (struct ATask* t, AKind k);
+
+// Static description of a task prototype.
+typedef struct AProto {
+    AResume resume;
+    // slots of the frame; parameters take the first ones, then a
+    // table with the extra arguments, if variadic
+    int nslots;
+    int npar;
+    int dots;
+} AProto;
+
+// New task prototype with `ncap` empty captures (owned).
+AVal a_task (const AProto* p, int ncap);
+
+// Node of the task tree: a task or a pool. A node owns one reference
+// to each child, in spawn order.
+typedef struct ANode {
+    AObj   hdr;
+    struct ANode*  up;
+    struct ANode** dns;
+    int    ndns;
+    int    cdns;
+    // traversals in progress: children are only removed at zero
+    int    trav;
+    uint8_t dirty;
+    // terminated task, or released pool
+    uint8_t dead;
+    uint8_t toggled;
+} ANode;
+
+typedef enum {
+    T_RUNNING, T_SUSPENDED, T_DONE
+} TStatus;
+
+// Task instance. The frame is freed at termination; the header lives
+// while referenced, so `await t` and `t.pub` keep working.
+typedef struct ATask {
+    ANode    node;
+    AFunc*   proto;
+    AVal*    L;
+    int      pc;
+    uint8_t  status;
+    // transparent: no identity, owned by its enclosing task
+    uint8_t  tra;
+    // abort requested while running: unwinds when control returns
+    uint8_t  aborted;
+    // exit delivered by a child
+    AStatus  exit;
+    // emit counter when the current await was established
+    uint32_t time;
+    struct APatt* awt;
+    AVal     pub;
+    AVal     ret;
+} ATask;
+
+// Pool of tasks, with an optional limit (-1 for none).
+typedef struct ATasks {
+    ANode node;
+    int   max;
+} ATasks;
+
+#define A_TASK_OF(v)  ((ATask*)(v).u.o)
+#define A_TASKS_OF(v) ((ATasks*)(v).u.o)
+
+// Innermost running task (NULL outside the program).
+extern struct ATask* a_cur;
+
+// spawn T(...): arguments at `[base,a_top)`. The pool is nil for none;
+// a full pool gives nil.
+AStatus a_spawn (AVal* dst, AVal proto, AVal pool, int base);
+
+// tasks(n)
+AStatus a_tasks (AVal* dst, AVal max);
+
+// abort(t)
+AStatus a_abort (AVal v);
+
+// emit @to (evt): `to` is nil for the default target.
+AStatus a_emit (AVal to, AVal evt);
+
+// Establishes an await on a value. Returns A_OK if it is satisfied at
+// once (results in the payload), or A_AWAIT if the task must suspend.
+AStatus a_await_val (struct ATask* t, AVal v);
+
+// Status a task continues with after it is resumed at an await.
+AStatus a_resumed (struct ATask* t, AKind k);
+
+// The running task with an identity (owned), or nil.
+AVal a_me (void);
+
+// Storage of `pub` of the running task.
+AStatus a_pub (AVal** ref);
+
+// pin x = v: a task or pool becomes owned by the block.
+AStatus a_pin (AVal* slot);
+
+// val x = v: a task or pool must be pinned somewhere.
+AStatus a_chk_task (AVal v);
+
+static inline AStatus a_chk (AVal v) {
+    if (v.type!=A_XTASK && v.type!=A_TASKS) {
+        return A_OK;
+    }
+    return a_chk_task(v);
+}
+
+// End of the block of a pin: aborts the task or pool. Returns the
+// status the block continues with.
+AStatus a_pin_end (AVal* slot, AStatus st);
+
+// Runs the main chunk as a task until it terminates or nothing can
+// awake it.
+AStatus a_main (const AProto* p, int argc, AVal* argv);
 
 ///////////////////////////////////////////////////////////////////////////////
 // OPERATIONS
@@ -615,5 +756,7 @@ void    atm_quit (void);
 
 // Generated: runs the main chunk, with the program arguments.
 AStatus atm_main (int argc, AVal* argv);
+
+extern AVal atm_g_atmos;
 
 #endif

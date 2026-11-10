@@ -1,0 +1,1 @@
+task-err-06.atm : line 1 : near 'await' : invalid await : unexpected enclosing defer

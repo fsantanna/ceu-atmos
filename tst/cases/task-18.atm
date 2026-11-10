@@ -1,0 +1,15 @@
+task T () {
+    await(:X)
+    :value
+}
+pin t = spawn T()
+spawn (task () {
+    val e = await(true)
+    print(:any, e ?? :xtask, e == t)
+})()
+spawn (task () {
+    val v = await(t)
+    print(:got, v)
+})()
+emit(:X)
+print((await(t)))

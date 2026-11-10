@@ -1,0 +1,4 @@
+true
+==> ERROR:
+ v  task-err-02.atm:5 (throw)
+==> invalid assignment : unexpected pinned value

@@ -1,0 +1,17 @@
+task T (v) {
+    v * 2
+}
+pin t = spawn T(10)
+print((await(t)))
+task U () {
+    await(:go)
+    return(:done, :extra)
+}
+pin u = spawn U()
+spawn (task () {
+    val v, x = await(u)
+    print(v, x == u)
+})()
+emit(:go)
+val a, b = await(u)
+print(a, b == u)

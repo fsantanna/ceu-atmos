@@ -1,0 +1,20 @@
+task T (name) {
+    loop {
+        val e = await(:tick)
+        print(name, e)
+    }
+}
+spawn T(:a)
+spawn T(:b)
+emit(:tick)
+emit(:tick)
+task C () {
+    spawn T(:c1)
+    spawn T(:c2)
+    await(:tick)
+    print(:parent)
+    await(false)
+}
+print("--")
+spawn C()
+emit(:tick)

@@ -1,0 +1,17 @@
+val T = task (x) {
+    val f = func () { x * 2 }
+    await(:X)
+    f()
+}
+var acc = 0
+task Add (n) {
+    var local = n
+    val inc = \{ set local = local + it ; local }
+    await(:X)
+    set acc = acc + inc(1)
+}
+pin t = spawn T(21)
+spawn Add(10)
+spawn Add(20)
+emit(:X)
+print((await(t)), acc)

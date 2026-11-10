@@ -1,0 +1,2 @@
+task T () { await(false) }
+val t = spawn T()

@@ -1,0 +1,15 @@
+task Inner () {
+    await(:X)
+    print(:inner)
+    emit @:global (:Y)
+    print(:inner2)
+}
+task Outer () {
+    spawn Inner()
+    await(:Y)
+    print(:outer)
+}
+spawn Outer()
+spawn (task () { await(:Y) ; print(:sibling) })()
+emit(:X)
+print(:end)

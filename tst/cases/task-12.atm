@@ -1,0 +1,27 @@
+catch :e {
+    spawn (task () {
+        throw(:e)
+        print(:no)
+    })()
+    print(:no)
+}
+print(:ok)
+task P () {
+    val ok, e = catch :E {
+        spawn (task () {
+            print(:1)
+            await(true)
+            print(:e)
+            throw(:E, 10)
+            print(:no1)
+        })()
+        print(:2)
+        await(false)
+        print(:no2)
+    }
+    print(:4, ok, e)
+}
+spawn P()
+print(:3)
+emit(:go)
+print(:5)

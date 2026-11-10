@@ -20,6 +20,9 @@ static int    N     = 0;
 // Number of enclosing loops in the current function.
 static int LOOPS = 0;
 
+// Number of enclosing defers.
+static int DEFERS = 0;
+
 // Current function.
 Proto* PROTO_MAIN = NULL;
 static Proto* PROTO = NULL;
@@ -31,6 +34,7 @@ static int   NGLOBALS = 0;
 
 // Global variables provided by the runtime.
 static const char* BUILTINS[][2] = {
+    { "atmos",    "atm_g_atmos"    },
     { "print",    "atm_g_print"    },
     { "type",     "atm_g_type"     },
     { "tostring", "atm_g_tostring" },
@@ -113,12 +117,35 @@ static void capture (Var* v) {
     }
 }
 
-static Proto* proto_new (int dots) {
+static Proto* proto_new (int dots, int task) {
     Proto* p = xalloc(sizeof(Proto));
     p->id   = NPROTOS++;
     p->up   = PROTO;
     p->dots = dots;
+    p->task = task;
     return p;
+}
+
+static void res_patt (Patt* p) {
+    if (p == NULL) {
+        return;
+    }
+    res(p->e);
+    for (int i=0; i<p->args.n; i++) {
+        res(p->args.v[i]);
+    }
+    res_patt(p->a);
+    res_patt(p->b);
+}
+
+// An await is only valid lexically inside a task body.
+static void chk_await (Tk tk, const char* what) {
+    if (!PROTO->task) {
+        err(tk, "invalid %s : expected enclosing task", what);
+    }
+    if (DEFERS > 0) {
+        err(tk, "invalid %s : unexpected enclosing defer", what);
+    }
 }
 
 // `func f () {...}` declares `f` at the top level if it is unknown
@@ -213,6 +240,22 @@ static void hoist (Expr* e) {
         case E_PROTO:
             hoist(e->u.proto.blk);
             break;
+        case E_SPAWN:
+            hoist(e->u.spawn.f);
+            hoist_list(&e->u.spawn.args);
+            break;
+        case E_SPAWN_BLK:
+            hoist(e->u.sblk.blk);
+            break;
+        case E_TOGGLE_ON:
+            hoist(e->u.toggle_on.blk);
+            break;
+        case E_PAR:
+            hoist_list(&e->u.par.blks);
+            break;
+        case E_WATCHING:
+            hoist(e->u.watching.blk);
+            break;
         default:
             break;
     }
@@ -256,7 +299,6 @@ static void res (Expr* e) {
         case E_TAG:
         case E_NAT:
         case E_CLK:
-        case E_ME:
             break;
 
         case E_DOTS:
@@ -266,6 +308,10 @@ static void res (Expr* e) {
             break;
 
         case E_ACC:
+            if (!strcmp(e->tk.str, "pub")) {
+                e->tag = E_PUB;
+                break;
+            }
             if (special(e) != SP_NONE) {
                 err(e->tk, "expected call syntax");
             }
@@ -359,6 +405,9 @@ static void res (Expr* e) {
             for (int i=0; i<e->u.set.dsts.n; i++) {
                 Expr* dst = e->u.set.dsts.v[i];
                 res(dst);
+                if (dst->tag == E_PUB) {
+                    continue;
+                }
                 if (dst->tag==E_ACC && dst->var->kind!=V_VAR) {
                     err(dst->tk, "invalid set : expected mutable variable");
                 }
@@ -377,7 +426,9 @@ static void res (Expr* e) {
             // a loop does not reach into a defer
             int loops = LOOPS;
             LOOPS = 0;
+            DEFERS++;
             res_block(e->u.defer.blk);
+            DEFERS--;
             LOOPS = loops;
             break;
         }
@@ -399,6 +450,9 @@ static void res (Expr* e) {
             break;
 
         case E_LOOP:
+            if (e->u.loop.on != NULL) {
+                err(e->tk, "loop on : not implemented");
+            }
             res(e->u.loop.itr);
             scope_push();
             e->vars = xalloc(e->u.loop.n * sizeof(Var*));
@@ -416,11 +470,31 @@ static void res (Expr* e) {
             res_block(e->u.xcatch.blk);
             break;
 
+        case E_ME:
+        case E_PUB:
+            break;
+
         case E_SPAWN:
-        case E_SPAWN_BLK:
+            res(e->u.spawn.pool);
+            res(e->u.spawn.f);
+            res_list(&e->u.spawn.args);
+            break;
+
         case E_TASKS:
+            res(e->u.tasks.n);
+            break;
+
         case E_EMIT:
+            res(e->u.emit.to);
+            res(e->u.emit.e);
+            break;
+
         case E_AWAIT:
+            chk_await(e->tk, "await");
+            res_patt(e->u.await.p);
+            break;
+
+        case E_SPAWN_BLK:
         case E_TOGGLE:
         case E_TOGGLE_ON:
         case E_PAR:
@@ -430,10 +504,12 @@ static void res (Expr* e) {
 
         case E_PROTO: {
             // a loop does not reach into a function
-            int loops = LOOPS;
+            int loops  = LOOPS;
+            int defers = DEFERS;
             if (!e->u.proto.inl) {
-                LOOPS = 0;
-                e->proto = proto_new(e->u.proto.dots);
+                LOOPS  = 0;
+                DEFERS = 0;
+                e->proto = proto_new(e->u.proto.dots, e->u.proto.task);
                 PROTO = e->proto;
             }
             scope_push();
@@ -446,7 +522,8 @@ static void res (Expr* e) {
             if (!e->u.proto.inl) {
                 PROTO = PROTO->up;
             }
-            LOOPS = loops;
+            LOOPS  = loops;
+            DEFERS = defers;
             break;
         }
     }
@@ -464,7 +541,7 @@ Var** resolver_main (Expr* prog, int* n) {
     }
 
     // main block: its variables are static
-    PROTO_MAIN = proto_new(1);
+    PROTO_MAIN = proto_new(1, 1);
     PROTO = PROTO_MAIN;
     scope_push();
     hoist(prog);

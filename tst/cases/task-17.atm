@@ -1,0 +1,15 @@
+task E () {
+    defer { print(:e_defer) }
+    await(:go)
+    print(:emit)
+    emit @:global (:kill)
+    print(:no)
+}
+task W () {
+    pin e = spawn E()
+    await(:kill)
+    print(:w_awake)
+}
+spawn W()
+emit(:go)
+print(:end)

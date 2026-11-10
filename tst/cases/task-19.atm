@@ -1,0 +1,8 @@
+defer { print(:main_defer) }
+spawn (task () {
+    defer { print(:task_defer) }
+    await(false)
+})()
+print(:before)
+await(:never)
+print(:no)

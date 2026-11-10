@@ -1,0 +1,3 @@
+==> ERROR:
+ v  task-err-10.atm:3 (throw)
+==> invalid operation '+' : expected number : got nil

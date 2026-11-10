@@ -1,0 +1,1 @@
+task-err-05.atm : line 2 : near 'await' : invalid await : expected enclosing task

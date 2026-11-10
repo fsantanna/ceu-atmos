@@ -50,6 +50,10 @@ typedef struct Unit {
     // function being compiled, and its number of parameters
     Proto* proto;
     int npar;
+    // task: resumable, with the slots in its frame
+    int task;
+    // number of resumption points
+    int npcs;
     // number of slots in `L`
     int nslots;
     // number of count variables `n<i>`
@@ -60,14 +64,17 @@ typedef struct Unit {
     int cleanup;
     // extra indentation of the generated lines
     int ind;
-    // defers of the enclosing block: flag slot and body
+    // finalizers of the enclosing block
     struct Defer* defs;
     int ndefs;
 } Unit;
 
+// Finalizer of a block: a defer (flag slot and body), or a pin (the
+// storage of the pinned task or pool).
 typedef struct Defer {
     int   flag;
     Expr* e;
+    const char* pin;
 } Defer;
 
 // Appends one line at column zero (labels).
@@ -412,6 +419,7 @@ static int is_multi (Expr* e) {
         case E_LOOP:
         case E_CATCH:
         case E_WHERE:
+        case E_AWAIT:
             return 1;
         default:
             return 0;
@@ -686,6 +694,11 @@ static void gen_block_x (Unit* u, List* es, Dst d, Hnd h) {
     Defer* mine = u->defs;
     int   nmine = u->ndefs;
     for (int i=nmine-1; i>=0; i--) {
+        if (mine[i].pin != NULL) {
+            // aborts the pinned task or pool
+            out(u, "st = a_pin_end(&%s, st);", mine[i].pin);
+            continue;
+        }
         int id = ++u->nlabels;
         out(u, "if (a_truthy(L[%d])) {", mine[i].flag);
         u->ind++;
@@ -788,8 +801,20 @@ static void gen_defer (Unit* u, Expr* e) {
     u->defs = realloc(u->defs, (u->ndefs+1) * sizeof(Defer));
     u->defs[u->ndefs].flag = flag;
     u->defs[u->ndefs].e    = e;
+    u->defs[u->ndefs].pin  = NULL;
     u->ndefs++;
     out(u, "a_set(&L[%d], a_bool(1));", flag);
+}
+
+// The value in `slot` becomes owned by the enclosing block, which
+// aborts it on exit, if it is a task or a pool.
+static void gen_pin (Unit* u, const char* slot) {
+    out_try(u, "a_pin(&%s)", slot);
+    u->defs = realloc(u->defs, (u->ndefs+1) * sizeof(Defer));
+    u->defs[u->ndefs].flag = -1;
+    u->defs[u->ndefs].e    = NULL;
+    u->defs[u->ndefs].pin  = slot;
+    u->ndefs++;
 }
 
 // e where { x = e1 ; y = e2 }
@@ -816,11 +841,21 @@ static void gen_boxes (Unit* u, Expr* e) {
     }
 }
 
-// val x = e  |  var x, y = e
-static void gen_dcl (Unit* u, Expr* e) {
-    if (e->tk.str[0] == 'p') {
-        err(e->tk, "pin : not implemented");
+// After a declaration: a pin takes ownership of a task or pool; a val
+// or var only accepts one that is pinned elsewhere.
+static void gen_dcl_chk (Unit* u, Expr* e) {
+    for (int i=0; i<e->u.dcl.n; i++) {
+        const char* v = var_c(u, e->vars[i]);
+        if (e->vars[i]->kind == V_PIN) {
+            gen_pin(u, v);
+        } else {
+            out_try(u, "a_chk(%s)", v);
+        }
     }
+}
+
+// val x = e  |  var x, y = e  |  pin x = e
+static void gen_dcl (Unit* u, Expr* e) {
     int k = e->u.dcl.n;
     const char** vs = xalloc(k * sizeof(char*));
     if (e->u.dcl.set == NULL) {
@@ -831,6 +866,7 @@ static void gen_dcl (Unit* u, Expr* e) {
         Opnd o = gen_expr(u, e->u.dcl.set);
         gen_boxes(u, e);
         opnd_mov(u, o, var_c(u,e->vars[0]));
+        gen_dcl_chk(u, e);
         return;
     } else {
         Dst m = dst_multi(u);
@@ -843,6 +879,7 @@ static void gen_dcl (Unit* u, Expr* e) {
         for (int i=k-1; i>=0; i--) {
             out(u, "a_pop(&%s);", vs[i]);
         }
+        gen_dcl_chk(u, e);
         return;
     }
     gen_boxes(u, e);
@@ -865,7 +902,7 @@ static Loc gen_loc (Unit* u, Expr* dst) {
         if (dst->u.index.kind == IDX_EXPR) {
             l.k = gen_expr(u, dst->u.index.idx);
         }
-    } else if (dst->tag != E_ACC) {
+    } else if (dst->tag!=E_ACC && dst->tag!=E_PUB) {
         err(dst->tk, "assignment : not implemented");
     }
     return l;
@@ -873,8 +910,18 @@ static Loc gen_loc (Unit* u, Expr* dst) {
 
 // Assigns an operand to a destination, consuming both.
 static void gen_assign (Unit* u, Loc l, Opnd v) {
+    out_try(u, "a_chk(%s)", v.c);
     if (l.e->tag == E_ACC) {
         opnd_mov(u, v, var_c(u,l.e->var));
+        return;
+    }
+    if (l.e->tag == E_PUB) {
+        out(u, "{");
+        out(u, "    AVal* pub;");
+        out(u, "    if ((st = a_pub(&pub)) != A_OK) goto CL_%d;", u->cleanup);
+        out(u, "    a_cpy(pub, %s);", v.c);
+        out(u, "}");
+        opnd_rel(u, v);
         return;
     }
     switch (l.e->u.index.kind) {
@@ -1194,6 +1241,19 @@ static void gen_call (Unit* u, Expr* e, Dst d) {
             store_void(u, d);
             return;
         }
+        case SP_ABORT: {
+            List args = { 0, NULL };
+            flatten(&args, &e->u.call.es);
+            if (args.n != 1) {
+                err(e->tk, "invalid abort : expected single argument");
+            }
+            Opnd x = gen_expr(u, args.v[0]);
+            out(u, "a_lin = %d;", e->tk.lin);
+            out_try(u, "a_abort(%s)", x.c);
+            opnd_rel(u, x);
+            store_void(u, d);
+            return;
+        }
         case SP_ESCAPE: {
             Dst m = dst_multi(u);
             gen_args(u, &e->u.call.es, m.n, NULL);
@@ -1278,19 +1338,78 @@ static Buf FUNCS = { NULL, 0, 0 };
 
 // Appends the common prologue of a function, its body, and its
 // cleanup label.
+//
+// A function keeps its slots on the C stack. A task keeps them in its
+// frame, and starts by jumping to its resumption point.
 static void unit_emit (Unit* u, Buf* c) {
     int n = (u->nslots > 0) ? u->nslots : 1;
-    buf_add(c, xfmt("    AVal L[%d];\n", n));
-    buf_add(c, xfmt("    a_nils(L, %d);\n", n));
+    if (u->task) {
+        buf_add(c, "    AVal* L = t->L;\n");
+        buf_add(c, "    AFunc* self = t->proto;\n");
+    } else {
+        buf_add(c, xfmt("    AVal L[%d];\n", n));
+        buf_add(c, xfmt("    a_nils(L, %d);\n", n));
+    }
     buf_add(c, "    AStatus st = A_OK;\n");
     buf_add(c, "    int base = a_top;\n");
     for (int i=0; i<u->ncnts; i++) {
         buf_add(c, xfmt("    int n%d = 0;\n", i));
     }
+    if (u->task) {
+        buf_add(c, "    switch (t->pc) {\n");
+        for (int i=1; i<=u->npcs; i++) {
+            buf_add(c, xfmt("        case %d: goto AW_%d;\n", i, i));
+        }
+        buf_add(c, "    }\n");
+    }
     buf_add(c, u->body.s ? u->body.s : "");
     buf_add(c, "    goto CL_0;\n");
     buf_add(c, "CL_0:\n");
-    buf_add(c, xfmt("    a_clrs(L, %d);\n", n));
+    if (!u->task) {
+        buf_add(c, xfmt("    a_clrs(L, %d);\n", n));
+    }
+}
+
+// Compiles a task prototype (or the main chunk) to a resume function
+// and its static description. Returns the name of the description.
+//
+// Parameters take the first slots of the frame, then comes a table
+// with the extra arguments, if variadic. The value of the body, or of
+// a return, becomes the result of the task.
+static const char* gen_task (Proto* p, Var** pars, int npar, List* body,
+                             int lin)
+{
+    Unit u;
+    memset(&u, 0, sizeof(u));
+    u.proto = p;
+    u.npar  = npar;
+    u.task  = 1;
+    for (int i=0; i<npar; i++) {
+        pars[i]->slot = u.nslots++;
+    }
+    if (p->dots) {
+        u.nslots++;
+    }
+    gen_block(&u, body, dst_slot("t->ret"));
+
+    const char* name = xfmt("T%d", p->id);
+    const char* sig = xfmt(
+        "static AStatus %s (ATask* t, AKind k)", name);
+    buf_add(&DECLS, xfmt("%s;\n", sig));
+
+    Buf* c = &FUNCS;
+    buf_add(c, xfmt("// line %d\n%s {\n", lin, sig));
+    unit_emit(&u, c);
+    buf_add(c, "    if (st == A_RETURN) {\n");
+    buf_add(c, "        st = A_OK;\n");
+    buf_add(c, "        a_pay_take(&t->ret, 0);\n");
+    buf_add(c, "        a_pay_clear();\n");
+    buf_add(c, "    }\n");
+    buf_add(c, "    return st;\n");
+    buf_add(c, "}\n\n");
+    buf_add(c, xfmt("static const AProto P%d = { %s, %d, %d, %d };\n\n",
+        p->id, name, (u.nslots > 0) ? u.nslots : 1, npar, p->dots));
+    return xfmt("P%d", p->id);
 }
 
 // Compiles a prototype to a C function. Returns its name.
@@ -1329,13 +1448,16 @@ static const char* gen_func (Expr* e) {
 // func (...) {...}: a closure with copies of the captured variables
 // (or their boxes).
 static Opnd gen_proto (Unit* u, Expr* e) {
-    if (e->u.proto.task) {
-        err(e->tk, "task : not implemented");
-    }
-    const char* name = gen_func(e);
     Proto* p = e->proto;
     Opnd d = opnd_tmp(u);
-    out(u, "a_set(&%s, a_func(%s, %d));", d.c, name, p->ncaps);
+    if (e->u.proto.task) {
+        const char* name = gen_task(p, e->vars, e->u.proto.n,
+            &e->u.proto.blk->u.block.es, e->tk.lin);
+        out(u, "a_set(&%s, a_task(&%s, %d));", d.c, name, p->ncaps);
+    } else {
+        const char* name = gen_func(e);
+        out(u, "a_set(&%s, a_func(%s, %d));", d.c, name, p->ncaps);
+    }
     for (int i=0; i<p->ncaps; i++) {
         out(u, "a_cpy(&A_FUNC_OF(%s)->caps[%d], %s);",
             d.c, i, var_raw(u,p->caps[i]));
@@ -1343,8 +1465,23 @@ static Opnd gen_proto (Unit* u, Expr* e) {
     return d;
 }
 
-// `...`: the extra arguments of the function.
+// `...`: the extra arguments of the function. A task keeps them in a
+// table in its frame.
 static void gen_dots (Unit* u, Dst d) {
+    if (u->task) {
+        switch (d.kind) {
+            case D_NONE:
+                break;
+            case D_SLOT:
+                out(u, "a_cpy(&%s, a_tab_get(A_TAB_OF(L[%d]), a_num(0)));",
+                    d.slot, u->npar);
+                break;
+            case D_MULTI:
+                out(u, "%s = a_tab_unpack(L[%d]);", d.n, u->npar);
+                break;
+        }
+        return;
+    }
     switch (d.kind) {
         case D_NONE:
             break;
@@ -1356,6 +1493,76 @@ static void gen_dots (Unit* u, Dst d) {
             out(u, "%s = a_dots(argc, argv, %d);", d.n, u->npar);
             break;
     }
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// TASKS
+///////////////////////////////////////////////////////////////////////////////
+
+// spawn T(...)  |  spawn @ts T(...)
+// As a statement, the task is pinned to the enclosing block.
+// Otherwise it flows out, and the receiver must pin it.
+static void gen_spawn (Unit* u, Expr* e, Dst d) {
+    Opnd f = gen_expr(u, e->u.spawn.f);
+    Opnd pool = opnd_c("a_nil()");
+    if (e->u.spawn.pool != NULL) {
+        pool = gen_expr(u, e->u.spawn.pool);
+    }
+    Dst m = dst_multi(u);
+    gen_args(u, &e->u.spawn.args, m.n, NULL);
+
+    Opnd t = opnd_tmp(u);
+    out(u, "a_lin = %d;", e->tk.lin);
+    out_try(u, "a_spawn(&%s, %s, %s, a_top-%s)", t.c, f.c, pool.c, m.n);
+    opnd_rel(u, f);
+    opnd_rel(u, pool);
+
+    if (d.kind==D_NONE && e->u.spawn.pool==NULL) {
+        gen_pin(u, t.c);
+    } else {
+        store(u, t, d);
+    }
+}
+
+// Suspends the task until it is resumed, then continues with the
+// status of the resumption. The results arrive in the payload.
+static void gen_suspend (Unit* u, Dst d) {
+    int pc = ++u->npcs;
+    out(u, "if (st == A_AWAIT) {");
+    out(u, "    t->pc = %d;", pc);
+    out(u, "    return A_AWAIT;");
+    out0(u, "AW_%d:", pc);
+    out(u, "    base = a_top;");
+    out(u, "    st = a_resumed(t, k);");
+    out(u, "}");
+    out(u, "if (st != A_OK) goto CL_%d;", u->cleanup);
+    store_pay(u, d);
+}
+
+// await P
+static void gen_await (Unit* u, Expr* e, Dst d) {
+    Patt* p = e->u.await.p;
+    if (p->kind != PT_VAL) {
+        err(p->tk, "await pattern : not implemented");
+    }
+    Opnd v = gen_expr(u, p->e);
+    out(u, "a_lin = %d;", e->tk.lin);
+    out(u, "st = a_await_val(t, %s);", v.c);
+    opnd_rel(u, v);
+    gen_suspend(u, d);
+}
+
+// emit @to (e)
+static void gen_emit (Unit* u, Expr* e) {
+    Opnd to = opnd_c("a_nil()");
+    if (e->u.emit.to != NULL) {
+        to = gen_expr(u, e->u.emit.to);
+    }
+    Opnd v = gen_expr(u, e->u.emit.e);
+    out(u, "a_lin = %d;", e->tk.lin);
+    out_try(u, "a_emit(%s, %s)", to.c, v.c);
+    opnd_rel(u, to);
+    opnd_rel(u, v);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1401,6 +1608,31 @@ static Opnd gen_expr (Unit* u, Expr* e) {
             return gen_bin(u, e);
         case E_PROTO:
             return gen_proto(u, e);
+        case E_ME: {
+            Opnd t = opnd_tmp(u);
+            out(u, "a_set(&%s, a_me());", t.c);
+            return t;
+        }
+        case E_PUB: {
+            Opnd t = opnd_tmp(u);
+            out(u, "{");
+            out(u, "    AVal* pub;");
+            out(u, "    if ((st = a_pub(&pub)) != A_OK) goto CL_%d;",
+                u->cleanup);
+            out(u, "    a_cpy(&%s, *pub);", t.c);
+            out(u, "}");
+            return t;
+        }
+        case E_TASKS: {
+            Opnd n = opnd_c("a_nil()");
+            if (e->u.tasks.n != NULL) {
+                n = gen_expr(u, e->u.tasks.n);
+            }
+            Opnd t = opnd_tmp(u);
+            out_try(u, "a_tasks(&%s, %s)", t.c, n.c);
+            opnd_rel(u, n);
+            return t;
+        }
         default: {
             // compound: evaluated into a temporary
             Opnd t = opnd_tmp(u);
@@ -1452,9 +1684,23 @@ static void gen (Unit* u, Expr* e, Dst d) {
             gen_defer(u, e);
             store_void(u, d);
             break;
+        case E_SPAWN:
+            gen_spawn(u, e, d);
+            break;
+        case E_AWAIT:
+            gen_await(u, e, d);
+            break;
+        case E_EMIT:
+            gen_emit(u, e);
+            store_void(u, d);
+            break;
         case E_NAT:
         case E_MET:
-        case E_ME:
+        case E_SPAWN_BLK:
+        case E_TOGGLE:
+        case E_TOGGLE_ON:
+        case E_PAR:
+        case E_WATCHING:
             err(e->tk, "expression not implemented");
             break;
         default:
@@ -1468,12 +1714,12 @@ static void gen (Unit* u, Expr* e, Dst d) {
 ///////////////////////////////////////////////////////////////////////////////
 
 char* coder_main (Expr* prog, Var** globals, int nglobals) {
+    // the main chunk is a task
+    const char* main = gen_task(PROTO_MAIN, NULL, 0, &prog->u.block.es, 1);
+
     Unit u;
     memset(&u, 0, sizeof(u));
     u.proto = PROTO_MAIN;
-
-    // the value of the main block is discarded
-    gen_block(&u, &prog->u.block.es, dst_none());
 
     Buf c = { NULL, 0, 0 };
     buf_add(&c, "#include \"atmos.h\"\n\n");
@@ -1495,19 +1741,14 @@ char* coder_main (Expr* prog, Var** globals, int nglobals) {
     }
     buf_add(&c, "}\n\n");
 
-    // functions
+    // functions and tasks
     buf_add(&c, DECLS.s ? DECLS.s : "");
     buf_add(&c, "\n");
     buf_add(&c, FUNCS.s ? FUNCS.s : "");
 
-    // main chunk
     buf_add(&c, "AStatus atm_main (int argc, AVal* argv) {\n");
     buf_add(&c, "    consts_init();\n");
-    unit_emit(&u, &c);
-    buf_add(&c, "    if (st == A_RETURN) {\n");
-    buf_add(&c, "        st = A_OK;\n");
-    buf_add(&c, "        a_pay_clear();\n");
-    buf_add(&c, "    }\n");
+    buf_add(&c, xfmt("    AStatus st = a_main(&%s, argc, argv);\n", main));
     for (int i=nglobals-1; i>=0; i--) {
         buf_add(&c, xfmt("    a_clr(&%s);\n", var_raw(&u,globals[i])));
     }

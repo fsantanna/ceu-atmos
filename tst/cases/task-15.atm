@@ -1,0 +1,19 @@
+task Killer (victim) {
+    await(:X)
+    print(:kill)
+    abort(victim)
+    print(:killed)
+}
+task Victim () {
+    defer { print(:victim_defer) }
+    spawn (task () {
+        defer { print(:child_defer) }
+        await(false)
+    })()
+    await(:Never)
+    print(:no)
+}
+pin v = spawn Victim()
+spawn Killer(v)
+emit(:X)
+print(atmos.status(v))

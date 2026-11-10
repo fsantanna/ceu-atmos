@@ -1,0 +1,18 @@
+spawn (task () {
+    set pub = 10
+    print(pub)
+}) ()
+pin t = spawn (task () {
+    set pub = 10
+}) ()
+print(t.pub)
+set t.pub = 20
+print(t.pub)
+task T (n) {
+    set pub = n
+    await(false)
+}
+pin u = spawn T(10)
+print(u.pub)
+func getpub () { pub }
+pin w = spawn (task () { set pub = :dyn ; print(getpub()) })()

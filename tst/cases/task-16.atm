@@ -1,0 +1,21 @@
+task Child (parent) {
+    defer { print(:child_defer) }
+    print(:abort_parent)
+    abort(parent)
+    print(:no1)
+}
+task Parent () {
+    defer { print(:parent_defer) }
+    spawn Child(task)
+    print(:no2)
+    await(false)
+}
+pin p = spawn Parent()
+print(atmos.status(p))
+task Self () {
+    defer { print(:self_defer) }
+    abort(task)
+    print(:no3)
+}
+pin s = spawn Self()
+print(atmos.status(s))

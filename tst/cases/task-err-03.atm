@@ -1,0 +1,4 @@
+task T () {
+    pin me = task
+}
+spawn T()

@@ -982,6 +982,7 @@ static int is_prefix (Expr* e) {
         case E_INDEX:
         case E_PARENS:
         case E_TAGGED:
+        case E_ME:
             return 1;
         default:
             return 0;

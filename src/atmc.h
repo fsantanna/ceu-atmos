@@ -90,6 +90,8 @@ typedef enum {
     E_PROTO,
     // task (the running task)
     E_ME,
+    // pub (of the running task)
+    E_PUB,
     // spawn T(...)  spawn @ts T(...)  spawn {...}
     E_SPAWN, E_SPAWN_BLK,
     // tasks(n)
@@ -275,6 +277,8 @@ struct Proto {
     int    ncaps;
     // accepts `...`
     int    dots;
+    // task prototype (or the main chunk): may await
+    int    task;
 };
 
 // Binds every access to its declaration and checks assignments.

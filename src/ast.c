@@ -238,6 +238,9 @@ void ast_dump (Expr* e) {
         case E_ME:
             printf("(me)");
             break;
+        case E_PUB:
+            printf("pub");
+            break;
         case E_SPAWN:
             printf("(spawn ");
             if (e->u.spawn.pool != NULL) {

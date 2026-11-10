@@ -216,6 +216,7 @@ AStatus a_catch (AVal cnd, int* ok) {
 
 void a_str_free (AStr* s);
 void a_tab_free (ATab* t);
+void a_node_free (ANode* n);
 
 void a_free (AObj* o) {
     switch (o->type) {
@@ -225,6 +226,11 @@ void a_free (AObj* o) {
         case A_TAB:
             a_tab_free((ATab*) o);
             break;
+        case A_XTASK:
+        case A_TASKS:
+            a_node_free((ANode*) o);
+            break;
+        case A_TASK:
         case A_FUNC: {
             AFunc* f = (AFunc*) o;
             for (int i=0; i<f->ncap; i++) {
@@ -257,9 +263,18 @@ AVal a_func (AFn fn, int ncap) {
     f->hdr.pinned = 0;
     f->hdr.depth  = 0;
     f->fn   = fn;
+    f->task = NULL;
     f->ncap = ncap;
     a_nils(f->caps, ncap);
     return a_obj(&f->hdr);
+}
+
+AVal a_task (const AProto* p, int ncap) {
+    AVal v = a_func(NULL, ncap);
+    v.type = A_TASK;
+    v.u.o->type = A_TASK;
+    A_FUNC_OF(v)->task = p;
+    return v;
 }
 
 AVal a_box (void) {
@@ -296,6 +311,11 @@ AStatus a_call (AVal f, int base) {
     CALLS--;
     a_lin = lin;
     a_dec(f);
+
+    // the call aborted the running task: it unwinds
+    if (st==A_OK && a_cur!=NULL && a_cur->aborted) {
+        st = A_ABORT;
+    }
 
     if (st != A_OK) {
         if (st == A_ERROR) {

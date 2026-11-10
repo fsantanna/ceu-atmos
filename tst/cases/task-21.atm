@@ -1,0 +1,4 @@
+func f () { pub }
+print(f())
+set pub = 10
+print(f(), task.pub)

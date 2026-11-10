@@ -1,0 +1,18 @@
+task T (i) {
+    defer {
+        print("aborted " ++ i)
+    }
+    await(false)
+}
+do {
+    spawn T(1)
+    spawn T(2)
+    pin t = spawn T(3)
+}
+do {
+    pin t = spawn T(4)
+    abort(t)
+    print(atmos.status(t))
+    abort(t)
+    print(:after)
+}

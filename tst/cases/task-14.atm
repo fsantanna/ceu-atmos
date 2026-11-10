@@ -1,0 +1,15 @@
+task T () {
+    defer { print(:t_defer) }
+    await(false)
+}
+task P () {
+    spawn T()
+    defer { print(:p_defer) }
+    await(:X)
+    print(:p_awake)
+}
+pin p = spawn P()
+abort(p)
+print(atmos.status(p))
+emit(:X)
+print(:end)

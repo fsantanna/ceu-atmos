@@ -1,0 +1,10 @@
+val tk = task (v) {
+    val e1 = await(true)
+    print(:1, e1)
+    val e2 = await(true)
+    print(:2, e2)
+}
+spawn tk ()
+emit(:1)
+emit(:2)
+emit(:3)

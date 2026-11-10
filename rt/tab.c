@@ -232,7 +232,16 @@ int a_tab_next (ATab* t, uint32_t* pos, AVal* k, AVal* v) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
+// A task only has the field `pub`.
+static int is_pub (AVal t, AVal k) {
+    return t.type==A_XTASK && k.type==A_STR && !strcmp(A_STR_OF(k)->s,"pub");
+}
+
 AStatus a_index (AVal* dst, AVal t, AVal k) {
+    if (is_pub(t, k)) {
+        a_cpy(dst, A_TASK_OF(t)->pub);
+        return A_OK;
+    }
     if (t.type != A_TAB) {
         return a_error("invalid index : expected table : got %s",
             a_typename(t));
@@ -242,6 +251,10 @@ AStatus a_index (AVal* dst, AVal t, AVal k) {
 }
 
 AStatus a_setindex (AVal t, AVal k, AVal v) {
+    if (is_pub(t, k)) {
+        a_cpy(&A_TASK_OF(t)->pub, v);
+        return A_OK;
+    }
     if (t.type != A_TAB) {
         return a_error("invalid index : expected table : got %s",
             a_typename(t));
@@ -313,4 +326,12 @@ void a_tab_fill (AVal t, int i, int n) {
         a_tab_set(A_TAB_OF(t), a_num(i+j), a_stk[a_top-n+j]);
     }
     a_settop(a_top - n);
+}
+
+int a_tab_unpack (AVal t) {
+    ATab* x = A_TAB_OF(t);
+    for (uint32_t i=0; i<x->an; i++) {
+        a_pushc(x->arr[i]);
+    }
+    return x->an;
 }

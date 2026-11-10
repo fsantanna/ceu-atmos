@@ -1,0 +1,14 @@
+task T () {
+    val e = await(:Key [:escape])
+    X.print(e)
+    val x = await(:E.a)
+    print(x)
+    val y = await(true)
+    print(y ?? :table)
+}
+spawn T()
+emit(:Key [:enter])
+emit(:Key [:escape, mod=1])
+emit(:E)
+emit(:E.a.b)
+emit([])

@@ -1,0 +1,5 @@
+task T () { await(false) }
+pin t = spawn T()
+val x = t
+print(x == t)
+pin y = t

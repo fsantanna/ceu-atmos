@@ -1,0 +1,7 @@
+task T () {
+    await(:X)
+    nil + 1
+}
+spawn T()
+emit(:X)
+print(:no)
