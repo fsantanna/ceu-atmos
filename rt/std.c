@@ -301,6 +301,16 @@ static AStatus atmos_status (AFunc* self, int argc, AVal* argv) {
     return A_OK;
 }
 
+// atmos.next(): microseconds to the nearest timer, or nil.
+static AStatus atmos_next (AFunc* self, int argc, AVal* argv) {
+    (void) self;
+    (void) argc;
+    (void) argv;
+    double us = a_clock_next();
+    a_push((us < 0) ? a_nil() : a_num(us));
+    return A_OK;
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 
 static void field (AVal t, const char* name, AFn fn) {
@@ -325,6 +335,7 @@ void atm_std_init (void) {
 
     atm_g_atmos = a_tab();
     field(atm_g_atmos, "status", atmos_status);
+    field(atm_g_atmos, "next",   atmos_next);
 }
 
 void atm_std_quit (void) {

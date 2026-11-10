@@ -672,9 +672,12 @@ static inline AStatus a_chk (AVal v) {
 // status the block continues with.
 AStatus a_pin_end (AVal* slot, AStatus st);
 
-// Runs the main chunk as a task until it terminates or nothing can
-// awake it.
-AStatus a_main (const AProto* p, int argc, AVal* argv);
+// Starts the main chunk as a task, with the program arguments: runs
+// it until it suspends or terminates.
+AStatus a_main (const AProto* p);
+
+// Microseconds to the nearest timer (a lower bound), or -1 if none.
+double a_clock_next (void);
 
 ///////////////////////////////////////////////////////////////////////////////
 // OPERATIONS
@@ -816,11 +819,41 @@ AVal a_xcopy (AVal v);
 // DRIVER
 ///////////////////////////////////////////////////////////////////////////////
 
-void    atm_init (int argc, char** argv);
-void    atm_quit (void);
+// An environment drives the program from its own loop:
+//
+//     atm_init(argc, argv);
+//     st = atm_main();
+//     while (st==A_OK && atm_alive()) {
+//         <wait for input or for atm_next() microseconds>
+//         st = atm_emit(evt);     // or atm_step(ms)
+//     }
+//     if (st == A_OK) st = atm_stop();
+//     if (st != A_OK) a_error_dump();
+//     atm_quit();
 
-// Generated: runs the main chunk, with the program arguments.
-AStatus atm_main (int argc, AVal* argv);
+void atm_init (int argc, char** argv);
+void atm_quit (void);
+
+// Generated: runs the main chunk until it suspends or terminates.
+AStatus atm_main (void);
+
+// Generated: releases the constants and the top-level variables.
+void atm_free (void);
+
+// External event, with the global target.
+AStatus atm_emit (AVal evt);
+
+// Advances the clock, in milliseconds.
+AStatus atm_step (uint32_t ms);
+
+// Microseconds to the nearest timer, or -1 if none.
+double atm_next (void);
+
+// The main chunk is still pending.
+int atm_alive (void);
+
+// Aborts the main chunk.
+AStatus atm_stop (void);
 
 extern AVal atm_g_atmos;
 

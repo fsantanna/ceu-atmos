@@ -1,0 +1,7 @@
+print(atmos.next())
+spawn {
+    await(10ms)
+}
+print(atmos.next())
+emit @:global 4ms
+print(atmos.next())

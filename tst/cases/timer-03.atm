@@ -1,0 +1,10 @@
+spawn {
+    await(10ms)
+}
+spawn {
+    loop _ in 2 {
+        val dt, late = await(:clock)
+        print(dt, late)
+    }
+}
+emit @:global 25ms

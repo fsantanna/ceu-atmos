@@ -1,0 +1,10 @@
+pin t = spawn {
+    await(10ms)
+    print(:ok)
+}
+emit @:global 5ms
+toggle t(false)
+emit @:global 20ms
+toggle t(true)
+print("-")
+emit @:global 5ms

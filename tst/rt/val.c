@@ -8,6 +8,9 @@
 
 const char* atm_file = "test";
 
+void atm_free (void) {
+}
+
 static AStatus two (AFunc* self, int argc, AVal* argv) {
     (void) self;
     assert(argc == 1);

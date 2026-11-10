@@ -1,0 +1,3 @@
+==> ERROR:
+ v  timer-err-01.atm:1 (throw)
+==> invalid emit : expected global

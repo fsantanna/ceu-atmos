@@ -1,0 +1,12 @@
+spawn {
+    loop i in 3 {
+        await(10ms)
+        print(i)
+    }
+}
+emit @:global 35ms
+spawn {
+    print(await(10ms))
+    print(await(10ms))
+}
+emit @:global 25ms

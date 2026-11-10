@@ -8,6 +8,9 @@
 
 const char* atm_file = "test";
 
+void atm_free (void) {
+}
+
 int main (void) {
     atm_init(0, NULL);
 

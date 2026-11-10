@@ -1,0 +1,9 @@
+spawn {
+    await(10ms)
+    spawn {
+        await(10ms)
+        print(:B)
+    }
+    await(false)
+}
+emit @:global 25ms

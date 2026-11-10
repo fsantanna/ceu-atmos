@@ -1,0 +1,22 @@
+spawn {
+    await <:X || 5ms>
+    print(:ok)
+}
+emit @:global 5ms
+spawn {
+    watching 10ms {
+        loop on 3ms {
+            print(:tick)
+        }
+    }
+    print(:done)
+}
+emit @:global 20ms
+spawn {
+    val v = watching 1s {
+        await(:X)
+        :x
+    }
+    print(v)
+}
+emit(:X)

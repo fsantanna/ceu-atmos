@@ -461,16 +461,19 @@ int a_num_fmt (char* buf, size_t n, double v) {
 void atm_std_init (void);
 void atm_std_quit (void);
 void a_str_quit (void);
+void a_task_init (int argc, char** argv);
+void a_task_quit (void);
 
 void atm_init (int argc, char** argv) {
-    (void) argc;
-    (void) argv;
     a_stk = malloc(A_STK_MAX * sizeof(AVal));
     a_top = 0;
     atm_std_init();
+    a_task_init(argc, argv);
 }
 
 void atm_quit (void) {
+    a_task_quit();
+    atm_free();
     atm_std_quit();
     a_settop(0);
     free(a_stk);

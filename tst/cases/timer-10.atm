@@ -1,0 +1,8 @@
+val t0 = await 20ms
+print(:awake, t0 >= 0)
+spawn {
+    await 10ms
+    print(:first)
+}
+await 30ms
+print(:second)

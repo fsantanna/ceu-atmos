@@ -1,0 +1,12 @@
+par :any {
+    await 30ms
+} with {
+    var n = 0
+    defer {
+        print("I counted ", n)
+    }
+    loop on 10ms {
+        set n = n + 1
+    }
+}
+print(:end)

@@ -1,5 +1,6 @@
 // Tasks: tree, spawn, resume, emit, await, abort.
 
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -14,6 +15,17 @@ static ATasks ROOT;
 // Emit counter: a task only reacts to emits that start after its
 // current await was established.
 static uint32_t TIME = 1;
+
+// Clock: time to the nearest timer (a lower bound, reported by the
+// timers themselves), and what is left of the current tick after the
+// piece in progress.
+static double CLK_MIN  = INFINITY;
+static double CLK_LATE = 0;
+
+// Main chunk, and the program arguments.
+static ATask* MAIN = NULL;
+static int    ARGC = 0;
+static char** ARGV = NULL;
 
 static AStatus node_abort (ANode* n);
 static AStatus emit_top   (ANode* n, AVal evt);
@@ -49,7 +61,9 @@ typedef enum {
     // !p / p && q / p || q
     PK_NOT, PK_AND, PK_OR,
     // :any ts / :all ts
-    PK_ANY, PK_ALL
+    PK_ANY, PK_ALL,
+    // duration / any clock tick
+    PK_CLK, PK_TICK
 } PKind;
 
 struct APatt {
@@ -62,6 +76,8 @@ struct APatt {
     int    own;
     APatt* a;
     APatt* b;
+    // duration: time left
+    double clk;
     // &&: operands already satisfied, and their first results
     int    da;
     int    db;
@@ -203,6 +219,17 @@ static AStatus patt_pred (APatt* p, int* done) {
 
 static AStatus patt_start (APatt* p, int* done);
 
+// A timer expires with how late it is, or reports the time it still
+// needs.
+static void patt_clk (APatt* p, int* done) {
+    if (p->clk <= 0) {
+        pay1(a_num(CLK_LATE - p->clk));
+        *done = 1;
+    } else if (p->clk < CLK_MIN) {
+        CLK_MIN = p->clk;
+    }
+}
+
 // Starts an until/while again after its predicate rejected the base.
 static AStatus patt_again (APatt* p) {
     int done = 0;
@@ -228,8 +255,12 @@ static AStatus patt_start (APatt* p, int* done) {
                     p->kind = PK_GTE;
                     break;
                 case A_STR:
-                    p->kind = PK_IS;
+                    p->kind = !strcmp(A_STR_OF(p->v)->s,"clock") ?
+                        PK_TICK : PK_IS;
                     break;
+                case A_NUM:
+                    p->kind = PK_CLK;
+                    return patt_start(p, done);
                 case A_XTASK:
                     p->kind = PK_TASK;
                     return patt_start(p, done);
@@ -239,12 +270,16 @@ static AStatus patt_start (APatt* p, int* done) {
                     return a_error("invalid await : unexpected tasks pool");
                 case A_FUNC:
                     return a_error("invalid await : unexpected function");
-                case A_NUM:
-                    return a_error("invalid await : clock : not implemented");
                 default:
                     return a_error("invalid await : unexpected %s",
                         a_typename(p->v));
             }
+            break;
+
+        case PK_CLK:
+            // a timer counts down from its full duration
+            p->clk = p->v.u.n;
+            patt_clk(p, done);
             break;
 
         case PK_TASK:
@@ -414,6 +449,22 @@ static AStatus patt_match (APatt* p, AVal evt, int* done) {
                 st = patt_match(p->b, evt, done);
             }
             return st;
+
+        case PK_CLK:
+            if (evt.type == A_NUM) {
+                p->clk -= evt.u.n;
+                patt_clk(p, done);
+            }
+            return A_OK;
+
+        case PK_TICK:
+            if (evt.type == A_NUM) {
+                a_pay_clear();
+                a_pay_addc(evt);
+                a_pay_add(a_num(CLK_LATE));
+                *done = 1;
+            }
+            return A_OK;
 
         case PK_ANY:
         case PK_ALL:
@@ -863,13 +914,41 @@ static AStatus emit_to (ANode** ret, AVal to) {
     return A_OK;
 }
 
+// A tick is split in pieces, each ending at the nearest timer, so
+// timers expire in order within a single tick.
+static AStatus emit_tick (double us) {
+    AStatus st = A_OK;
+    double late = CLK_LATE;
+    do {
+        double d = (CLK_MIN < us) ? CLK_MIN : us;
+        us -= d;
+        // the timers report again
+        CLK_MIN  = INFINITY;
+        CLK_LATE = us;
+        st = emit_top(&ROOT.node, a_num(d));
+    } while (st==A_OK && us>0);
+    CLK_LATE = late;
+    return st;
+}
+
 AStatus a_emit (AVal to, AVal evt) {
     ANode* n = NULL;
     AStatus st = emit_to(&n, to);
     if (st != A_OK) {
         return st;
     }
+    if (evt.type == A_NUM) {
+        // time passes for the whole program
+        if (n != &ROOT.node) {
+            return a_error("invalid emit : expected global");
+        }
+        return chk_aborted(emit_tick(evt.u.n));
+    }
     return chk_aborted(emit_top(n, evt));
+}
+
+double a_clock_next (void) {
+    return (CLK_MIN < INFINITY) ? CLK_MIN : -1;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1114,31 +1193,68 @@ AStatus a_pin_end (AVal* slot, AStatus st) {
 // MAIN
 ///////////////////////////////////////////////////////////////////////////////
 
-AStatus a_main (const AProto* p, int argc, AVal* argv) {
+AStatus a_main (const AProto* p) {
     node_init(&ROOT.node, A_TASKS);
     ROOT.max = -1;
     TIME = 1;
+    CLK_MIN  = INFINITY;
+    CLK_LATE = 0;
 
+    // the program arguments are the `...` of the main chunk
     AVal proto = a_task(p, 0);
     int base = a_top;
-    for (int i=0; i<argc; i++) {
-        a_pushc(argv[i]);
+    for (int i=1; i<ARGC; i++) {
+        a_push(a_strz(ARGV[i]));
     }
-    ATask* t = task_new(A_FUNC_OF(proto), &ROOT.node, base);
-    AVal main = a_obj(&t->node.hdr);
-    a_inc(main);
+    MAIN = task_new(A_FUNC_OF(proto), &ROOT.node, base);
+    a_inc(a_obj(&MAIN->node.hdr));
     a_dec(proto);
+    return task_resume(MAIN, R_START);
+}
 
-    AStatus st = task_resume(t, R_START);
+///////////////////////////////////////////////////////////////////////////////
+// DRIVER
+///////////////////////////////////////////////////////////////////////////////
 
-    // nothing can awake the main chunk: it is aborted
-    if (st==A_OK && t->status!=T_DONE) {
-        st = node_abort(&t->node);
+void a_task_init (int argc, char** argv) {
+    ARGC = argc;
+    ARGV = argv;
+    MAIN = NULL;
+    a_cur = NULL;
+}
+
+void a_task_quit (void) {
+    if (MAIN != NULL) {
+        a_dec(a_obj(&MAIN->node.hdr));
+        MAIN = NULL;
+        node_sweep(&ROOT.node);
+        free(ROOT.node.dns);
+        ROOT.node.dns = NULL;
     }
+}
 
-    a_dec(main);
-    node_sweep(&ROOT.node);
-    free(ROOT.node.dns);
-    ROOT.node.dns = NULL;
-    return st;
+int atm_alive (void) {
+    return MAIN!=NULL && MAIN->status!=T_DONE;
+}
+
+AStatus atm_stop (void) {
+    if (!atm_alive()) {
+        return A_OK;
+    }
+    return node_abort(&MAIN->node);
+}
+
+AStatus atm_emit (AVal evt) {
+    if (evt.type == A_NUM) {
+        return emit_tick(evt.u.n);
+    }
+    return emit_top(&ROOT.node, evt);
+}
+
+AStatus atm_step (uint32_t ms) {
+    return emit_tick(ms * 1000.0);
+}
+
+double atm_next (void) {
+    return a_clock_next();
 }

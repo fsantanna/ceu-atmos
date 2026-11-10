@@ -1,0 +1,16 @@
+spawn {
+    await(10ms)
+    await(10ms)
+    print(:ok)
+}
+emit @:global 25ms
+spawn {
+    par :any {
+        await(20ms)
+        print(:a)
+    } with {
+        await(10ms)
+        print(:b)
+    }
+}
+emit @:global 30ms

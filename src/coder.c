@@ -2102,14 +2102,16 @@ char* coder_main (Expr* prog, Var** globals, int nglobals) {
     buf_add(&c, "\n");
     buf_add(&c, FUNCS.s ? FUNCS.s : "");
 
-    buf_add(&c, "AStatus atm_main (int argc, AVal* argv) {\n");
+    buf_add(&c, "AStatus atm_main (void) {\n");
     buf_add(&c, "    consts_init();\n");
-    buf_add(&c, xfmt("    AStatus st = a_main(&%s, argc, argv);\n", main));
+    buf_add(&c, xfmt("    return a_main(&%s);\n", main));
+    buf_add(&c, "}\n\n");
+
+    buf_add(&c, "void atm_free (void) {\n");
     for (int i=nglobals-1; i>=0; i--) {
         buf_add(&c, xfmt("    a_clr(&%s);\n", var_raw(&u,globals[i])));
     }
     buf_add(&c, xfmt("    a_clrs(K, %d);\n", KN));
-    buf_add(&c, "    return st;\n");
     buf_add(&c, "}\n");
     return c.s;
 }

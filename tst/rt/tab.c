@@ -8,6 +8,9 @@
 
 const char* atm_file = "test";
 
+void atm_free (void) {
+}
+
 static double len (AVal t) {
     AVal n = a_nil();
     assert(a_len(&n, t) == A_OK);

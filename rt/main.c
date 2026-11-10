@@ -1,19 +1,44 @@
-// Default driver: runs the main chunk.
+// Default driver: runs the main chunk, then lets time pass until the
+// program terminates or nothing can awake it.
+
+#define _POSIX_C_SOURCE 199309L
 
 #include <stdio.h>
+#include <time.h>
 
 #include "atmos.h"
 
+static double now_us (void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return ts.tv_sec*1e6 + ts.tv_nsec/1e3;
+}
+
 int main (int argc, char** argv) {
     atm_init(argc, argv);
+    AStatus st = atm_main();
 
-    // the program arguments are the `...` of the main chunk
-    int base = a_top;
-    for (int i=1; i<argc; i++) {
-        a_push(a_strz(argv[i]));
+    // sleeps until the nearest timer and delivers the time elapsed
+    while (st==A_OK && atm_alive()) {
+        double us = atm_next();
+        if (us < 0) {
+            break;
+        }
+        fflush(stdout);
+        double t0 = now_us();
+        struct timespec ts;
+        ts.tv_sec  = (time_t) (us / 1e6);
+        ts.tv_nsec = (long) ((us - ts.tv_sec*1e6) * 1e3);
+        nanosleep(&ts, NULL);
+        double dt = now_us() - t0;
+        st = atm_emit(a_num((dt > us) ? dt : us));
     }
-    AStatus st = atm_main(a_top-base, &a_stk[base]);
-    a_settop(base);
+
+    // nothing can awake the main chunk: it is aborted
+    if (st == A_OK) {
+        st = atm_stop();
+    }
+
     fflush(stdout);
     if (st == A_ESCAPE) {
         st = a_escape_err();
