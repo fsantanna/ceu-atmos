@@ -1,0 +1,16 @@
+task U () {
+    val name = "owner"
+    var n = 10
+    spawn {
+        defer { print(:defer, name, n) }
+        await(:X)
+        set n += 1
+        emit(:Y)
+        print(:no)
+    }
+    await(:Y)
+    print(:U, n)
+}
+spawn U()
+emit(:X)
+print(:end)

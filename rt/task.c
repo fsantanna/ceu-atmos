@@ -560,6 +560,25 @@ static void node_untoggle (ANode* n) {
     n->toggled = 0;
 }
 
+// A transparent task that is aborted while running only unwinds when
+// control returns to it. Meanwhile its owner goes on and may release
+// or reuse the slots they share. So the task gets a private copy of
+// the frame: its cleanup and its defers see the variables as they
+// were, and cannot disturb the owner.
+static void frame_split (ATask* t) {
+    AFrame* f = t->frame;
+    AFrame* c = malloc(sizeof(AFrame) + f->n*sizeof(AVal));
+    c->rc = 1;
+    c->n  = f->n;
+    for (int i=0; i<f->n; i++) {
+        c->L[i] = f->L[i];
+        a_inc(c->L[i]);
+    }
+    f->rc--;
+    t->frame = c;
+    t->L = c->L;
+}
+
 void a_node_free (ANode* n) {
     node_untoggle(n);
     a_dec(n->tog);
@@ -688,8 +707,11 @@ static AStatus node_abort (ANode* n) {
             if (st == A_OK) {
                 st = st2;
             }
-        } else if (t->status == T_RUNNING) {
+        } else if (t->status==T_RUNNING && !t->aborted) {
             t->aborted = 1;
+            if (t->tra && t->frame->rc>1) {
+                frame_split(t);
+            }
         }
     }
     return st;

@@ -733,6 +733,11 @@ static void blk_close (Unit* u, Blk b, Hnd h) {
     out0(u, "CL_%d:", b.cl);
     u->ind++;
 
+    // a task aborted while running unwinds over a private frame
+    if (u->task) {
+        out(u, "L = t->L;");
+    }
+
     // pins are aborted and defers that were reached run, in reverse
     // order, whatever the exit. The pending exit is set aside
     // meanwhile, and replaced if a defer exits itself.

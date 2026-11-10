@@ -1,0 +1,7 @@
+go	1
+defer	1
+mid
+go	2
+defer	2
+last
+defer	3

@@ -1,0 +1,20 @@
+spawn {
+    var i = 0
+    loop {
+        set i += 1
+        watching :X {
+            val me = i
+            defer { print(:defer, me) }
+            await(:go)
+            print(:go, me)
+            emit(:X)
+            print(:no)
+        }
+        until(i == 3)
+    }
+    print(:end)
+}
+emit(:go)
+print(:mid)
+emit(:go)
+print(:last)
