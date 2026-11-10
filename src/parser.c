@@ -135,11 +135,18 @@ static int check_op (const char** set) {
 
 // Comma-separated expressions up to (not including) `clo`.
 // A trailing comma is accepted.
+// Inside the delimiters `<` and `>` of an await pattern, a bare `>`
+// closes the pattern: it is not the operator, unless the expression is
+// enclosed by its own delimiters.
+static int ANGLE = 0;
+
 static List parser_list (const char* clo) {
     List l = { 0, NULL };
     if (check_str(clo)) {
         return l;
     }
+    int angle = ANGLE;
+    ANGLE = 0;
     list_add(&l, parser());
     while (accept_str(",")) {
         if (check_str(clo)) {
@@ -147,18 +154,22 @@ static List parser_list (const char* clo) {
         }
         list_add(&l, parser());
     }
+    ANGLE = angle;
     return l;
 }
 
 // Sequence of expressions up to (not including) `clo`.
 static List parser_stmts (const char* clo) {
     List l = { 0, NULL };
+    int angle = ANGLE;
+    ANGLE = 0;
     while (!check_str(clo)) {
         if (l.n>0 && TK0.sep==TK1.sep) {
             err(TK1, "sequence error : expected ';' or new line");
         }
         list_add(&l, parser());
     }
+    ANGLE = angle;
     return l;
 }
 
@@ -665,13 +676,15 @@ static void accept_angle_err (const char* one) {
     }
 }
 
-// until/while predicate: `(E)`, a function, or an expression over
-// the event `it`.
+// until/while predicate: a function, or an expression over the event
+// `it`.
 static Expr* parser_pred (void) {
-    accept_str_err("(");
-    Tk tk = TK0;
+    Tk tk = TK1;
     Expr* e = parser();
-    accept_str_err(")");
+    // until (c): the parentheses only delimit the predicate
+    if (e->tag == E_PARENS) {
+        e = e->u.parens.e;
+    }
     if (e->tag == E_PROTO) {
         return e;
     }
@@ -699,7 +712,9 @@ static Patt* parser_await_1_prim (void) {
 
     // <p>
     } else if (accept_angle("<")) {
+        ANGLE++;
         Patt* p = parser_await_3_bin();
+        ANGLE--;
         accept_angle_err(">");
         return p;
 
@@ -775,7 +790,9 @@ static Patt* parser_await (void) {
 
     // pattern: await<PAT>
     if (accept_angle("<")) {
+        ANGLE++;
         Patt* p = parser_await_3_bin();
+        ANGLE--;
         accept_angle_err(">");
         return p;
     }
@@ -826,7 +843,10 @@ static int check_call_arg (void) {
 // Returns NULL on no match.
 static Expr* parser_at (void) {
     if (accept_str("(")) {
+        int angle = ANGLE;
+        ANGLE = 0;
         Expr* e = parser();
+        ANGLE = angle;
         accept_str_err(")");
         return e;
     } else if (accept_tag(TK_TAG)) {
@@ -912,7 +932,11 @@ static Expr* parser_1_prim (void) {
 
     // table: [...]
     } else if (accept_str("[")) {
-        return parser_table();
+        int angle = ANGLE;
+        ANGLE = 0;
+        Expr* t = parser_table();
+        ANGLE = angle;
+        return t;
 
     // parens: (e)  (e1,e2)  ()
     } else if (accept_str("(")) {
@@ -1267,6 +1291,9 @@ static const char* LEVELS[][8] = {
 
 static int check_level (int lvl) {
     if (!check_tag(TK_OP)) {
+        return 0;
+    }
+    if (ANGLE>0 && (!strcmp(TK1.str,">") || !strcmp(TK1.str,">>"))) {
         return 0;
     }
     for (int i=0; i<8 && LEVELS[lvl][i]!=NULL; i++) {

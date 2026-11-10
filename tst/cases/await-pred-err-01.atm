@@ -1,0 +1,3 @@
+spawn {
+    await <:X until it.n > 3>
+}

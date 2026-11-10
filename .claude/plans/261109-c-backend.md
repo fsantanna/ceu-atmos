@@ -859,9 +859,13 @@ Agreed after `atmos-lang/atmos@5977b07`.
     - `(a, b)` remains a list expression, valid anywhere. A single
       expression in parentheses has a single value, as in Lua:
       `return (f())` truncates, `return f()` does not.
-    - Unchanged: `do(e)`, `tasks(n)`, `await`, `toggle`, and the
-      `until (c)` of await patterns, since a bare `>` would clash with
-      the pattern delimiters.
+    - The predicates of await patterns follow: `await :X until c`.
+      Inside `<...>`, a bare `>` always closes the pattern, so `>` and
+      `>>` need parentheses there: `<:X until (a > b)>`.
+    - `until` and `while` keep the same names in loops and in
+      patterns. The line tells them apart: in the line of the `await`
+      it is a predicate, in the next line it is a statement.
+    - Unchanged: `do(e)`, `tasks(n)`, `await`, and `toggle`.
 - Statements with no value (`val`, `var`, `pin`, `set`, `defer`, named
   `func` and `task`) are only valid as an item of a block or as the
   body of a case. Elsewhere they are a compile error.

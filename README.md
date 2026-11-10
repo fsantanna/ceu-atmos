@@ -113,6 +113,8 @@ exs/    examples
       `val a, b = 1, 2`, `set x, y = y, x`.
     - `(a, b)` is still a list anywhere, and `(f())` has a single
       value, as in Lua.
+    - The predicates of await patterns too: `await :X until it.n > 3`.
+      Inside `<...>`, a bare `>` closes the pattern.
 - A declaration, an assignment, or a `defer` is only valid as a
   statement of a block. Using one as a value, as in
   `print(val x = 1)`, is a compile error.

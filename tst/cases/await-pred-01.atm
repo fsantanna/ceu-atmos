@@ -1,0 +1,30 @@
+;; predicates of await patterns need no parentheses
+spawn {
+    val a = await :X until it.n > 3
+    print(:a, a.n)
+    val b = await <:X until it.n < 3>
+    print(:b, b.n)
+    val c = await <<:X until (it.n > 10)> || :Y>
+    print(:c, c.n)
+    val d = await :X while it.n >= 5
+    print(:d, d.n)
+    val e = await until \{ it && it.tag == :Z }
+    print(:e, e.tag)
+    watching :X until it.n == 0 {
+        loop on :X {
+            print(:tick)
+        }
+    }
+    print(:done)
+}
+emit :X [n=1]
+emit :X [n=4]
+emit :X [n=5]
+emit :X [n=2]
+emit :X [n=7]
+emit :X [n=11]
+emit :X [n=6]
+emit :X [n=4]
+emit :Z []
+emit :X [n=9]
+emit :X [n=0]

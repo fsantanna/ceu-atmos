@@ -2337,7 +2337,7 @@ Full  : Full Pred                           ;; (5) lower precedence
       | Pred                                ;; (1)
       | `<´ Full `>´                        ;; (1)
       | Expr                                ;; (1) higher precedence
-Pred  : (`until´ | `while´) `(´ Expr `)´
+Pred  : (`until´ | `while´) Expr
 ```
 
 The bare form accepts one of the following atomic patterns, with an optional
@@ -2347,13 +2347,24 @@ predicate:
 - a clock duration (`1h`)
 - a task to spawn (`T()`)
 - a pool (`:any ts`, `:all ts`)
-- a base-less predicate alone (`until (c)`)
+- a base-less predicate alone (`until c`)
+
+A predicate is an expression over the event, which is bound to `it`, or a
+function that receives the event.
+With `until`, the await only accepts an event if the predicate is truthy.
+With `while`, only if it is falsy.
+The predicate extends as far as possible, like the
+[arguments of a statement](#statement-arguments).
 
 The full combinators (`!`, `&&`, `||`, and the `until`/`while` suffix) require
 the `<...>` form, with angle brackets (instead of parenthesis) as delimiters.
 Like in [expressions](#precedence-and-associativity), the combinators follow
 the precedences of C: `!` binds tighter than `&&`, which binds tighter than
 `||`.
+
+Inside the `<...>` form, a bare `>` always closes the pattern.
+Therefore, an expression that uses the operators `>` or `>>` must be enclosed
+by parenthesis: `await <:X until (it.n > 3)>`.
 The `until`/`while` suffix applies to the whole combination to its left.
 
 An `await` is only valid in the body of a task, which includes the main chunk
@@ -2408,11 +2419,12 @@ Examples:
 await(false)                    ;; never awakes
 await :Key [:escape]            ;; awakes on a :Key :escape event
 await 1h10min30s                ;; awakes after the given time
-await until (it && (it@0 > 10)) ;; awakes if event index 0 > 10
+await until it && (it@0 > 10)   ;; awakes if event index 0 > 10
 await <:X && :Y>                ;; awakes after both :X and :Y in any order
 await <:X || :Y && :Z>          ;; awakes on :X, or after both :Y and :Z
 await <!:X>                     ;; awakes on any non-:X event
-await <:X until (it.n==3)>      ;; awaits :X until its field n equals 3
+await <:X until it.n==3>        ;; awaits :X until its field n equals 3
+await :X until it.n > 3         ;; no delimiters: `>` is the operator
 ```
 
 ```
@@ -2441,8 +2453,10 @@ await :all ts           ;; awaits all tasks (pool drains)
 
 See [Ambiguities](#ambiguities):
     a bare `await :X || :Y` is invalid (combinators need `await<:X || :Y>`);
-    and `await :X` ⏎ `until (c)` reads as `await :X ; until(c)` (not
-    `await<:X until (c)>`).
+    `await :X` ⏎ `until c` reads as `await :X ; until c` (not
+    `await<:X until c>`);
+    and `await <:X until a > b>` closes the pattern at the first `>` (use
+    `await <:X until (a > b)>`).
 
 ### Emit
 
@@ -2561,10 +2575,6 @@ emit(:Ok [false])
 emit(:Tick)         ;; (nop)
 emit(:Draw)         ;; --> draw
 ```
-
-See [Ambiguities](#ambiguities):
-    `with :a until (c), :b` reads as `with :a (until (c), :b)` (not
-    `with <:a until (c)>, :b`).
 
 ### Parallel
 
@@ -2985,7 +2995,7 @@ Full  : Full Pred                       ;; <> combinators, by precedence
       | Pred
       | `<´ Full `>´
       | Expr
-Pred  : (`until´|`while´) `(´ Expr `)´  ;; until/while predicate
+Pred  : (`until´|`while´) Expr          ;; until/while predicate
 
 ID    : [A-Za-z_][A-Za-z0-9_]*      ;; variable identifier
 TAG   : :[A-Za-z0-9_\.]+            ;; tag
@@ -3003,13 +3013,13 @@ may surprise a naive reading:
 | #                 | case                  | what it is              | what it is **not**       |
 |-------------------|-----------------------|-------------------------|--------------------------|
 | [await](#await)   | `await 20min + 1s`    | `(await 20min) + 1s`    | `await(20min + 1s)`      |
-| [await](#await)   | `await P` ⏎ `until (c)` | `await P ; until(c)`   | `await<P until (c)>`     |
+| [await](#await)   | `await P` ⏎ `until c` | `await P ; until c`     | `await<P until c>`       |
+| [await](#await)   | `<P until a > b>`     | `<P until a>` then `b>` | `<P until (a > b)>`      |
 | [table](#table)   | `:X` ⏎ `[]`           | `:X ; []`               | `:X []`                  |
 | [calls](#calls)   | `f` ⏎ `(x)`           | `f ; (x)`               | `f(x)`                   |
 | [calls](#calls)   | `f :X []`             | `f(:X [])`              | `f(:X) []`               |
 | [pipes](#pipes)   | `x<-y`                | `y(x)`                  | `x < (-y)`               |
 | [tasks](#tasks)   | `task` ⏎ `(x)`        | `task ; (x)`            | `task(x)`                |
-| [toggle](#toggle) | `with :a until (c), :b` | `with :a (until (c), :b)` | `with <:a until (c)>, :b` |
 | [lambda](#lambda) | `\-`                  | `\(a,b){ a - b }`       | `\(a){ -a }`             |
 | [return](#statement-arguments) | `return` ⏎ `f()` | `return ; f()`         | `return f()`             |
 | [return](#statement-arguments) | `return (a+1)*2` | `return ((a+1)*2)`     | `(return (a+1)) * 2`     |
