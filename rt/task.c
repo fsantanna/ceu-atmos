@@ -50,8 +50,6 @@ typedef enum {
     PK_TRUE, PK_FALSE,
     // event ?? value
     PK_IS,
-    // table =>= event
-    PK_GTE,
     // termination of a task
     PK_TASK,
     // T(...): becomes PK_TASK when the await starts
@@ -252,7 +250,7 @@ static AStatus patt_start (APatt* p, int* done) {
                     p->kind = p->v.u.b ? PK_TRUE : PK_FALSE;
                     break;
                 case A_TAB:
-                    p->kind = PK_GTE;
+                    p->kind = PK_IS;
                     break;
                 case A_STR:
                     p->kind = !strcmp(A_STR_OF(p->v)->s,"clock") ?
@@ -380,9 +378,6 @@ static AStatus patt_match (APatt* p, AVal evt, int* done) {
             break;
         case PK_IS:
             *done = a_is(evt, p->v);
-            break;
-        case PK_GTE:
-            *done = (evt.type != A_XTASK) && a_gte(p->v, evt);
             break;
         case PK_TASK:
             if (a_eq(evt, p->v)) {

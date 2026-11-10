@@ -40,6 +40,17 @@ int a_is (AVal v, AVal x) {
     if (a_eq(v, x)) {
         return 1;
     }
+    if (x.type==A_TAB && v.type==A_TAB) {
+        // every field of the pattern matches the same field of the value
+        uint32_t pos = 0;
+        AVal k, xv;
+        while (a_tab_next(A_TAB_OF(x), &pos, &k, &xv)) {
+            if (!a_is(a_tab_get(A_TAB_OF(v), k), xv)) {
+                return 0;
+            }
+        }
+        return 1;
+    }
     if (x.type != A_STR) {
         return 0;
     }

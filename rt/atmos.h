@@ -792,8 +792,11 @@ static inline AStatus a_le (AVal* dst, AVal a, AVal b) {
 // vector part of `b` appended and its other keys favored.
 AStatus a_cat (AVal* dst, AVal a, AVal b);
 
-// v ?? x: equal, or `x` names the type of `v`, or `x` is a dot prefix
-// of `v` or of its tag.
+// v ?? x: the value matches the pattern.
+//  - equal values
+//  - `x` names the type of `v`
+//  - `x` is a dot prefix of `v`, or of the tag of `v`
+//  - tables: every field of `x` matches the same field of `v`
 int a_is (AVal v, AVal x);
 
 // X.gte(a, b): `a` is structurally more general than `b`.

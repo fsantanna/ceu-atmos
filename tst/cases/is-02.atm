@@ -1,0 +1,20 @@
+val e = :Key.Down [:escape, mod=1]
+print(e ?? :Key [:escape], e ?? :Key [:enter], e ?? [mod=1], e ?? [mod=2])
+print(e ?? :Key.Down.x [], e ?? [], [] ?? [x=1], [x=[y=1,z=2]] ?? [x=[y=1]])
+print(e ?? [mod=:number], e ?? [:string], e ?? [mod=:string], e !? :Key [:escape])
+print([p=:Pos [x=1]] ?? [p=:Pos], [1,2,3] ?? [1,2], [1,2] ?? [1,2,3])
+val p = :Pos [x=0, y=5]
+print(match p { :Pos [x=1] => :one ; :Pos [x=0] => \{ it.y } ; else => :no })
+print(match p { [y=:number] => :num })
+X.print(catch :Err [code=404] { throw(:Err.Http [code=404, url="x"]) })
+print(catch :Err [code=500] { catch :Err [code=404] { throw(:Err [code=404]) } ; :ok })
+spawn {
+    val a = await(:Pt [x=:number])
+    print(a.x)
+    val b = await :Key [mod=[ctrl=true]]
+    print(b@0)
+}
+emit(:Pt [x="s"])
+emit(:Pt.A [x=7, y=8])
+emit(:Key [:a, mod=[ctrl=false]])
+emit(:Key [:b, mod=[ctrl=true, alt=true]])
