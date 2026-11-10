@@ -1,0 +1,14 @@
+U ends
+defer U 2
+defer d
+defer C
+defer U 1
+dead
+defer c
+V goes on	10	20
+V ends
+W ends
+defer	a
+defer	b
+defer W
+end

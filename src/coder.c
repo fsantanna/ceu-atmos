@@ -76,6 +76,8 @@ typedef struct Unit {
     int ndefs;
     // constructor that initializes a `pin`: pinned before it is filled
     Expr* born;
+    // inside the body of a defer, which never suspends
+    int indefer;
 } Unit;
 
 // Finalizer of a block: a defer (flag slot and body), or a pin (the
@@ -752,11 +754,6 @@ static void blk_close (Unit* u, Blk b, Dst d, Hnd h) {
     // an exit may arrive from a deeper block
     out(u, "a_depth = D + %d;", u->level);
 
-    // a task aborted while running unwinds over a private frame
-    if (u->task) {
-        out(u, "L = t->L;");
-    }
-
     // pins are aborted and defers that were reached run, in reverse
     // order, whatever the exit. The pending exit is set aside
     // meanwhile, and replaced if a defer exits itself.
@@ -783,8 +780,35 @@ static void blk_close (Unit* u, Blk b, Dst d, Hnd h) {
     }
 
     for (int i=nmine-1; i>=0; i--) {
+        if (mine[i].pin!=NULL && u->task && !u->indefer) {
+            // a task of the block that is running only unwinds when
+            // control returns to it: the exit waits for that, so that
+            // the finalizers still run from the inside out
+            int pc = ++u->npcs;
+            out0(u, "LW_%d: ;", pc);
+            out(u, "if (a_pin_end(t, &%s, &st, base)) {", mine[i].pin);
+            // the other tasks of the block stop meanwhile
+            for (int j=0; j<i; j++) {
+                if (mine[j].pin != NULL) {
+                    out(u, "    a_pin_doom(&%s);", mine[j].pin);
+                }
+            }
+            out(u, "    t->pc = %d;", pc);
+            out(u, "    return A_AWAIT;");
+            out0(u, "AW_%d:", pc);
+            out(u, "    base = a_top;");
+            out(u, "    a_lin = %d;", u->lin);
+            out(u, "    a_depth = D + %d;", u->level);
+            out(u, "    st = a_pin_resumed(t);");
+            if (d.kind == D_MULTI) {
+                out(u, "    %s = a_top - base;", d.n);
+            }
+            out(u, "    goto LW_%d;", pc);
+            out(u, "}");
+            continue;
+        }
         if (mine[i].pin != NULL) {
-            out(u, "st = a_pin_end(&%s, st);", mine[i].pin);
+            out(u, "a_pin_end(NULL, &%s, &st, 0);", mine[i].pin);
             continue;
         }
         int id = ++u->nlabels;
@@ -799,7 +823,9 @@ static void blk_close (Unit* u, Blk b, Dst d, Hnd h) {
         // values of the block may be pending on the stack
         out(u, "int base = a_top;");
         u->cleanup = id;
+        u->indefer++;
         gen_block(u, &mine[i].e->u.defer.blk->u.block.es, dst_none());
+        u->indefer--;
         u->ind--;
         out0(u, "CL_%d: ;", id);
         out(u, "}");

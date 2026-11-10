@@ -1,0 +1,19 @@
+defer U 2
+after abort	suspended
+defer inner
+defer U 1
+end	dead
+defer 1
+defer 2
+defer 3
+par	one
+defer 3
+defer 1
+defer 2
+par	three
+defer in
+defer w
+loop	out
+defer E
+false	Late
+end

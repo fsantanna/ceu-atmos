@@ -1,0 +1,63 @@
+;; chain: d runs below, c waits for d, U waits for c
+task C () {
+    defer { print("defer C") }
+    spawn {
+        defer { print("defer d") }
+        await(:X)
+        emit @:global (:Y)
+        print(:never)
+    }
+    await(false)
+}
+task U () {
+    defer { print("defer U 1") }
+    pin c = spawn C()
+    defer { print("defer U 2") }
+    await(:Y)
+    print("U ends")
+}
+pin u = spawn U()
+emit(:X)
+print(atmos.status(u))
+
+;; the block gives values while it waits
+task V () {
+    val a, b = do {
+        pin c = spawn (task () {
+            defer { print("defer c") }
+            await(:X)
+            emit @:global (:Y)
+        }) ()
+        await(:Y)
+        (10, 20)
+    }
+    print("V goes on", a, b)
+    await(:Z)
+    print("V ends")
+}
+pin v = spawn V()
+emit(:X)
+emit(:Z)
+
+;; a pool
+task W () {
+    defer { print("defer W") }
+    pin ts = tasks()
+    spawn @ts (task (id) {
+        defer { print("defer", id) }
+        await(:X)
+        if id == :b { emit @:global (:Y) }
+        await(false)
+    }) (:a)
+    spawn @ts (task (id) {
+        defer { print("defer", id) }
+        await(:X)
+        if id == :b { emit @:global (:Y) }
+        await(false)
+    }) (:b)
+    await(:Y)
+    print("W ends")
+}
+pin w = spawn W()
+emit(:X)
+print(:end)

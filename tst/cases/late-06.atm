@@ -1,0 +1,89 @@
+;; aborted from outside while a task of it runs below
+task U () {
+    defer { print("defer U 1") }
+    spawn {
+        defer { print("defer inner") }
+        await(:X)
+        emit @:global (:Kill)
+        print(:never)
+    }
+    defer { print("defer U 2") }
+    await(false)
+}
+pin u = spawn U()
+spawn {
+    await(:Kill)
+    abort(u)
+    print("after abort", atmos.status(u))
+}
+emit(:X)
+print("end", atmos.status(u))
+
+;; par :any, with the last and the first branches running below
+spawn {
+    val v = par :any {
+        defer { print("defer 1") }
+        await(:A)
+        :one
+    } with {
+        defer { print("defer 2") }
+        await(false)
+    } with {
+        defer { print("defer 3") }
+        await(:B)
+        emit(:A)
+        print(:never)
+    }
+    print("par", v)
+}
+emit(:B)
+spawn {
+    val v = par :any {
+        defer { print("defer 1") }
+        await(:B)
+        emit(:A)
+        print(:never)
+    } with {
+        defer { print("defer 2") }
+        await(false)
+    } with {
+        defer { print("defer 3") }
+        await(:A)
+        :three
+    }
+    print("par", v)
+}
+emit(:B)
+
+;; a break crosses a block that waits
+spawn {
+    val v = loop {
+        watching :Never {
+            defer { print("defer w") }
+            spawn {
+                defer { print("defer in") }
+                await(:C)
+                emit(:D)
+                print(:never)
+            }
+            await(:D)
+            break(:out)
+        }
+    }
+    print("loop", v)
+}
+emit(:C)
+
+;; an error in the late defer reaches the emitter
+task E () {
+    defer { print("defer E") }
+    spawn {
+        defer { throw(:Late) }
+        await(:F)
+        emit @:global (:G)
+    }
+    await(:G)
+}
+spawn E()
+print(catch :Late { emit(:F) })
+print(:end)

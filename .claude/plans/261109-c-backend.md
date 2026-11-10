@@ -540,10 +540,27 @@ typedef AStatus (*AResume) (ATask* t, AKind k, AVal evt);
     - Cleanup and deallocation run when control returns to that code,
       which sees `A_ABORT` and unwinds.
     - Pinned values held in its temporaries stay valid until then.
-    - A transparent block shares the frame of its owner, which goes on
-      and may reuse the slots. So the marked block gets a private
-      copy of the frame: its cleanup and its defers still see the
-      variables as they were, and cannot disturb the owner.
+- **Late exit.** The marked task may belong to a block that is being
+  left right now, by a task above it in the C stack (e.g. the task
+  emits the event that its owner awaits to terminate).
+    - The block must not go on: its remaining defers would run before
+      those of the task, which could then find resources of the owner
+      already released. (lua-atmos has this inversion.)
+    - So the exit waits. The task that executes the block saves the
+      pending exit (status, payload, values on the stack) and suspends
+      at that finalizer. It is resumed when the marked task ends, and
+      goes on with the remaining finalizers.
+    - Finalization is thus always from the inside out, as when the
+      task is suspended.
+    - Meanwhile, the other tasks of the block are doomed: a suspended
+      one no longer reacts to events, and a running one is marked too.
+    - A task that waits is not resumed by anything else. An abort only
+      turns its pending exit into an abort, so whoever aborts it from
+      outside gets control back before it has ended.
+    - Known limit: two running tasks of the same block unwind in the
+      order of the C stack, not in the reverse order of declaration.
+    - Only blocks of tasks wait. In a function the case cannot occur:
+      a task that runs below a function cannot be pinned in it.
 - **Pinned payloads.** `emit` of a pinned value requires the target to
   live inside the value's pin block (see Memory, Stores).
 - **Termination.** A finishing task stores `ret` and signals its owner,
@@ -829,8 +846,10 @@ Agreed after `atmos-lang/atmos@5977b07`.
 - Await combinators follow the precedence of C (Settled decisions).
 - At the end of a block, pinned tasks and pools are aborted in the
   reverse order of their declarations, interleaved with the defers.
-- A block aborted while running unwinds over a private copy of the
-  frame (Scheduler).
+- A block that is left while one of its tasks is running waits for
+  that task to unwind (Scheduler, Late exit). This replaces the
+  private copy of the frame, which kept the variables alive but let
+  the outer defers run first.
 - Memory refinements found while implementing M8 (Pin, Stores, Exits):
   pin at birth for constructors, two-phase block end, lateral check on
   `emit`, confinement after a transfer, abort of confined tasks that

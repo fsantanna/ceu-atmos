@@ -28,12 +28,16 @@ static int    ARGC = 0;
 static char** ARGV = NULL;
 
 static AStatus node_abort (ANode* n);
+static AStatus task_resume (ATask* t, AKind k);
+static void    wait_set (ATask* t, AStatus st);
 static AStatus emit_top   (ANode* n, AVal evt);
 static AStatus emit_self  (ANode* n, uint32_t time, AVal evt);
 
-// The running task was aborted by what it just did.
+// The running task was aborted by what it just did. It is told only
+// once: from then on it unwinds, and its defers execute normally.
 static AStatus chk_aborted (AStatus st) {
-    if (st==A_OK && a_cur!=NULL && a_cur->aborted) {
+    if (st==A_OK && a_cur!=NULL && a_cur->aborted==1) {
+        a_cur->aborted = 2;
         return A_ABORT;
     }
     return st;
@@ -560,25 +564,6 @@ static void node_untoggle (ANode* n) {
     n->toggled = 0;
 }
 
-// A transparent task that is aborted while running only unwinds when
-// control returns to it. Meanwhile its owner goes on and may release
-// or reuse the slots they share. So the task gets a private copy of
-// the frame: its cleanup and its defers see the variables as they
-// were, and cannot disturb the owner.
-static void frame_split (ATask* t) {
-    AFrame* f = t->frame;
-    AFrame* c = malloc(sizeof(AFrame) + f->n*sizeof(AVal));
-    c->rc = 1;
-    c->n  = f->n;
-    for (int i=0; i<f->n; i++) {
-        c->L[i] = f->L[i];
-        a_inc(c->L[i]);
-    }
-    f->rc--;
-    t->frame = c;
-    t->L = c->L;
-}
-
 void a_node_free (ANode* n) {
     node_untoggle(n);
     a_dec(n->tog);
@@ -675,13 +660,27 @@ static AStatus task_end (ATask* t, AStatus st) {
         case A_OK:
             // termination is an emit of the task itself to the
             // subtree of its owner
-            return emit_top((owner != NULL) ? &owner->node : &ROOT.node,
+            st = emit_top((owner != NULL) ? &owner->node : &ROOT.node,
                 a_obj(&t->node.hdr));
+            break;
         case A_ABORT:
-            return A_OK;
+            st = A_OK;
+            break;
         default:
-            return st;
+            break;
     }
+
+    // a block waited for this task to go on with its exit: an exit of
+    // the task replaces the pending one, as if it had ended in time
+    ATask* w = t->waiter;
+    if (w != NULL) {
+        t->waiter = NULL;
+        if (st != A_OK) {
+            wait_set(w, st);
+        }
+        st = task_resume(w, R_LATE);
+    }
+    return st;
 }
 
 static AStatus task_resume (ATask* t, AKind k) {
@@ -710,6 +709,20 @@ static AStatus task_resume (ATask* t, AKind k) {
 // ABORT
 ///////////////////////////////////////////////////////////////////////////////
 
+// Replaces the exit that a waiting task keeps: the payload becomes
+// the current one.
+static void wait_set (ATask* t, AStatus st) {
+    a_pay_drop(&t->wpay);
+    for (int i=0; i<t->wn; i++) {
+        a_dec(t->wstk[i]);
+    }
+    free(t->wstk);
+    t->wstk = NULL;
+    t->wn   = 0;
+    a_pay_save(&t->wpay);
+    t->wst = st;
+}
+
 // Children first, in spawn order, then the task itself: a suspended
 // task unwinds now; a running one, when control returns to it.
 static AStatus node_abort (ANode* n) {
@@ -726,16 +739,19 @@ static AStatus node_abort (ANode* n) {
 
     if (n->hdr.type == A_XTASK) {
         ATask* t = (ATask*) n;
-        if (t->status == T_SUSPENDED) {
+        if (t->waiting) {
+            // already leaving a block: goes on as an abort
+            if (t->wst != A_ABORT) {
+                wait_set(t, A_ABORT);
+            }
+        } else if (t->status == T_SUSPENDED) {
             AStatus st2 = task_resume(t, R_ABORT);
             if (st == A_OK) {
                 st = st2;
             }
         } else if (t->status==T_RUNNING && !t->aborted) {
+            // unwinds when control returns to it
             t->aborted = 1;
-            if (t->tra && t->frame->rc>1) {
-                frame_split(t);
-            }
         }
     }
     return st;
@@ -810,7 +826,7 @@ static int toggle_evt (ANode* n, AVal evt, int* on) {
 // Traverses a subtree: the children in order, then the node itself at
 // its await.
 static AStatus emit_node (ANode* n, uint32_t time, AVal evt) {
-    if (n->dead) {
+    if (n->dead || n->doomed) {
         return A_OK;
     }
     AVal me = a_obj(&n->hdr);
@@ -853,11 +869,15 @@ static AStatus emit_self (ANode* n, uint32_t time, AVal evt) {
         if (st != A_OK) {
             // a child exited: raised at the await of the parent, or
             // propagated if the parent is on the C stack
-            if (t->status == T_SUSPENDED) {
+            if (t->waiting) {
+                // leaving a block: replaces the pending exit
+                wait_set(t, st);
+                st = A_OK;
+            } else if (t->status == T_SUSPENDED) {
                 t->exit = st;
                 st = task_resume(t, R_EXIT);
             }
-        } else if (t->status==T_SUSPENDED && t->time<time) {
+        } else if (t->status==T_SUSPENDED && !t->waiting && t->time<time) {
             // predicates run in the context of the awaiting task
             int done  = 0;
             int depth = a_depth;
@@ -1554,25 +1574,101 @@ void a_pin_clr (AVal* slot) {
     }
 }
 
-AStatus a_pin_end (AVal* slot, AStatus st) {
+// A task of the block that has not ended after its abort: it is
+// running below in the C stack, or it waits for one that is.
+static ATask* late_of (ANode* n) {
+    if (n->hdr.type == A_XTASK) {
+        ATask* t = (ATask*) n;
+        int late = (t->status==T_RUNNING || t->waiting);
+        return (!n->dead && late) ? t : NULL;
+    }
+    for (int i=0; i<n->ndns; i++) {
+        ATask* t = late_of(n->dns[i]);
+        if (t != NULL) {
+            return t;
+        }
+    }
+    return NULL;
+}
+
+// Marks the tasks in a subtree that are running, to unwind when
+// control returns to them.
+static void node_stop (ANode* n) {
+    if (n->dead) {
+        return;
+    }
+    if (n->hdr.type == A_XTASK) {
+        ATask* t = (ATask*) n;
+        if (t->status==T_RUNNING && !t->aborted) {
+            t->aborted = 1;
+        }
+    }
+    for (int i=0; i<n->ndns; i++) {
+        node_stop(n->dns[i]);
+    }
+}
+
+void a_pin_doom (AVal* slot) {
+    AVal v = *slot;
+    if ((v.type!=A_XTASK && v.type!=A_TASKS) ||
+        !v.u.o->pinned || v.u.o->depth!=(uint32_t)a_depth)
+    {
+        return;
+    }
+    ANode* n = (ANode*) v.u.o;
+    n->doomed = 1;
+    node_stop(n);
+}
+
+int a_pin_end (ATask* me, AVal* slot, AStatus* st, int base) {
     AVal v = *slot;
     // only what is still pinned in this very block
     if (v.type<A_STR || !v.u.o->pinned || v.u.o->depth!=(uint32_t)a_depth) {
-        return st;
+        return 0;
     }
 
     // data is released later, by `a_pin_clr`
     if (v.type!=A_XTASK && v.type!=A_TASKS) {
-        return st;
+        return 0;
     }
     ANode* n = (ANode*) v.u.o;
-    st = blk_abort(n, st);
+    *st = blk_abort(n, *st);
+
+    // the block waits for what could not be aborted yet
+    ATask* late = (me != NULL) ? late_of(n) : NULL;
+    if (late != NULL) {
+        late->waiter = me;
+        me->waiting  = 1;
+        me->wst = *st;
+        a_pay_save(&me->wpay);
+        me->wn   = a_top - base;
+        me->wstk = malloc((me->wn + 1) * sizeof(AVal));
+        memcpy(me->wstk, a_stk+base, me->wn * sizeof(AVal));
+        a_top = base;
+        return 1;
+    }
 
     // a pool leaves the tree with its block
     if (n->hdr.type==A_TASKS && !n->dead) {
         node_died(n);
     }
-    return chk_aborted(st);
+    *st = chk_aborted(*st);
+    return 0;
+}
+
+AStatus a_pin_resumed (ATask* t) {
+    t->waiting = 0;
+    for (int i=0; i<t->wn; i++) {
+        a_push(t->wstk[i]);
+    }
+    free(t->wstk);
+    t->wstk = NULL;
+    t->wn   = 0;
+    a_pay_restore(&t->wpay);
+    t->wpay.v   = NULL;
+    t->wpay.n   = 0;
+    t->wpay.cap = 0;
+    return t->wst;
 }
 
 ///////////////////////////////////////////////////////////////////////////////

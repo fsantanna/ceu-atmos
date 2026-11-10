@@ -1,0 +1,11 @@
+-- inner running
+A	U ends
+A	defer U last
+A	defer inner
+A	defer U first
+-- inner suspended
+B	U ends
+B	defer U last
+B	defer inner
+B	defer U first
+-- end

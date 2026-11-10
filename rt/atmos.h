@@ -577,8 +577,10 @@ typedef struct APatt APatt;
 //  - R_EVENT: an emit matched its await; the results are the payload
 //  - R_EXIT:  a child delivered a non-local exit, raised at its await
 //  - R_ABORT: it unwinds from its await
+//  - R_LATE:  a task it waited for has ended; it goes on with the exit
+//             of a block
 typedef enum {
-    R_START, R_EVENT, R_EXIT, R_ABORT
+    R_START, R_EVENT, R_EXIT, R_ABORT, R_LATE
 } AKind;
 
 // Generated: runs a task from its resumption point until it awaits
@@ -611,6 +613,9 @@ typedef struct ANode {
     uint8_t dirty;
     // terminated task, or released pool
     uint8_t dead;
+    // its block is being left, but waits before aborting it: emits
+    // skip the subtree meanwhile
+    uint8_t doomed;
     // toggled off: emits skip the subtree, unless a filter matches
     uint8_t toggled;
     struct APatt** filt;
@@ -645,7 +650,18 @@ typedef struct ATask {
     // transparent: no identity, owned by its enclosing task
     uint8_t  tra;
     // abort requested while running: unwinds when control returns
+    // (1: requested, 2: unwinding)
     uint8_t  aborted;
+    // suspended in the exit of a block, until a task of the block that
+    // is running below in the C stack unwinds. Meanwhile it keeps the
+    // pending exit: status, payload, and values on the stack.
+    uint8_t  waiting;
+    AStatus  wst;
+    APay     wpay;
+    AVal*    wstk;
+    int      wn;
+    // the task that waits for this one to end
+    struct ATask* waiter;
     // exit delivered by a child
     AStatus  exit;
     // emit counter when the current await was established
@@ -768,9 +784,26 @@ static inline AStatus a_chk (AVal v) {
 
 // End of the block of a pin, if the value is still pinned there.
 // First, tasks and pools are aborted, along with the defers of the
-// block, in reverse order. Returns the status the block continues
-// with.
-AStatus a_pin_end (AVal* slot, AStatus st);
+// block, in reverse order.
+//
+// A task that is running cannot be aborted at once: it is below in
+// the C stack, in the call that led to this exit, and only unwinds
+// when control returns to it. The block must not go on before that,
+// or its remaining defers would run before those of the task. So the
+// task `me`, which executes the block, saves the pending exit `*st`
+// with the values on the stack from `base` on, and the function
+// returns 1: `me` must suspend, and call `a_pin_end` again when it is
+// resumed. A block of a function (`me` is NULL) never waits.
+int a_pin_end (ATask* me, AVal* slot, AStatus* st, int base);
+
+// The task was resumed after the wait: restores the pending exit.
+AStatus a_pin_resumed (ATask* t);
+
+// The block of the pin waits before it gets to abort this value. From
+// the moment the block is left, its tasks execute nothing but their
+// finalization: a suspended one no longer reacts to events, and one
+// that is running unwinds when control returns to it.
+void a_pin_doom (AVal* slot);
 
 // Then, data is released, so that no code ever sees it empty:
 //  - table: entries released

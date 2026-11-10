@@ -1,0 +1,18 @@
+;; The inner defer still finds what the outer task finalizes.
+task U (late) {
+    pin res = [:open]
+    defer { set res@0 = :closed ; print("U closes") }
+    spawn {
+        defer { print("inner uses:", res@0) }
+        await(:X)
+        if late { emit(:Y) }
+        await(false)
+    }
+    await(:Y)
+}
+print("-- inner suspended")
+spawn U(false)
+emit(:Y)
+print("-- inner running")
+spawn U(true)
+emit(:X)

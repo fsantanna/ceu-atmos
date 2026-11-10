@@ -1,0 +1,67 @@
+;; direct emit to a task of the block
+task U () {
+    defer { print("defer U 1") }
+    pin c = spawn (task () {
+        defer { print("defer c") }
+        await(:X)
+        emit @:global (:Y)
+        print(:never)
+    }) ()
+    defer { print("defer U 2") }
+    spawn {
+        await(:Go)
+        emit @c (:X)
+        print(:never)
+    }
+    await(:Y)
+    print("U ends")
+}
+pin u = spawn U()
+emit(:Go)
+print(atmos.status(u))
+
+;; aborted while it waits
+task V () {
+    defer { print("defer V 1") }
+    spawn {
+        defer { print("defer inner") }
+        await(:A)
+        emit @:global (:B)
+        print("inner goes on")
+        emit @:global (:C)
+        print(:never)
+    }
+    await(false)
+}
+pin v = spawn V()
+spawn {
+    par {
+        await(:B)
+        print("B")
+    } with {
+        await(:C)
+        abort(v)
+        print("aborted", atmos.status(v))
+        abort(v)
+    }
+}
+emit(:A)
+print(atmos.status(v))
+
+;; the pending exit is a return with a pinned value
+task W () {
+    pin c = spawn (task () {
+        defer { print("defer c") }
+        await(:D)
+        emit @:global (:E)
+    }) ()
+    pin t = [1, 2]
+    await(:E)
+    return(t)
+}
+spawn {
+    val r = await W()
+    print(#r, r@1)
+}
+emit(:D)
+print(:end)

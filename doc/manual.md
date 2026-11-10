@@ -1307,6 +1307,16 @@ When the block terminates or aborts, its pinned values are reclaimed:
 - Then, tables and functions release what they hold, even if they are part of a
   cycle, and native values release their resources.
 
+A task of the block may be the one that makes the block terminate, e.g., by
+emitting the event that the enclosing task awaits.
+Such a task is in the middle of an operation, and can only be aborted when the
+operation returns.
+In this case, the block waits: its remaining `defer` blocks and pins only
+proceed after that task unwinds.
+Therefore, finalization always goes from the inside out: a `defer` of a task
+executes before the `defer` blocks that its enclosing block declares before
+it.
+
 The value to pin must be new, with no other references to it.
 The exception is a task or a pool, since tasks may refer to themselves.
 Tasks and pools must always be pinned:

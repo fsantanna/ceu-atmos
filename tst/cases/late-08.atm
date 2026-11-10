@@ -1,0 +1,28 @@
+;; a suspended task of the block does not react while the block waits
+task U () {
+    defer { print("defer U") }
+    pin a = spawn (task () {
+        defer { print("defer a") }
+        loop on :E {
+            print("a reacts")
+        }
+    }) ()
+    spawn {
+        defer { emit @:global (:E) ; print("defer inner") }
+        await(:X)
+        emit @:global (:Y)
+        print(:never)
+    }
+    await(:Y)
+    emit @:global (:E)
+    print("U ends")
+}
+pin u = spawn U()
+;; this one is outside: it reacts
+spawn {
+    loop on :E {
+        print("outside reacts")
+    }
+}
+emit(:X)
+print(atmos.status(u))

@@ -1,0 +1,22 @@
+;; The finalizers of a block run from the inside out, whether a task
+;; of the block is suspended or is the one that makes the block end.
+task U (id, late) {
+    defer { print(id, "defer U first") }
+    spawn {
+        defer { print(id, "defer inner") }
+        await(:X)
+        if late { emit(:Y) }
+        print(id, "never")
+        await(false)
+    }
+    defer { print(id, "defer U last") }
+    await(:Y)
+    print(id, "U ends")
+}
+print("-- inner running")
+spawn U(:A, true)
+emit(:X)
+print("-- inner suspended")
+spawn U(:B, false)
+emit(:Y)
+print("-- end")

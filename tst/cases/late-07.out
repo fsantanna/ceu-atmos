@@ -1,0 +1,14 @@
+U ends
+defer c
+defer U 2
+defer U 1
+dead
+B
+inner goes on
+aborted	suspended
+defer inner
+defer V 1
+dead
+defer c
+2	2
+end
