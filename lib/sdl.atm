@@ -1,0 +1,374 @@
+;; A basic SDL environment.
+;;
+;;      include "lib/sdl.atm"
+;;      ATMOS_LDFLAGS="-lSDL2 -lSDL2_image -lSDL2_ttf -lSDL2_mixer" atmos game.atm
+;;
+;; The program runs inside the loop of SDL, which emits:
+;;
+;;      :sdl.key.dn [name]      a key was pressed    (name: 'A', 'Return', ...)
+;;      :sdl.key.up [name]      a key was released
+;;      :sdl.quit               the window was closed (the program terminates)
+;;      :sdl.draw               once per frame, to redraw the screen
+;;
+;; Time passes once per frame, so that `await 1s` and `loop us on :clock`
+;; work as usual.
+;;
+;; Textures and fonts are native values: `pin` them to release them with
+;; their block, or let them go with their last reference.
+;;
+;; To test with no screen, set `SDL_VIDEODRIVER=dummy` and:
+;;
+;;      SDL_ATM_FRAMES=n:ms     runs `n` frames of `ms` milliseconds, then quits
+;;      SDL_ATM_KEYS=f:dn:A,... presses (`dn`) or releases (`up`) keys at frames
+;;      SDL_ATM_SHOT=f:x.png,...  saves the screen at frames
+
+```:prelude
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_image.h>
+#include <SDL2/SDL_ttf.h>
+#include <SDL2/SDL_mixer.h>
+
+static SDL_Window*   SDL_WIN = NULL;
+static SDL_Renderer* SDL_REN = NULL;
+static SDL_Color     SDL_CLR = { 255, 255, 255, 255 };
+static int           SDL_SND = 0;
+
+static const char* SDL_KIND_TEX = "sdl.texture";
+static const char* SDL_KIND_FNT = "sdl.font";
+
+static void sdl_tex_fin (void* p) { SDL_DestroyTexture(p); }
+static void sdl_fnt_fin (void* p) { TTF_CloseFont(p); }
+
+// Field of a table as a number, or `def`.
+static double sdl_fld (AVal t, const char* k, double def) {
+    if (t.type != A_TAB) {
+        return def;
+    }
+    AVal key = a_strz(k);
+    AVal v = a_tab_get(A_TAB_OF(t), key);
+    a_dec(key);
+    return a_isnum(v) ? a_dbl(v) : def;
+}
+
+// Field of a table as a C string, or `def`.
+static const char* sdl_str (AVal t, const char* k, const char* def) {
+    if (t.type != A_TAB) {
+        return def;
+    }
+    AVal key = a_strz(k);
+    AVal v = a_tab_get(A_TAB_OF(t), key);
+    a_dec(key);
+    return (v.type == A_STR) ? A_STR_OF(v)->s : def;
+}
+
+// [x,y,w,h] as a rectangle. Returns NULL if `t` is not a table.
+static SDL_Rect* sdl_rect (AVal t, SDL_Rect* r) {
+    if (t.type != A_TAB) {
+        return NULL;
+    }
+    r->x = (int) sdl_fld(t, "x", 0);
+    r->y = (int) sdl_fld(t, "y", 0);
+    r->w = (int) sdl_fld(t, "w", 0);
+    r->h = (int) sdl_fld(t, "h", 0);
+    return r;
+}
+
+static void sdl_window (AVal t) {
+    int w = (int) sdl_fld(t, "width",  640);
+    int h = (int) sdl_fld(t, "height", 480);
+    SDL_WIN = SDL_CreateWindow(sdl_str(t,"title","Atmos"),
+        SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, w, h, 0);
+    if (SDL_WIN != NULL) {
+        SDL_REN = SDL_CreateRenderer(SDL_WIN, -1, 0);
+    }
+    if (SDL_REN == NULL) {
+        fprintf(stderr, "sdl : %s\n", SDL_GetError());
+        exit(1);
+    }
+}
+
+static AVal sdl_image (AVal path) {
+    SDL_Texture* tex = (path.type == A_STR && SDL_REN != NULL)
+        ? IMG_LoadTexture(SDL_REN, A_STR_OF(path)->s) : NULL;
+    return (tex == NULL) ? a_nil() : a_nat(tex, sdl_tex_fin, SDL_KIND_TEX);
+}
+
+static AVal sdl_font (AVal path, AVal size) {
+    TTF_Font* fnt = (path.type == A_STR && a_isnum(size))
+        ? TTF_OpenFont(A_STR_OF(path)->s, (int)a_dbl(size)) : NULL;
+    return (fnt == NULL) ? a_nil() : a_nat(fnt, sdl_fnt_fin, SDL_KIND_FNT);
+}
+
+static int sdl_dim (AVal tex, int width) {
+    int w=0, h=0;
+    if (a_nat_is(tex,SDL_KIND_TEX) && a_nat_ptr(tex)!=NULL) {
+        SDL_QueryTexture(a_nat_ptr(tex), NULL, NULL, &w, &h);
+    }
+    return width ? w : h;
+}
+
+static void sdl_copy (AVal tex, AVal crop, AVal dst) {
+    if (!a_nat_is(tex,SDL_KIND_TEX) || a_nat_ptr(tex)==NULL) {
+        return;
+    }
+    SDL_Rect r1, r2;
+    SDL_RenderCopy(SDL_REN, a_nat_ptr(tex), sdl_rect(crop,&r1), sdl_rect(dst,&r2));
+}
+
+static void sdl_color (AVal rgb) {
+    int64_t c = a_isnum(rgb) ? (int64_t)a_dbl(rgb) : 0xFFFFFF;
+    SDL_CLR.r = (c >> 16) & 0xFF;
+    SDL_CLR.g = (c >>  8) & 0xFF;
+    SDL_CLR.b = (c >>  0) & 0xFF;
+    SDL_SetRenderDrawColor(SDL_REN, SDL_CLR.r, SDL_CLR.g, SDL_CLR.b, 255);
+}
+
+static void sdl_fill (AVal rect) {
+    SDL_Rect r;
+    SDL_RenderFillRect(SDL_REN, sdl_rect(rect,&r));
+}
+
+// Writes a text centered at a position, with the current color.
+static void sdl_write (AVal fnt, AVal txt, AVal pos) {
+    if (!a_nat_is(fnt,SDL_KIND_FNT) || a_nat_ptr(fnt)==NULL || txt.type!=A_STR) {
+        return;
+    }
+    SDL_Surface* sfc = TTF_RenderUTF8_Blended(a_nat_ptr(fnt), A_STR_OF(txt)->s, SDL_CLR);
+    if (sfc == NULL) {
+        return;
+    }
+    SDL_Texture* tex = SDL_CreateTextureFromSurface(SDL_REN, sfc);
+    SDL_Rect r = {
+        (int)sdl_fld(pos,"x",0) - sfc->w/2, (int)sdl_fld(pos,"y",0) - sfc->h/2,
+        sfc->w, sfc->h
+    };
+    SDL_RenderCopy(SDL_REN, tex, NULL, &r);
+    SDL_DestroyTexture(tex);
+    SDL_FreeSurface(sfc);
+}
+
+// Plays a sound file. The sounds are loaded once and kept.
+static void sdl_play (AVal path) {
+    static struct { char* path; Mix_Chunk* snd; } SNDS[64];
+    static int N = 0;
+    if (!SDL_SND || path.type!=A_STR) {
+        return;
+    }
+    Mix_Chunk* snd = NULL;
+    for (int i=0; i<N; i++) {
+        if (!strcmp(SNDS[i].path, A_STR_OF(path)->s)) {
+            snd = SNDS[i].snd;
+        }
+    }
+    if (snd==NULL && N<64) {
+        snd = Mix_LoadWAV(A_STR_OF(path)->s);
+        if (snd != NULL) {
+            SNDS[N].path = strdup(A_STR_OF(path)->s);
+            SNDS[N].snd  = snd;
+            N++;
+        }
+    }
+    if (snd != NULL) {
+        Mix_PlayChannel(-1, snd, 0);
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// DRIVER
+///////////////////////////////////////////////////////////////////////////////
+
+// Emits `:tag [name=name]`, or the tag alone.
+static AStatus sdl_emit (const char* tag, const char* name) {
+    AVal t = a_strz(tag);
+    AVal evt = t;
+    if (name != NULL) {
+        evt = a_tab();
+        a_tag(evt, t);
+        AVal k = a_strz("name");
+        AVal v = a_strz(name);
+        a_setindex(evt, k, v);
+        a_dec(k);
+        a_dec(v);
+    }
+    AStatus st = atm_emit(evt);
+    if (name != NULL) {
+        a_dec(evt);
+    }
+    a_dec(t);
+    return st;
+}
+
+// Test script: the entries `frame:...` of a variable that are due.
+static AStatus sdl_script (const char* var, int frame) {
+    AStatus st = A_OK;
+    const char* s = getenv(var);
+    while (s!=NULL && *s!='\0' && st==A_OK) {
+        char item[256];
+        size_t n = strcspn(s, ",");
+        snprintf(item, sizeof(item), "%.*s", (int)n, s);
+        s += n + (s[n] == ',');
+        char* arg = strchr(item, ':');
+        if (arg==NULL || atoi(item)!=frame) {
+            continue;
+        }
+        arg++;
+        if (!strcmp(var, "SDL_ATM_SHOT")) {
+            int w, h;
+            SDL_GetRendererOutputSize(SDL_REN, &w, &h);
+            SDL_Surface* sfc = SDL_CreateRGBSurfaceWithFormat(0, w, h, 32,
+                SDL_PIXELFORMAT_RGBA32);
+            SDL_RenderReadPixels(SDL_REN, NULL, SDL_PIXELFORMAT_RGBA32,
+                sfc->pixels, sfc->pitch);
+            IMG_SavePNG(sfc, arg);
+            SDL_FreeSurface(sfc);
+        } else if (!strncmp(arg, "dn:", 3)) {
+            st = sdl_emit("sdl.key.dn", arg+3);
+        } else if (!strncmp(arg, "up:", 3)) {
+            st = sdl_emit("sdl.key.up", arg+3);
+        }
+    }
+    return st;
+}
+
+int main (int argc, char** argv) {
+    if (SDL_Init(SDL_INIT_VIDEO|SDL_INIT_AUDIO) != 0) {
+        SDL_Init(SDL_INIT_VIDEO);
+    }
+    TTF_Init();
+    SDL_SND = (Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 1024) == 0);
+
+    // test mode: a fixed number of frames with a fixed duration
+    int frames = -1;
+    int fixed  = 0;
+    if (getenv("SDL_ATM_FRAMES") != NULL) {
+        sscanf(getenv("SDL_ATM_FRAMES"), "%d:%d", &frames, &fixed);
+    }
+
+    atm_init(argc, argv);
+    AStatus st = atm_main();
+
+    Uint32 prv = SDL_GetTicks();
+    int quit = 0;
+    for (int frame=1; st==A_OK && !quit && atm_alive(); frame++) {
+        SDL_Event e;
+        while (st==A_OK && SDL_PollEvent(&e)) {
+            if (e.type == SDL_QUIT) {
+                st = sdl_emit("sdl.quit", NULL);
+                quit = 1;
+            } else if (e.type==SDL_KEYDOWN && !e.key.repeat) {
+                st = sdl_emit("sdl.key.dn", SDL_GetKeyName(e.key.keysym.sym));
+            } else if (e.type == SDL_KEYUP) {
+                st = sdl_emit("sdl.key.up", SDL_GetKeyName(e.key.keysym.sym));
+            }
+        }
+        if (st == A_OK) {
+            st = sdl_script("SDL_ATM_KEYS", frame);
+        }
+
+        // time
+        Uint32 now = SDL_GetTicks();
+        int ms = fixed ? fixed : (int)(now - prv);
+        prv = now;
+        if (st==A_OK && ms>0) {
+            st = atm_emit(a_int((int64_t)ms * 1000));
+        }
+
+        // screen
+        if (st==A_OK && SDL_REN!=NULL) {
+            SDL_SetRenderDrawColor(SDL_REN, 0, 0, 0, 255);
+            SDL_RenderClear(SDL_REN);
+            st = sdl_emit("sdl.draw", NULL);
+            sdl_script("SDL_ATM_SHOT", frame);
+            SDL_RenderPresent(SDL_REN);
+        }
+
+        if (frames>0 && frame>=frames) {
+            quit = 1;
+        } else if (!fixed) {
+            SDL_Delay(16);
+        }
+    }
+
+    if (st == A_OK) {
+        st = atm_stop();
+    }
+    fflush(stdout);
+    if (st == A_ESCAPE) {
+        st = a_escape_err();
+    }
+    if (st != A_OK) {
+        a_error_dump();
+    }
+    atm_quit();
+    if (SDL_SND) {
+        Mix_CloseAudio();
+    }
+    TTF_Quit();
+    SDL_Quit();
+    return (st == A_OK) ? 0 : 1;
+}
+```
+
+val sdl = [
+    ;; sdl.window [title=, width=, height=]
+    window = func (t) {
+        `sdl_window($t);`
+    },
+
+    ;; sdl.image(path): a texture, or nil
+    image = func (path) {
+        `:value sdl_image($path)`
+    },
+
+    ;; sdl.size(tex): width and height of a texture
+    size = func (tex) {
+        return `:number sdl_dim($tex, 1)`, `:number sdl_dim($tex, 0)`
+    },
+
+    ;; sdl.font(path, size): a font, or nil
+    font = func (path, size) {
+        `:value sdl_font($path, $size)`
+    },
+
+    ;; sdl.copy(tex, crop, rect): draws the part `crop` of a texture
+    ;; into `rect`. Both default to the whole.
+    copy = func (tex, crop, rect) {
+        `sdl_copy($tex, $crop, $rect);`
+    },
+
+    ;; sdl.color(0xRRGGBB): the color of the next drawings
+    color = func (rgb) {
+        `sdl_color($rgb);`
+    },
+
+    ;; sdl.fill(rect): a filled rectangle
+    fill = func (rect) {
+        `sdl_fill($rect);`
+    },
+
+    ;; sdl.write(fnt, text, pos): a text centered at `pos`
+    write = func (fnt, text, pos) {
+        `sdl_write($fnt, $text, $pos);`
+    },
+
+    ;; sdl.play(path): plays a sound file
+    play = func (path) {
+        `sdl_play($path);`
+    },
+
+    ;; sdl.pct_to_pos(x, y): percentages of the window as a position
+    pct_to_pos = func (x, y) {
+        val w = `:number ({ int w=0,h=0; SDL_GetRendererOutputSize(SDL_REN,&w,&h); w; })`
+        val h = `:number ({ int w=0,h=0; SDL_GetRendererOutputSize(SDL_REN,&w,&h); h; })`
+        [ x = (w*x)//100, y = (h*y)//100 ]
+    },
+
+    ;; sdl.rect_vs_rect(r1, r2): the rectangles overlap
+    rect_vs_rect = func (r1, r2) {
+        (r1.x < r2.x+r2.w) && (r2.x < r1.x+r1.w) &&
+        (r1.y < r2.y+r2.h) && (r2.y < r1.y+r1.h)
+    },
+]
