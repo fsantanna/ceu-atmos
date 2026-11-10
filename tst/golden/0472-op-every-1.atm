@@ -1,0 +1,9 @@
+        spawn {
+            loop on <:A || :B> {
+                print(:tick)
+            }
+        }
+        emit(:A)
+        emit(:B)
+        emit(:A)
+    

@@ -1,0 +1,15 @@
+        task T () {
+            await(true)
+        }
+        pin ts = tasks(1)
+        spawn @ts T()
+        spawn {
+            loop _ in ts {
+                break()
+            }
+        }
+        emit(:X)                    ;; kills T
+        val ok1 = spawn @ts T()    ;; dead slot is free: passes
+        val ok2 = spawn @ts T()    ;; full: fails
+        print(ok1 != nil, ok2 != nil)
+    

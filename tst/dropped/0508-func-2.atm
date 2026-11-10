@@ -1,0 +1,7 @@
+    val S = require "atmos.streams"
+    val my_array =
+        S.from()::
+            take(5)
+    loop v in my_array {
+      print(v)
+    }

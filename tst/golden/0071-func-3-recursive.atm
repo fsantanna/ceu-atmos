@@ -1,0 +1,9 @@
+        func f (v) {
+            if v == 0 {
+                (0)
+            } else {
+                v + f(v - 1)
+            }
+        }
+        print(f(4))
+    

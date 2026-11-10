@@ -1,0 +1,4 @@
+    val S = require "atmos.streams"
+    val numbers = S.from(10,15)
+    val sum = numbers::acc0(0, \(acc,new){acc+new})::to()
+    print(sum)

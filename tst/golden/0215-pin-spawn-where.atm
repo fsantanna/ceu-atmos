@@ -1,0 +1,11 @@
+        val T = task (v) {
+            print(v)
+            val e = await(true)
+            print(e)
+        }
+        pin t = spawn T(x+y) where {
+            x = 10
+            y = 20
+        }
+        emit(:done)
+    

@@ -1,0 +1,11 @@
+        spawn {
+            watching :Z {
+                loop on :X {
+                    break()
+                }
+                print(:inner)
+            }
+            print(:outer)
+        }
+        emit(:X)
+    

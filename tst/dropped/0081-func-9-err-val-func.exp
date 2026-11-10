@@ -1,0 +1,5 @@
+ok
+==> ERROR:
+|  [C]:-1 (loop)
+v  [string "anon.atm"]:7 (throw)
+==> attempt to call a nil value (global 'x')

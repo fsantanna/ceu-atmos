@@ -1,0 +1,14 @@
+        spawn {
+            par :any {
+                await(:X)
+            } with {
+                await(:Y)
+            }
+            print(:ok)
+        }
+        emit(:X)
+        emit(:X)
+        print(:antes)
+        emit(:Y)
+        print(:depois)
+    

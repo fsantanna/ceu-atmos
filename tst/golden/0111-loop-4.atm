@@ -1,0 +1,6 @@
+        print(:1)
+        loop x in (func () { return<-nil }) {
+            print(x)
+        }
+        print(:2)
+    

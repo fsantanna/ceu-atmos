@@ -1,0 +1,3 @@
+        val T = func (v) { }
+        print(T)
+    

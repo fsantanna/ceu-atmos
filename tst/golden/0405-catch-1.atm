@@ -1,0 +1,15 @@
+        spawn {
+            catch :e1 {
+                throw(:e1)
+            }
+            print(:e1)
+            await(true)
+            throw(:e2)
+        }
+        catch :e2 {
+            emit(:)
+            emit(:)
+            print(99)
+        }
+        print(:e2)
+    

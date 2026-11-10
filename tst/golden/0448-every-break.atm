@@ -1,0 +1,8 @@
+        spawn {
+            loop on true {
+                break()
+            }
+            print(:ok)
+        }
+        emit(:ok)
+    

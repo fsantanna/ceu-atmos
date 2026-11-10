@@ -1,0 +1,14 @@
+        var tk
+        set tk = task () {
+            await(true)
+            val e = await(true)
+            print(e)
+        }
+        spawn (tk) ()
+        spawn tk ()
+        do {
+             emit(:1)
+             emit(:2)
+             emit(:3)
+        }
+    

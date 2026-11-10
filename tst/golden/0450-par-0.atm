@@ -1,0 +1,7 @@
+        spawn {
+            par {
+            } with {
+            }
+        }
+        print(:X)
+    

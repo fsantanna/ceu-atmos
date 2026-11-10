@@ -1,0 +1,8 @@
+        spawn (task () {
+            val x = await(true)
+            print(:ok, x)
+        }) ()
+        spawn (task () {
+            emit @(:global) (:10)
+        }) ()
+    

@@ -1,0 +1,6 @@
+        val C = func () { }
+        val T = task () { }
+        val c = coroutine.create(C)
+        pin t = xtask(T)
+        print(C, T, c, t)
+    

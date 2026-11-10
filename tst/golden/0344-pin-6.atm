@@ -1,0 +1,9 @@
+        pin t = spawn {
+            await(:X)
+        }
+        spawn {
+            await(t)
+            print(:done)
+        }
+        emit(:X)
+    

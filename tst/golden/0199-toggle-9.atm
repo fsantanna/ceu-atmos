@@ -1,0 +1,8 @@
+        spawn {
+            val x = toggle on :Show {
+                10
+            }
+            print(x)
+        }
+        print(:ok)
+    

@@ -1,0 +1,8 @@
+        task T () {
+            await :X
+            print :no
+        }
+        pin _ = if false => spawn T()
+        emit :X
+        print :ok
+    

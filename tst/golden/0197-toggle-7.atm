@@ -1,0 +1,16 @@
+        val T = task () {
+            spawn (task () {
+                await(:nil)
+                print(3)
+            }) ()
+            await(:nil)
+            print(4)
+        }
+        print(1)
+        pin t = spawn T()
+        toggle t (false)
+        emit (:nil)
+        print(2)
+        toggle t (true)
+        emit (:nil)
+    

@@ -1,0 +1,4 @@
+        val T = task () { }
+        pin t = spawn T()
+        print(t)
+    

@@ -1,0 +1,15 @@
+        val T = task () {
+            val e1 = do :brk {
+                loop {
+                    val e = await(true)
+                    do {
+                        val x = e
+                        print(:in, e)    ;; TODO: 10
+                    }
+                    escape(:brk)
+                }
+            }
+        }
+        spawn T()
+        emit(:10)
+    

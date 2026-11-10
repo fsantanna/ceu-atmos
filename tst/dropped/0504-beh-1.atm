@@ -1,0 +1,4 @@
+        val S = require "atmos.streams"
+        pin x* = S.from(1,10)
+        print(x)
+    

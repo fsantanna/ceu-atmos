@@ -1,0 +1,8 @@
+        func f () {
+            break()
+        }
+        loop {
+            f()
+        }
+        print:ok
+    

@@ -1,0 +1,4 @@
+        func f (self,v) { self.v+v }
+        val o = [v=10,f=f]
+        print(o::f(20))
+    

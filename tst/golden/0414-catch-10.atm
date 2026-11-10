@@ -1,0 +1,19 @@
+        var tk = task (v) {
+            await(true)
+            val v = await(true)
+            throw(:1)
+        }
+        spawn tk ()
+        spawn tk ()
+        catch :1 {
+            (func () {
+                print(1)
+                emit(:1)
+                print(2)
+                emit(:2)
+                print(3)
+                emit(:3)
+            })()
+        }
+        print(99)
+    

@@ -1,0 +1,13 @@
+        var T = task () {
+            do {
+                val v =
+                    await(true)
+                X.print(v@1)
+            }
+        }
+        spawn T()
+        ;;print(:1111)
+        var e = []
+        emit(:t [e])
+        ;;print(:2222)
+    

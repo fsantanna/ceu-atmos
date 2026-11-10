@@ -1,0 +1,4 @@
+        val M = []
+        task M.T (v) { print(v) }
+        spawn M.T(10)
+    

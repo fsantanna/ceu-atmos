@@ -48,9 +48,12 @@ test-ast: atmos
 test-cases: all
 	tst/run.sh cases
 
-test: test-rt test-lex test-ast test-cases
+test-golden: all
+	tst/run.sh golden
+
+test: test-rt test-lex test-ast test-cases test-golden
 
 clean:
 	rm -rf build
 
-.PHONY: all test test-rt test-lex test-ast test-cases clean
+.PHONY: all test test-rt test-lex test-ast test-cases test-golden clean

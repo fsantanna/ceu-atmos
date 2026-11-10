@@ -1,0 +1,8 @@
+        val T = task (v) {
+            val e = await(true)
+            print(v, e)
+        }
+        spawn T(:1)
+        pin t2 = spawn T(:2)
+        emit(:1)
+    

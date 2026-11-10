@@ -1,0 +1,6 @@
+        var x = :X.A [a=10]
+        match x {
+            :X.A => { print(x.a) }
+            else => { throw()  }
+        }
+    

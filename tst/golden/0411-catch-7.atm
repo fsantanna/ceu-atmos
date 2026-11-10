@@ -1,0 +1,9 @@
+        spawn {
+            spawn {
+                await(true)
+            }
+            await(true)
+            throw(nil)
+        }
+        print(1)
+    

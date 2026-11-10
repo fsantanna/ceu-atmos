@@ -1,0 +1,6 @@
+        spawn {
+            await <:X until
+                (x+10)>
+        }
+        emit :X [10]
+    

@@ -1,0 +1,9 @@
+        val T = task () {
+        }
+        pin t = spawn T()
+        do {
+            val x = []
+            set t.pub = x
+        }
+        X.print(t.pub)
+    

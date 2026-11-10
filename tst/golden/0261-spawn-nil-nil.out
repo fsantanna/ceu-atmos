@@ -1,0 +1,3 @@
+==> ERROR:
+ v  0261-spawn-nil-nil.atm:1 (throw)
+==> invalid spawn : expected task prototype

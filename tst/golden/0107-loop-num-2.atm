@@ -1,0 +1,4 @@
+            loop x in (10,12) {
+                print(x)
+            }
+        

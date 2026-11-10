@@ -1,0 +1,17 @@
+        var f, g
+        set f = func (v) {
+            if v == 0 {
+                0
+            } else {
+                (v + g(v - 1))
+            }
+        }
+        set g = func (v) {
+            if v == 0 {
+                0
+            } else {
+                v + f(v - 1)
+            }
+        }
+        print(f(4))
+    

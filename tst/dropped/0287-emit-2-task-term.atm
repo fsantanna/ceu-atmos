@@ -1,0 +1,12 @@
+        val tk = task (v) {
+            val e1 = await(true)
+            print(v, e1)
+            var e2 = await(true)
+            print(v, e2)
+        }
+        pin co1 = spawn tk(:1)
+        spawn tk(:2)
+        emit(:1)
+        emit(:2)
+        emit(:3)
+    

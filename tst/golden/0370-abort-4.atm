@@ -1,0 +1,9 @@
+        spawn (task () {
+            pin t = spawn (task () {
+                await(false)
+            }) ()
+            await(false)
+        } )()
+        emit(:true)
+        print(:ok)
+    

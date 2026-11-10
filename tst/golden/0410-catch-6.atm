@@ -1,0 +1,28 @@
+        val T = task () {
+            catch :e1 {
+                spawn {
+                    await(true)
+                    throw(:e1)
+                    print(:no)
+                }
+                await(false)
+            }
+            print(:ok1)
+            throw(:e2)
+            print(:no)
+        }
+        spawn {
+            catch :e2 {
+                spawn T()
+                await(false)
+            }
+            print(:ok2)
+            throw(:e3)
+            print(:no)
+        }
+        catch :e3 {
+            emit(:)
+            print(:no)
+        }
+        print(:ok3)
+    

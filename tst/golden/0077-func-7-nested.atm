@@ -1,0 +1,10 @@
+        var i = 10
+        func f () {
+            var j = 20
+            func g () {
+                return(i + j)
+            }
+            print(g())
+        }
+        f()
+    

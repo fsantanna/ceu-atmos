@@ -1,0 +1,10 @@
+        pin ts = tasks()
+        task T () { print :ok }
+        spawn {
+            watching :X {
+                await :Y
+                spawn @ts T()
+            }
+        }
+        emit :Y
+    

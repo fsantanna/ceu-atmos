@@ -1,0 +1,9 @@
+        val T = task () {
+            loop {
+                val e = await(true)
+            }
+        }
+        spawn T ()
+        emit <- :t [2]
+        print(:ok)
+    

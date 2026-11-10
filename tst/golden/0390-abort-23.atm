@@ -1,0 +1,10 @@
+        spawn (task () {
+            spawn (task () {
+                await(true)
+                emit @(:global)(:)
+            }) ()
+            await(true)
+        }) ()
+        emit(:)
+        print(:ok)
+    

@@ -1,0 +1,1 @@
+print(ifs { false=>99 ; true=>100 })

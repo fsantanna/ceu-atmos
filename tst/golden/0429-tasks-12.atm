@@ -1,0 +1,22 @@
+        pin ts = tasks(2)
+        var T
+        set T = task (v) {
+            print(10)
+            defer {
+                print(20)
+                print(30)
+            }
+            await until (func (e) { e && (e !? :xtask) })
+            if v {
+                await until (func (e) { e && (e !? :xtask) })
+            }
+        }
+        print(0)
+        spawn @ts T(false)
+        spawn @ts T(true)
+        print(1)
+        emit(:99)
+        print(2)
+        emit(:99)
+        print(3)
+    

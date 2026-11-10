@@ -1,0 +1,8 @@
+        val T = task () {
+            set pub = 10
+            await until (func (e) { e && (e.tag==:X) && (e@(1)==pub) })
+            print(pub)
+        }
+        pin t = spawn T()
+        emit :X [10]
+    

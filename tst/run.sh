@@ -3,7 +3,7 @@
 # Runs the golden tests.
 #
 #   tst/run.sh            all suites
-#   tst/run.sh lex        one suite (lex, ast, cases)
+#   tst/run.sh lex        one suite (lex, ast, cases, golden)
 #
 # Each case is a `NAME.atm` with the expected output in `NAME.out`
 # (stdout followed by stderr).
@@ -12,7 +12,7 @@ cd "$(dirname "$0")"
 
 ATMOS=../../atmos
 
-suites=${@:-lex ast cases}
+suites=${@:-lex ast cases golden}
 
 # programs are built with the address sanitizer (leaks included)
 export ATMOS_ASAN=1
@@ -25,7 +25,8 @@ for suite in $suites; do
     case $suite in
         lex) flags="--lex" ;;
         ast) flags="--ast" ;;
-        cases) flags="" ;;
+        cases)  flags="" ;;
+        golden) flags="" ;;
         *)   echo "unknown suite: $suite" ; exit 1 ;;
     esac
     cd $suite

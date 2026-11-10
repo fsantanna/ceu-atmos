@@ -1,0 +1,5 @@
+Y
+==> ERROR:
+|  [C]:-1 (loop)
+v  [string "anon.atm"]:2 (throw)
+==> attempt to perform arithmetic on a boolean value

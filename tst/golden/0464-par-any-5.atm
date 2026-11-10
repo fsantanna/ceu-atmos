@@ -1,0 +1,14 @@
+        spawn {
+            par :any {
+                await(:X)
+                print("x")
+            } with {
+                loop on :X {
+                    print("no")
+                }
+            }
+            print("or")
+        }
+        emit(:X)
+        print("ok")
+    

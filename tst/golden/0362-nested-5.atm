@@ -1,0 +1,13 @@
+        spawn (task () {
+            val fff = func () {
+                print(:ok)
+            }
+            val T = task () {
+                fff()
+            }
+            await(true)
+            spawn T()
+            await(true)
+        }) ()
+        emit(:true)
+    

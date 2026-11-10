@@ -1,0 +1,7 @@
+        spawn {
+            watching :X {
+                print :Y
+            }
+            print :X
+        }
+    

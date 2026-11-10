@@ -1,0 +1,16 @@
+        spawn (task () {
+            var evt1 = await(true)
+            val evtx = evt1
+            print(evt1)
+            spawn (task () {
+                var evt2 = evtx
+                loop {
+                    print(evt2)    ;; lost reference
+                    set evt2 = await(true)
+                }
+            }) ()
+            set evt1 = await(true)
+        }) ()
+        emit (:10)
+        emit (:20)
+    

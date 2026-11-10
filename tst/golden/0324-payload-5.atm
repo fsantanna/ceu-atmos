@@ -1,0 +1,20 @@
+        var fff
+        set fff = func (x) { return(x) }
+        spawn (task () {
+            var evt = await(true)
+            do :X {
+                loop {
+                    if evt@(:type)==:x {
+                        escape(:X)
+                    }
+                    set evt = await(true)
+                }
+            }
+            print(99)
+        }) ()
+        print(1)
+        emit (:T [type=:y])
+        print(2)
+        emit (:T [type=:x])
+        print(3)
+    

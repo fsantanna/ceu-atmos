@@ -1,0 +1,5 @@
+        val ok,v = catch true {
+            throw(10)
+        }
+        print(ok,v)
+    

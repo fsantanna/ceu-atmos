@@ -1,0 +1,12 @@
+        spawn {
+            loop {
+                ;;pin t = spawn {
+                    await(:X)
+                    print(:in)
+                ;;}
+                ;;await(t)
+            }
+        }
+        emit :X
+        print :out
+    

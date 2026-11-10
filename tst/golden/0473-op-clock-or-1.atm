@@ -1,0 +1,6 @@
+        spawn {
+            await <:X || 5ms>
+            print(:ok)
+        }
+        emit @:global 5ms
+    

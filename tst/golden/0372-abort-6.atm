@@ -1,0 +1,21 @@
+        spawn (task () {
+            ;;print(:x, `:number ceu_depth(ceu_block)`)
+            do {
+                spawn (task () {
+                    await(true)
+                }) ()
+                await(true)
+            }
+            ;;print(:y, `:number *ceu_dmin`)
+            do {
+                val x1
+                do {
+                    val x2
+                    ;;print(:z, `:number *ceu_dmin`, `:number ceu_depth(ceu_block)`)
+                    await(true)
+                }
+            }
+        }) ()
+        emit(:true)
+        print(:ok)
+    

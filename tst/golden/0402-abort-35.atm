@@ -1,0 +1,18 @@
+        spawn (task () {
+            print(:1)
+            ;;resume (coro (func () {
+            spawn {
+                defer {
+                    print(:ok)
+                }
+                print(:2)
+                await(true)
+            }
+            ;;})) ()
+            ;; refs=0 --> :ok
+            await(true)
+            print(:3)
+        }) ()
+        emit(:)
+        print(:4)
+    

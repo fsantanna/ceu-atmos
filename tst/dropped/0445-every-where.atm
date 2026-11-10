@@ -1,0 +1,11 @@
+        spawn {
+            loop on :X {
+                x where {
+                    x = match x {
+                        x => x
+                    }
+                }
+            }
+        }
+        print(:ok)
+    

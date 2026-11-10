@@ -1,0 +1,4 @@
+==> ERROR:
+|  [C]:-1 (loop)
+v  [string "anon.atm"]:1 (throw)
+==> attempt to index a number value

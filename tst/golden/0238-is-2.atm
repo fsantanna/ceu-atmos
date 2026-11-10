@@ -1,0 +1,5 @@
+        print([] ?? :bool)
+        print([] ?? :table)
+        print(1 !? :table)
+        print(1 !? :number)
+    

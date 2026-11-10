@@ -1,0 +1,4 @@
+==> ERROR:
+|  [C]:-1 (loop)
+v  [string "anon.atm"]:7 (throw)
+==> variable 'a' got a non-closable value

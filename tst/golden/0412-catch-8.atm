@@ -1,0 +1,7 @@
+        catch true {
+            spawn {
+                throw(:x)
+            }
+        }
+        print(1)
+    

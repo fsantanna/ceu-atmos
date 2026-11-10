@@ -1,0 +1,9 @@
+        pin ts = tasks(1)
+        var T = task () { await(true) }
+        val t1 = spawn @ts T()
+        val t2 = spawn @ts T()
+        emit @ts (:)
+        val t3 = spawn @ts T()
+        val t4 = spawn @ts T()
+        print(t1??:xtask, t2??:xtask, t3??:xtask, t4??:xtask)
+    

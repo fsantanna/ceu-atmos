@@ -1,0 +1,12 @@
+        var T
+        set T = task (v) {
+            defer {
+                print(v)
+            }
+            await(true)
+        }
+        pin ts = tasks()
+        spawn @ts T(1)
+        spawn @ts T(2)
+        print(0)
+    

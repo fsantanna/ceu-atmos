@@ -1,0 +1,11 @@
+        spawn {
+            par :any {
+                await(20ms)
+                print(:a)
+            } with {
+                await(10ms)
+                print(:b)
+            }
+        }
+        emit @:global 30ms              ;; b expires first (10ms)
+    

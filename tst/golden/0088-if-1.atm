@@ -1,0 +1,8 @@
+        if true {
+            print(:t)
+        }
+        if false {
+        } else {
+            print(:f)
+        }
+    

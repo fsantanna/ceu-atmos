@@ -1,0 +1,9 @@
+        val t = func () {
+            defer {
+                print :ok
+            }
+            coroutine.yield()
+        }
+        pin a = coroutine.create(t)
+        print :end
+    

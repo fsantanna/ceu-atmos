@@ -1,0 +1,6 @@
+        var T
+        set T = task (x,y) {
+            print(x,y)
+        }
+        spawn T(1,2)
+    

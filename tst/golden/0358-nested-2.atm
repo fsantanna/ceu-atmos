@@ -1,0 +1,9 @@
+        val F = func () {
+            val v = 10
+            val f = func () {
+                return(v)
+            }
+            return(f())
+        }
+        print(F())
+    

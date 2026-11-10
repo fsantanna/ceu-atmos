@@ -1,0 +1,9 @@
+        spawn {
+            val x = par :any {
+                await(false)
+            } with {
+                10
+            }
+            print(x)
+        }
+    

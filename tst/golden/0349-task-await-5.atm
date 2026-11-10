@@ -1,0 +1,13 @@
+        task t2 () {
+            print(">>> B")
+            await(:X)
+            print("<<< B")
+            ;;emit(Event.Task [`mar_exe`])
+        }
+        spawn {
+            print(">>> A")
+            await t2()
+            print("<<< A")
+        }
+        emit(:X)
+    

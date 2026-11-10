@@ -1,0 +1,8 @@
+        func f (v) {
+            if v != 0 {
+                print(v)
+                f(v - 1)
+            }
+        }
+        f(3)
+    

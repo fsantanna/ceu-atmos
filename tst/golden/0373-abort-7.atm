@@ -1,0 +1,21 @@
+        spawn (task () {
+            do {
+                spawn (task () {
+                    spawn (task () {
+                        await(true)
+                        print(:1)
+                    }) ()
+                    await(true)
+                    print(:2)
+                }) ()
+                await(true)
+                print(:3)
+            }
+            print(:4)
+            await(true)
+            print(:5)
+        }) ()
+        print(:0)
+        emit(:true)
+        print(:6)
+    

@@ -1,0 +1,13 @@
+        spawn {
+            loop {
+                await(:X)
+                print :1
+                watching(:X) {
+                    await(:Y)
+                }
+                print :2
+            }
+        }
+        emit(:X)
+        emit(:X)
+    

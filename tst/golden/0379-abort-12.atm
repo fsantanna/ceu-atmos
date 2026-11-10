@@ -1,0 +1,13 @@
+        val T = task () {
+            print(:1)
+            defer {
+                print(:ok)
+            }
+            print(:2)
+            loop {
+                await(true)
+            }
+            print(999)
+        }
+        spawn T()
+    

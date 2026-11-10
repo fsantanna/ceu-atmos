@@ -1,0 +1,6 @@
+        spawn {
+            thread { await :OK }
+        }
+        `os.execute("sleep 0.1")`
+        emit(nil)
+    

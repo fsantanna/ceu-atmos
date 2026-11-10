@@ -1,0 +1,4 @@
+==> ERROR:
+|  [C]:-1 (loop)
+v  [string "anon.atm"]:2 (throw)
+==> invalid assignment : expected pinned value

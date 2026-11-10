@@ -1,0 +1,13 @@
+        var T = task () {
+            set pub = [10]
+            await(true)
+        }
+        pin ts = tasks()
+        spawn @ts T()
+        loop _,t in ts {
+            var x = t.pub
+            emit @t (:nil)
+            X.print(x)
+        }
+        print(999)
+    

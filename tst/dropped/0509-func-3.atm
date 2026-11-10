@@ -1,0 +1,12 @@
+    val S = require "atmos.streams"
+    val names = [
+      "Arya",
+      "Beatrice",
+      "Caleb",
+      "Dennis"
+    ]
+    val names_with_b = S.from(names)
+        ::filter(\{it::find("[Bb]")})
+        ::table()
+        ::to()
+    X.print(names_with_b)

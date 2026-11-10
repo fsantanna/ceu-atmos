@@ -1,0 +1,5 @@
+        val task T (a) { print(:val, a) }
+        val task U (a) { print(:var, a) }
+        spawn T(1)
+        spawn U(2)
+    

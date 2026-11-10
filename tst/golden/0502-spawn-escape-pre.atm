@@ -1,0 +1,12 @@
+        val T = task () {
+            val v = do :X {
+                spawn {
+                    escape(:X, 10)
+                }
+                await(false)
+            }
+            print(v)
+        }
+        spawn T()
+        print(:end)
+    

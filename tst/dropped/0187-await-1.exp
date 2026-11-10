@@ -1,0 +1,5 @@
+==> ERROR:
+|  [C]:-1 (loop)
+|  [string "anon.atm"]:5 (emit) <- [C]:-1 (task)
+v  [string "anon.atm"]:3 (throw) <- [C]:-1 (task)
+==> attempt to perform arithmetic on a nil value (global 'x')

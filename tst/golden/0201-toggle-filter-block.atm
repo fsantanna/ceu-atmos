@@ -1,0 +1,17 @@
+        spawn {
+            toggle on :Show with :Draw {
+                par {
+                    loop on :Draw { print(:draw) }
+                } with {
+                    loop on :Tick { print(:tick) }
+                }
+            }
+        }
+        emit(:Draw)             ;; on  -> draw
+        emit(:Tick)             ;; on  -> tick
+        emit :Show [false]     ;; toggle off, filter :Draw
+        emit(:Draw)             ;; passes filter -> draw
+        emit(:Tick)             ;; gated -> frozen
+        emit :Show [true]      ;; toggle on
+        emit(:Tick)             ;; on  -> tick
+    

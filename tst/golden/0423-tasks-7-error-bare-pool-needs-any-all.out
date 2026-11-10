@@ -1,0 +1,3 @@
+==> ERROR:
+ v  0423-tasks-7-error-bare-pool-needs-any-all.atm:3 (throw)
+==> invalid await : unexpected tasks pool

@@ -1,0 +1,15 @@
+        var done = false
+        spawn {
+            watching until (done) {
+                await(false)
+                print(:never)
+            }
+            print(:aborted)
+        }
+        print(1)
+        emit(nil)               ;; done=false -> keep watching
+        print(2)
+        set done = true
+        emit(nil)               ;; done=true -> abort watching
+        print(3)
+    

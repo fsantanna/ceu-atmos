@@ -1,0 +1,14 @@
+        var T
+        set T = task (v) {
+            await(true)
+            print(v)
+            await(true)
+        }
+        var t1
+        pin t1 = spawn T (1)
+        do {
+            var t2
+            pin t2 = spawn T (2)
+            emit @t2 (:nil)
+        }
+    

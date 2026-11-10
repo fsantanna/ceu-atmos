@@ -1,0 +1,9 @@
+        print(1)
+        val x = loop {
+            print(2)
+            until <- (true,10)
+            print(99)
+        }
+        print(3)
+        print(x)
+    

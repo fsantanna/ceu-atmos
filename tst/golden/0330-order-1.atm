@@ -1,0 +1,14 @@
+        spawn (task () {
+            spawn (task () {
+                print(:1)
+                await(true)              ;; 1. awakes from outer bcast
+                print(:3)
+            }) ()
+            await(true)                  ;; 2. awakes from nested task
+            ;;await(true)                  ;; 3. awakes from outer bcast
+            print(:ok)
+        }) ()
+        print(:2)
+        emit(:T[])
+        print(:4)
+    

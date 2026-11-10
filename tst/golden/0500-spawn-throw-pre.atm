@@ -1,0 +1,12 @@
+        val T = task () {
+            val ok, e, v = catch :X {
+                spawn {
+                    throw(:X, 10)
+                }
+                await(false)
+            }
+            print(ok, e, v)
+        }
+        spawn T()
+        print(:end)
+    

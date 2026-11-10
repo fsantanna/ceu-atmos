@@ -1,0 +1,13 @@
+        var tk
+        set tk = task () {
+            X.print((await(true)).v)
+        }
+        pin co = spawn tk()
+        var f = func () {
+            var g = func () {
+                emit :x [v=10]
+            }
+            g()
+        }
+        f()
+    

@@ -1,0 +1,11 @@
+        spawn {
+            watching <:X || :Y> {
+                await(:Z)
+                print(:no)
+            }
+            print(:ok)
+        }
+        print(:antes)
+        emit(:Y)
+        print(:depois)
+    

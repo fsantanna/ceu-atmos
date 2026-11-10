@@ -1,0 +1,20 @@
+        spawn (task () {
+            spawn (task () {
+                await(true)
+                do {
+                    defer {
+                        print(:3)
+                    }
+                    print(:1)
+                    resume (coro (func () {
+                        ;; TODO: coro hides outer t.co and consumes the error
+                        emit @(:global)(:)
+                    })) ()
+                    print(:999)
+                }
+            }) ()
+            await(true)
+            print(:2)
+        }) ()
+        emit @(:global)(:)
+    

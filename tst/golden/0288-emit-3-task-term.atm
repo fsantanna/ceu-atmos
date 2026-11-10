@@ -1,0 +1,12 @@
+        spawn (task () {
+            spawn (task () {
+                await(true)              ;; awakes from outer bcast
+                print(:2)
+            }) ()
+            await(true)                  ;; awakes from co2 termination
+            print(:1)
+        }) ()
+        ;;`printf(">>> %d\n", CEU_DEPTH);`
+        print(:bcast)
+        emit(:ok)
+    

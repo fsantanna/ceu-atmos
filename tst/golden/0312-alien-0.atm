@@ -1,0 +1,5 @@
+        var x
+        set x = []
+        emit(:t [x])
+        X.print(x)
+    

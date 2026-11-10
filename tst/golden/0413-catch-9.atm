@@ -1,0 +1,24 @@
+        spawn {
+            catch :or {
+                spawn {
+                    await(true)
+                    ;;print(:evt, evt)
+                    ;;print(111)
+                    throw(:or)
+                }
+                spawn {
+                    await(true)
+                    ;;print(:evt, evt)
+                    ;;print(222)
+                    throw(:or)
+                }
+                await(true)
+                ;;print(:in)
+            }
+            ;;print(:out)
+        }
+        ;;print(:bcast-in)
+        emit (:)
+        ;;print(:bcast-out)
+        print(1)
+    

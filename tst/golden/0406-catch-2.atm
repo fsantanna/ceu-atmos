@@ -1,0 +1,21 @@
+        spawn (task () {
+            catch :e1 ;;;(it| it==:e1);;; {
+                ;;resume (coroutine (coro' () {
+                    ;;await(true)
+                    throw(:e1)
+                ;;})) ()
+                loop {
+                    await(true)
+                }
+            }
+            print(:e1)
+            await(true)
+            throw(:e2)
+        })()
+        catch :e2 ;;;(it | it==:e2 );;; {
+            emit(:)
+            emit(:)
+            print(99)
+        }
+        print(:e2)
+    

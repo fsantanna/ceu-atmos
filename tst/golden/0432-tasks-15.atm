@@ -1,0 +1,10 @@
+        val tup = []
+        val T = task () {
+            set ;;;task.;;;pub = tup
+            await(true)
+        }
+        pin ts = tasks()
+        spawn @ts T()
+        spawn @ts T()
+        print(:ok)
+    

@@ -1,0 +1,4 @@
+        pin ts = tasks()
+        spawn @ts (task () { print(:in) })()
+        print(:out)
+    

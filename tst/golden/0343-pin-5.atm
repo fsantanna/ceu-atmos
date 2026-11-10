@@ -1,0 +1,7 @@
+        pin t = spawn {
+            set pub = 10
+            await(:X)
+        }
+        print(t.pub)
+        emit(:X)
+    

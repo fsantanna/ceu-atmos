@@ -1,0 +1,26 @@
+        val T = task (i) {
+            loop on :X {
+                print(:X, i)
+            }
+        }
+        spawn {
+            var i = 1
+            loop {
+                watching :Y {
+                    pin ts = tasks()
+                    do {
+                        spawn @ts T(i)
+                        spawn @ts T(i+1)
+                    }
+                    emit(:X)
+                    await(false)
+                }
+                set i = i + 8
+            }
+        }
+        print '==='
+        emit :Y
+        print '---'
+        emit :X
+        print :ok
+    

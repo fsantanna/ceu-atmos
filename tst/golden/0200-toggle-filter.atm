@@ -1,0 +1,15 @@
+        val T = task () {
+            spawn (task () {
+                loop on :Draw { print(:draw) }
+            }) ()
+            loop on :Tick { print(:tick) }
+        }
+        pin t = spawn T()
+        emit(:Draw)                 ;; on  -> draw
+        emit(:Tick)                 ;; on  -> tick
+        toggle t (false) with :Draw ;; off, but :Draw passes
+        emit(:Draw)                 ;; passes filter -> draw
+        emit(:Tick)                 ;; gated -> frozen
+        toggle t (true)
+        emit(:Tick)                 ;; on  -> tick
+    

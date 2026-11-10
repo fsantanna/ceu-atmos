@@ -1,0 +1,7 @@
+        val _,x = catch :X {
+            catch :Y {
+                throw <- :X [10]
+            }
+        }
+        X.print(x)
+    

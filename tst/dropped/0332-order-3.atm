@@ -1,0 +1,13 @@
+        spawn (task () {
+            spawn (task () {
+                print(:1, await(true)) ;; awakes from outer bcast
+            }) ()
+            spawn (task () {
+                loop {
+                    await(true)
+                }
+            }) ()
+            print(:2, await(true))      ;; awakes from :1 termination
+        }) ()               ;; kill anon task which is pending on traverse
+        emit(:out)
+    

@@ -1,0 +1,36 @@
+        math.randomseed()
+
+        val func cpu (max) {
+            var sum = 0
+            loop i in max {
+                set sum = sum + i
+            }
+            sum
+        }
+
+        spawn {
+            val t = watching 20s {
+                par :any {
+                    val v = thread {
+                        loop {
+                            cpu(math.random(10000000))
+                        }
+                    }
+                    [worker="A", value=v]
+                } with {
+                    val v = thread {
+                        cpu(100)
+                    }
+                    [worker="B", value=v]
+                }
+            }
+
+            if t ?? :number {
+                print("Computation timeout...")
+            } else {
+                print(t.worker ++ " yields " ++ t.value)
+            }
+        }
+        `os.execute("sleep 0.1")`
+        emit(nil)
+    

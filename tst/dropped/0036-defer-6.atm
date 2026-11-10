@@ -1,0 +1,7 @@
+        spawn {
+            defer {
+                error :ok
+            }
+            await(false)
+        }
+    

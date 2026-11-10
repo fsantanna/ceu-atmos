@@ -1,0 +1,13 @@
+        val T = func (v) {
+            val x = []
+            print(v)
+            await(false)
+        }
+        pin t = do :X {
+            var v
+            set v = 10
+            escape(:X, (xtask(task() { return(T(v)) })))
+        }
+        spawn t()
+        print(t)
+    

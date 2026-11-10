@@ -1,0 +1,8 @@
+        print(:1)
+        catch true {
+            print(:2)
+            throw()
+            print(:3)
+        }
+        print(:4)
+    

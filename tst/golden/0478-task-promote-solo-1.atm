@@ -1,0 +1,8 @@
+        task T (v) {
+            v * 2
+        }
+        spawn {
+            val x = await T(10)
+            print(x)
+        }
+    

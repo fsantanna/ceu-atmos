@@ -1,0 +1,8 @@
+        var T
+        set T = task () {
+            await(true)
+        }
+        pin ts = tasks()
+        spawn @ts T()
+        print(1)
+    

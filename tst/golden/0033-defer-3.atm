@@ -1,0 +1,10 @@
+        print(1)
+        defer { print(2) }
+        do {
+            defer { print(3) }
+            defer { print(4) }
+            ;;nil
+        }
+        defer { print(5) }
+        print(6)
+    

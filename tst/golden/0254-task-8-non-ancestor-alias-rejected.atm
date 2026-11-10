@@ -1,0 +1,13 @@
+        var g = nil
+        val S = task () {
+            await(:go)
+            val x = g
+        }
+        val T = task () {
+            set g = task
+            emit @(:global) (:go)
+            await(false)
+        }
+        spawn S()
+        spawn T()
+    

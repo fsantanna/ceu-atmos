@@ -1,0 +1,5 @@
+        val x = do :X {
+            escape <- :X [10]
+        }
+        X.print(x)
+    

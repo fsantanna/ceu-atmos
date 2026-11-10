@@ -1,0 +1,16 @@
+        val fff = func (x) { return (x) }
+        spawn (task () {
+            print(1)
+            var evt
+            do {
+                print(2)
+                set evt = await(true)
+                print(3)
+            }
+            print(4)
+            fff(evt@(:type))
+            print(99)
+        }) ()
+        emit (:T [type=:y])
+        emit (:T [@(:type)=:x])
+    

@@ -1,0 +1,7 @@
+        spawn {
+            val v = thread { 42 }
+            print(v)
+        }
+        `os.execute("sleep 0.1")`
+        emit(nil)
+    

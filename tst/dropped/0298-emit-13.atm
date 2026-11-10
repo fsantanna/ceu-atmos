@@ -1,0 +1,15 @@
+        task t2 () {
+            print(">>> B")
+            await(:X)
+            print("<<< B")
+            ;;emit(Event.Task [`mar_exe`])
+        }
+        spawn {
+            pin exe = xtask(t2)
+            spawn exe()
+            print(">>> A")
+            var e = await(exe)
+            print("<<< A")
+        }
+        emit(:X)
+    

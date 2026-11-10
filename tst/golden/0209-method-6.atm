@@ -1,0 +1,4 @@
+        func f (v,x) { return(v - x) }
+        val v = f(10)<-20
+        print(v)
+    

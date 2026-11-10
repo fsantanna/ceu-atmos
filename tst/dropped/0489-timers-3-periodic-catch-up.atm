@@ -1,0 +1,8 @@
+        spawn {
+            loop i in 3 {
+                await(10ms)
+                print(i)
+            }
+        }
+        emit @:global 35ms              ;; 3 periods in one tick
+    

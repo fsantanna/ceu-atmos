@@ -1,0 +1,4 @@
+        val x, y, z = (10, 20)
+        set x, y = (y, (x, z))
+        print(x, y, z)
+    

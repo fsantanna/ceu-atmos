@@ -1,0 +1,4 @@
+        val T = task () { coroutine.yield() }
+        pin t = spawn T()
+        print(t)
+    

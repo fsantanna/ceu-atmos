@@ -1,0 +1,14 @@
+        var T
+        set T = task () {
+            defer {
+                print(10)
+            }
+            await(true)
+            print(999)
+        }
+        pin t = spawn T()
+        toggle t (false)
+        print(1)
+        emit (:nil)
+        print(2)
+    

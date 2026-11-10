@@ -1,0 +1,5 @@
+            loop x in 0 {
+                print(x)
+            }
+            print:ok
+        

@@ -1,0 +1,4 @@
+        val t = []
+        set t@(#t) = nil
+        X.print(t)
+    

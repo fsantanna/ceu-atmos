@@ -1,0 +1,8 @@
+    val S = require "atmos.streams"
+    val names = ["hellen", "oDYSseuS", "aChIlLeS", "PATROCLUS"]
+    val fix_case = func (name) {
+      name::sub(1,1)::upper() ++ name::sub(2)::lower()
+    }
+    loop name in S.from(names)::map(fix_case) {
+      print(name)
+    }

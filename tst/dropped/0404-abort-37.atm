@@ -1,0 +1,14 @@
+        task t2 () {
+            defer {
+                print("first")
+            }
+            await(true)
+        }
+        spawn {
+            defer {
+                print("last")
+            }
+            pin exe = xtask(t2)
+            spawn exe()
+        }
+    

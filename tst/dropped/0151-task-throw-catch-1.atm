@@ -1,0 +1,6 @@
+        spawn (task () {
+            spawn (task () {
+                throw(:X)
+            }) ()
+        }) ()
+    

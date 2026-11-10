@@ -1,0 +1,13 @@
+        spawn {
+            await(20ms)
+            print(:b)
+        }
+        pin t = spawn {
+            await(10ms)
+            print(:a)
+        }
+        toggle t(false)
+        emit @:global 1ms               ;; t frozen: timer not re-reported
+        toggle t(true)
+        emit @:global 30ms              ;; a (10ms) before b (19ms)
+    

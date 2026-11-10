@@ -1,0 +1,14 @@
+        val T = task () {
+            await(true)
+            print(10)
+        }
+        pin t = spawn T()
+        toggle t (false)
+        print(1)
+        emit(:X)
+        emit(:X)
+        ;; toggle on: emit(0, t) awakes await(true)
+        toggle t (true)
+        print(2)
+        emit(:X)
+    

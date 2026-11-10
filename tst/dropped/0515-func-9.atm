@@ -1,0 +1,9 @@
+    val S = require "atmos.streams"
+    val matrix = [
+      [1, 2, 3], ;; first element of matrix
+      [4, 5, 6], ;; second element of matrix
+      [7, 8, 9]  ;; third element of matrix
+    ]
+    ;; map will iterate through each row, and the lambda
+    ;; indexes each to retrieve the first element
+    X.print <-- S.from(matrix)::map(\{it@(2)})::table()::to()

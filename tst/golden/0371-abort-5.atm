@@ -1,0 +1,22 @@
+        do {
+            spawn (task () {
+                do {
+                    pin t1 = spawn (task () {
+                        pin t2 = spawn (task () {
+                            await(true)
+                            print(:1)
+                        }) ()
+                        await <true until (it==t2)>
+                        print(:2)
+                    }) ()
+                    await <true until (it==t1)>
+                    print(:3)
+                }
+                await(:X)
+                print(:99)
+            }) ()
+            print(:0)
+            emit(:true)
+            print(:4)
+        }
+    

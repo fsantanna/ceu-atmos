@@ -1,0 +1,9 @@
+        func g () {
+            :X
+        }
+        spawn {
+            await((g()))
+            print(:ok)
+        }
+        emit(:X)
+    

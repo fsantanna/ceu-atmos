@@ -1,0 +1,4 @@
+        spawn {
+            print(t.x)
+        }
+    

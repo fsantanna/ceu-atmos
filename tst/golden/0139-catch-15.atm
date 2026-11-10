@@ -1,0 +1,14 @@
+        func f () {
+            throw :X.Y
+        }
+        val x =
+            catch :X {
+                catch :X.Z {
+                    defer {
+                        print "ok"
+                    }
+                    f()
+                }
+            }               ;; --> ok (from defer)
+        print(x)            ;; --> false
+    

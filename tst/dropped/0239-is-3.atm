@@ -1,0 +1,7 @@
+        print([] ?? :table)
+        print(1s ?? :number)
+        print(task () {} ?? :task)
+        print(xtask(task () {}) ?? :xtask)
+        pin xs = tasks()
+        print(xs ?? :tasks)
+    

@@ -1,0 +1,4 @@
+        task T () {
+        }
+        val x = if true => spawn T()
+    

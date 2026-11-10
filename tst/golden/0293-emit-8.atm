@@ -1,0 +1,11 @@
+        val T = task (v) {
+            val e = await(true)
+            X.print(e.tag)
+        }
+        spawn T(10)
+        catch true {
+            (func () {
+                emit :t []
+            }) ()
+        }
+    

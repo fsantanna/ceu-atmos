@@ -1,0 +1,10 @@
+        spawn {
+            await(10ms)
+            spawn {
+                await(10ms)             ;; born at 10ms: expires at 20ms
+                print(:B)
+            }
+            await(false)
+        }
+        emit @:global 25ms
+    

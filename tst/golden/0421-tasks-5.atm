@@ -1,0 +1,7 @@
+        val T = task () {
+            await(true)
+        }
+        pin ts = tasks()
+        val ok = spawn @ts T()
+        print(ok)
+    

@@ -1,0 +1,10 @@
+        spawn {
+            await <:X && :Y>
+            print(:ok)
+        }
+        emit(:X)
+        emit(:X)
+        print(:antes)
+        emit(:Y)
+        print(:depois)
+    

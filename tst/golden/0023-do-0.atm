@@ -1,0 +1,7 @@
+        val x = do :X {
+            do :Y {
+                escape(:X,10)
+            }
+        }
+        X.print(x)
+    

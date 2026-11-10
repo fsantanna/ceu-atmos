@@ -1,0 +1,13 @@
+        spawn {
+            watching :X {
+                defer {
+                    print:defer
+                }
+                await(false)
+            }
+            print:abort
+        }
+        print:antes
+        emit :X
+        print:depois
+    

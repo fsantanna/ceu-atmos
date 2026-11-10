@@ -1,0 +1,10 @@
+        val T = task () {
+            await(true)
+        }
+        pin ts = tasks()
+        spawn @ts T()
+        spawn @ts T()
+        loop _,t in ts {
+            print(t ?? :xtask)
+        }
+    

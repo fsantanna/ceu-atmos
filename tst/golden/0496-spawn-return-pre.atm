@@ -1,0 +1,12 @@
+        val T = task () {
+            spawn {
+                return(10)
+            }
+            await(:X)
+            print(:alive)
+        }
+        pin t = spawn T()
+        emit(:X)
+        print((await(t)))
+        print(:end)
+    

@@ -1,0 +1,7 @@
+        val T = task (v) {
+            await(true)
+            X.print(v)
+        }
+        spawn T([])
+        emit(:ok)
+    

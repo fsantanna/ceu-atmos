@@ -1,0 +1,17 @@
+        ;;print(:BLOCK0, `:pointer ceu_block`)
+        spawn (task () {
+            ;;print(:CORO1, `:pointer ceu_x`)
+            ;;print(:BLOCK1, `:pointer ceu_block`)
+            spawn (task () {
+                ;;print(:CORO2, `:pointer ceu_x`)
+                ;;print(:BLOCK2, `:pointer ceu_block`)
+                await(true)
+                ;;print(:1)
+                emit(:ok)
+            }) ()
+            await(true)
+            ;;print(:2)
+        }) ()
+        emit(:ok)
+        print(1)
+    

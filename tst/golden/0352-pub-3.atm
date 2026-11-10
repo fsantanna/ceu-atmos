@@ -1,0 +1,7 @@
+        val T = task () {
+            set pub = 10
+            await(true)
+        }
+        pin t = spawn T()
+        print(t.pub)
+    

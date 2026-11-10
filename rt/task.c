@@ -645,10 +645,15 @@ static AStatus task_end (ATask* t, AStatus st) {
     patt_free(t->awt);
     t->awt = NULL;
 
-    // its blocks already aborted the children: these are leftovers
+    // its blocks already aborted the children: these are leftovers,
+    // such as a pool that was never pinned
     node_trav(&t->node, 1);
     for (int i=0; i<t->node.ndns; i++) {
-        node_abort(t->node.dns[i]);
+        ANode* dn = t->node.dns[i];
+        node_abort(dn);
+        if (dn->hdr.type==A_TASKS && !dn->dead) {
+            node_died(dn);
+        }
     }
     node_trav(&t->node, -1);
 

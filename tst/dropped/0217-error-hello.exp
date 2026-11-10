@@ -1,0 +1,4 @@
+==> ERROR:
+|  [C]:-1 (loop)
+v  [string "anon.atm"]:1 (throw)
+==> hello

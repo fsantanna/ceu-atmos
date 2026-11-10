@@ -1,0 +1,4 @@
+        print("xxx")
+        print(:2)
+        print(nil || 20)
+    

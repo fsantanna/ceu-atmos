@@ -1,0 +1,13 @@
+        spawn {
+            val x = loop it on :X {
+                print(2)
+                if it.n == 2 {
+                    break(it.n * 5)
+                }
+                print(99)
+            }
+            print(x)
+        }
+        emit :X [n=1]
+        emit :X [n=2]
+    

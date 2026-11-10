@@ -1,0 +1,12 @@
+        task T () {
+            await(:done)
+            print(:T)
+        }
+        spawn {
+            watching <T() || :X> {
+                await(:never)
+            }
+            print(:ok)
+        }
+        emit(:done)
+    

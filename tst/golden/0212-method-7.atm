@@ -1,0 +1,7 @@
+        func f (self, v) {
+            print(v)
+            self
+        }
+        val o = [f=f]
+        print(o::f'v'::f\{})
+    

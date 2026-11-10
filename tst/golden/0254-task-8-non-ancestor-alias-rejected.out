@@ -1,0 +1,3 @@
+==> ERROR:
+ v  0254-task-8-non-ancestor-alias-rejected.atm:4 (throw)
+==> invalid assignment : expected pinned value

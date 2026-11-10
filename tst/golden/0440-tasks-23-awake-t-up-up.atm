@@ -1,0 +1,14 @@
+        task T () {
+            await(true)
+        }
+        pin ts = tasks()
+        spawn @ts T()
+        spawn {
+            val x = loop _,t in ts {
+                break(t)
+            }
+            await(x)
+            print :ok
+        }
+        emit(:X)
+    

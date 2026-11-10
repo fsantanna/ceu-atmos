@@ -1,0 +1,9 @@
+        spawn {
+            print(:before)
+            defer {
+                print(:defer)
+            }
+            abort(`xtask()`)
+            print(:no)
+        }
+    

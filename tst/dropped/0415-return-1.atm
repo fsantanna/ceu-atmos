@@ -1,0 +1,9 @@
+        pin t = spawn (task () {
+            set pub = [1]
+            await(true)
+            return([2])
+        } )()
+        X.print(atmos.status(t), t.pub)
+        emit(:)
+        X.print(atmos.status(t), t.pub, t.ret)
+    

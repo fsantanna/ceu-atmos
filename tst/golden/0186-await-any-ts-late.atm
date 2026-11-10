@@ -1,0 +1,12 @@
+        val task T () {
+            await :X
+        }
+        pin ts = tasks()
+        spawn @ts T()
+        emit :X
+        spawn {
+            await :any ts
+            print :late
+        }
+        emit :Y
+    

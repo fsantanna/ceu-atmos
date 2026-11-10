@@ -1,0 +1,7 @@
+        val T = task () {
+            print(:ok)
+        }
+        pin ts = tasks(2)
+        spawn @ts T()
+        spawn @ts T()
+    

@@ -1,0 +1,9 @@
+        val x = test {
+            do :X {
+                test {
+                    escape(:X,10)
+                }
+            }
+        }
+        print(x)
+    

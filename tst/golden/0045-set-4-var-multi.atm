@@ -1,0 +1,4 @@
+        var death_count, level = (2, 1)
+        set death_count = death_count + 1
+        print(death_count, level)
+    

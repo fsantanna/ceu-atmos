@@ -1,0 +1,4 @@
+        catch :X {
+            throw(:Y)
+        }
+    

@@ -1,0 +1,7 @@
+        spawn {
+            await(10ms)
+            await(10ms)
+            print(:ok)
+        }
+        emit @:global 25ms              ;; 2nd timer: 15ms late carried
+    

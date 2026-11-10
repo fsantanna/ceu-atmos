@@ -1,0 +1,13 @@
+        spawn (task () {
+            spawn (task () {
+                await(true)
+                print(:1)
+                emit @(:global) (:)
+                print(:999)
+            }) ()
+            await(true)
+            print(:2)
+        }) ()
+        emit @(:global) (:)
+        print(:3)
+    

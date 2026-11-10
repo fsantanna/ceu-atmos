@@ -1,0 +1,14 @@
+        spawn {
+            spawn {
+                await(true)
+                defer {
+                    print(:1)
+                }
+                emit @(:global)(:)
+            }
+            await(true)
+            print(:0)
+        }
+        emit(:)
+        print(:2)
+    

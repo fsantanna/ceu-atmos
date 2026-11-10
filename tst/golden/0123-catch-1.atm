@@ -1,0 +1,8 @@
+        print(:1)
+        catch :X {
+            print(:2)
+            throw(:X)
+            print(:3)
+        }
+        print(:4)
+    

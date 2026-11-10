@@ -1,0 +1,7 @@
+        do {
+            val v = 10
+            spawn (task () {
+                print(v)
+            }) ()
+        }
+    

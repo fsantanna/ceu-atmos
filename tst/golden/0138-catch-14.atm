@@ -1,0 +1,8 @@
+        val _,x = catch :Y {
+            catch :Z {
+                (func() { throw (:Y.X [10]) })()
+            }
+            :ok
+        }
+        X.print(x)
+    

@@ -1,0 +1,5 @@
+        task T () {}
+        pin ts = tasks(0)
+        val x = spawn @ts T()
+        print(x)
+    

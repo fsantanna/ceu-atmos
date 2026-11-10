@@ -1,0 +1,9 @@
+        task T (a, b, c) {
+            print(a)
+            print(b)
+            print(c)
+        }
+        spawn {
+            await T(nil, 10, 20)
+        }
+    

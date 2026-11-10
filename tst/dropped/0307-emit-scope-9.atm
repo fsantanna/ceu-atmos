@@ -1,0 +1,12 @@
+        val f = func (v) {
+            (func (x) {
+                set x@1 = v@1
+                X.print(x@1)
+            }) ([0])
+        }
+        var T = task () {
+            f(await(true))
+        }
+        spawn T()
+        emit :t [[1]]
+    

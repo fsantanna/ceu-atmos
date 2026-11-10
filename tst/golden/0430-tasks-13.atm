@@ -1,0 +1,24 @@
+        pin ts = tasks(2)
+        var T
+        set T = task (v) {
+            defer {
+                print(v)
+            }
+            catch :ok ;;;(err|err==:ok);;; {
+                spawn {
+                    await(true)
+                    if v == 1 {
+                        throw(:ok)
+                    }
+                    loop { await(true) }
+                }
+                loop { await(true) }
+            }
+            print(v)
+        }
+        spawn @ts T(1)
+        spawn @ts T(2)
+        emit(:)
+        emit(:)
+        print(999)
+    

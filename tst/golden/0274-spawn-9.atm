@@ -1,0 +1,10 @@
+        var tk
+        set tk = task () {
+            X.print((await(true)))
+        }
+        spawn(tk)()
+        ;;var f = func' () {
+            emit :x
+        ;;}
+        ;;f()
+    

@@ -1,0 +1,4 @@
+==> ERROR:
+|  [C]:-1 (loop)
+v  [string "anon.atm"]:3 (throw)
+==> attempt to perform arithmetic on a nil value

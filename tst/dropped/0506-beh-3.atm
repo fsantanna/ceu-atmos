@@ -1,0 +1,18 @@
+        val S = require "atmos.streams"
+        pin x* = [
+            S.zip (S.on(1s), S.from(1))
+                ::map \{it@(2)},
+            S.zip (S.on('X'), S.from(1))
+                ::map \{it@2},
+        ]
+        spawn {
+            loop e on :x {
+                print(e.tag, e@1)
+            }
+        }
+        emit @:global 1s
+        emit :X
+        emit @:global 1s
+        emit @:global 1s
+        emit :X
+    

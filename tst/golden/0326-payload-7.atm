@@ -1,0 +1,9 @@
+        spawn {
+            var evt
+            loop {
+                X.print(evt)
+                set evt = await(true)
+            }
+        }
+        emit <- :T []
+    

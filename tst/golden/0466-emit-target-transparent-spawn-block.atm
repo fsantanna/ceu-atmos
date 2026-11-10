@@ -1,0 +1,18 @@
+        task Inner () {
+            await :go
+            emit @2 :h
+        }
+        task Mid () {
+            spawn {
+                await Inner()
+            }
+            await(false)
+        }
+        spawn Mid()
+        par:any {
+            await :h
+            print("ok")
+        } with {
+            emit :go
+        }
+    

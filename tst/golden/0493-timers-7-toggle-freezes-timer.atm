@@ -1,0 +1,11 @@
+        pin t = spawn {
+            await(10ms)
+            print(:ok)
+        }
+        emit @:global 5ms               ;; 5ms of 10ms
+        toggle t(false)
+        emit @:global 20ms              ;; frozen: no time passes for t
+        toggle t(true)
+        print("-")
+        emit @:global 5ms               ;; 10ms: expires
+    

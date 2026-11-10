@@ -1,0 +1,10 @@
+        var fff = func (...) {
+            X.print(...)
+        }
+        var T = task () {
+            val e = await(true)
+            fff(e.tag, e@1)
+        }
+        spawn T()
+        emit :t [[1]]
+    

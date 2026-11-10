@@ -1,0 +1,9 @@
+        do :X.Z {
+            do :X.Y {
+                escape(:X.Z)
+                print(99)
+            }
+            print(99)
+        }
+        print(10)
+    

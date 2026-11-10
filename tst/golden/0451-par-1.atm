@@ -1,0 +1,15 @@
+        spawn {
+            par {
+                loop on :X {
+                    print(:X)
+                }
+            } with {
+                loop on :Y {
+                    print(:Y)
+                }
+            }
+        }
+        emit(:X)
+        emit(:Y)
+        emit(:X)
+    

@@ -1,0 +1,7 @@
+        func g () { }
+        spawn {
+            watching g() {
+                await(:X)
+            }
+        }
+    

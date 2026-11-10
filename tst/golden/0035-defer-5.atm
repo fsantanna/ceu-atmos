@@ -1,0 +1,2 @@
+        defer { print(:2) }
+    

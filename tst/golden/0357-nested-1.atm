@@ -1,0 +1,8 @@
+        spawn (task () {
+            val v = 10
+            spawn (task () {
+                print(v)
+            }) ()
+            await(true)
+        }) ()
+    

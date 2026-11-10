@@ -1,0 +1,13 @@
+        val F = func (a) {
+            val b = coroutine.yield(10)
+            val c = coroutine.yield()
+            print(a, b, c)
+            return <-- 20
+            ;;20
+        }
+        val f = coroutine.create(F)
+        val a = coroutine.resume(f,1)
+        val b = coroutine.resume(f,nil)
+        val c = coroutine.resume(f,2)
+        print(a, b, c)
+    

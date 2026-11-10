@@ -1,0 +1,9 @@
+        spawn (
+            task () {
+                defer {
+                    print(:defer)
+                }
+                await(false)
+            }
+        ) ()
+    

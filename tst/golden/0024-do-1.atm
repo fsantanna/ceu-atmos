@@ -1,0 +1,7 @@
+        val x = do :X {
+            var x
+            set x = [0]
+            escape(:X,x)   ;; escape but no access
+        }
+        X.print(x)
+    

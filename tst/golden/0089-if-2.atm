@@ -1,0 +1,8 @@
+        if 10 => \{
+            print(it)
+        }
+        if false {
+        } else {
+            print('false')
+        }
+    

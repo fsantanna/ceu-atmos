@@ -1,0 +1,7 @@
+        val f = func (x) {
+            print(v)
+        }
+        val v = 10
+        print(v)
+        f()
+    

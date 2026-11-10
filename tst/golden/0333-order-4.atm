@@ -1,0 +1,13 @@
+        var T
+        set T = task (v) {
+            spawn (task () {
+                print(v)
+                await(true)
+                print(v)
+            }) ()
+            loop { await(true) }
+        }
+        spawn T(1)
+        spawn T(2)
+        emit(:ok)
+    

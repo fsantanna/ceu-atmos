@@ -1,0 +1,14 @@
+        val T = task (v) { }
+        pin ts = tasks()
+        var x = 0
+        do :X {
+            loop {
+                spawn @ts T()
+                set x = x + 1
+                if x==500 {
+                    escape (:X)
+                }
+            }
+        }
+        print(:ok)
+    

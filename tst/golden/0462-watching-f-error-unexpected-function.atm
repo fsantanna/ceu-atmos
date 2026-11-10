@@ -1,0 +1,7 @@
+        val f = func () { true }
+        spawn {
+            watching f {
+                await(false)
+            }
+        }
+    

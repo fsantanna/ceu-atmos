@@ -1,0 +1,17 @@
+        var T = task () {
+            var v =
+                (func (it) {return(it)}) (await(true))
+            X.print(v@1)
+        }
+        spawn T()
+        ;;print(:1111)
+        do {
+            val a
+            do {
+                val b
+                var e = []
+                emit(:t [e])
+            }
+        }
+        ;;print(:2222)
+    

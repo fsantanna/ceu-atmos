@@ -1,0 +1,9 @@
+        catch :e {
+            spawn {
+                throw(:e)
+                print(:no)
+            }
+            print(:no)
+        }
+        print(:ok)
+    

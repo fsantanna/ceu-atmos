@@ -1,0 +1,5 @@
+    val S = require "atmos.streams"
+    S.fr_range(1, 10)           ;; run through all the numbers from 1 to 10 (inclusive)
+        ::filter(\{(it%2)==0})  ;; take only even numbers
+        ::tap(print)            ;; run print for every value individually
+        ::to()

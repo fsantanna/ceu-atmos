@@ -1,0 +1,5 @@
+        spawn (task () {
+            set pub = 10
+            print(pub)
+        }) ()
+    

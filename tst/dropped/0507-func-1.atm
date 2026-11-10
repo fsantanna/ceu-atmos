@@ -1,0 +1,8 @@
+    val S = require "atmos.streams"
+    val my_counter = S.fr_counter()
+    val my_capped_counter = my_counter::take(5)
+    val my_array = my_capped_counter::table()::to()
+    print(type(my_array))
+    loop i,v in my_array {
+      print(i,v)
+    }

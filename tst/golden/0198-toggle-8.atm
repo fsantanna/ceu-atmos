@@ -1,0 +1,18 @@
+        task T (v) {
+            set pub = v
+            toggle on :Show {
+                print(pub)
+                loop it on :Draw {
+                    print(it.v)
+                }
+            }
+        }
+        spawn T(0)
+        emit :Draw [v=1]
+        emit :Show [false]
+        emit :Show [false]
+        emit :Draw [v=99]
+        emit :Show [true]
+        emit :Show [true]
+        emit :Draw [v=2]
+    

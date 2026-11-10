@@ -1,0 +1,10 @@
+        val T = task (t) {
+            val x = t
+            print(x ?? :xtask)
+        }
+        val U = task () {
+            spawn T(task)
+            await(false)
+        }
+        spawn U()
+    

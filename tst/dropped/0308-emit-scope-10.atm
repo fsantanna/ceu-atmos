@@ -1,0 +1,19 @@
+        val f = func (v) {
+            X.print(v@1)
+        }
+        val T = task () {
+            f(await(true))
+        }
+        spawn T()
+        do {
+            do {
+                do {
+                    do {
+                        do {
+                            emit :t [[]]
+                        }
+                    }
+                }
+            }
+        }
+    

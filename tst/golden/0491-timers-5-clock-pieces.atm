@@ -1,0 +1,12 @@
+        spawn {
+            await(10ms)
+        }
+        spawn {
+            loop _ in 2 {
+                val dt, late = await(:clock)
+                print(dt, late)
+            }
+        }
+        ;; global: resets nearest timer (default target: main task)
+        emit @:global 25ms              ;; pieces: 10ms (timer), 15ms (rest)
+    

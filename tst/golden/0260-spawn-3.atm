@@ -1,0 +1,4 @@
+        spawn (task () {
+            print(:ok)
+        })()
+    

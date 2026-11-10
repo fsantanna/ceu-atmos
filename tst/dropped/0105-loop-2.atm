@@ -1,0 +1,7 @@
+        loop x {
+            print(x)
+            if x == 2 {
+                break()
+            }
+        }
+    

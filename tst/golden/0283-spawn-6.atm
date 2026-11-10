@@ -1,0 +1,6 @@
+        val t = task () { print(:ok) }
+        val f = func () {
+            spawn t()
+        }
+        f()
+    

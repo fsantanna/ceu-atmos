@@ -1,0 +1,5 @@
+        match :a.b.c {
+            :a.b => 10
+            else => 99
+        } --> print
+    

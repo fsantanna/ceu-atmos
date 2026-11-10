@@ -1,0 +1,9 @@
+        val T = task () {
+            await(true)
+            print(:in)
+        }
+        pin ts = tasks()
+        spawn @ts T()
+        print(:out)
+        emit(:)
+    

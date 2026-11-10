@@ -1,0 +1,6 @@
+        val T = task () {
+            val t = task
+            print(t ?? :xtask)
+        }
+        spawn T()
+    

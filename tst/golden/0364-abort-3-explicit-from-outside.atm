@@ -1,0 +1,13 @@
+        var T = task () {
+            defer {
+                print(:defer)
+            }
+            await(false)
+            print(:no)
+        }
+        spawn {
+            pin t = spawn T()
+            abort(t)
+            emit(true)
+        }
+    

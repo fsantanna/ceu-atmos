@@ -1,0 +1,13 @@
+        spawn (task () {
+            val evt = await(true)
+            do {
+                val x = evt@(1)
+                X.print(x)
+                await(true)
+            }
+        }) ()
+        do {
+            val x
+            emit :t [[10]]
+        }
+    

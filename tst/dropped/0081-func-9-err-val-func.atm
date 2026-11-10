@@ -1,0 +1,8 @@
+        do {
+            val func x (v) {
+                print(v)
+            }
+            x(:ok)
+        }
+        x(:no)
+    

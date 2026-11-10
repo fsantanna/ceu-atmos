@@ -1,0 +1,13 @@
+        print(:1)
+        do {
+            print(:2)
+            pin x = spawn (task () {
+                defer {
+                    print(:defer)
+                }
+                await(true)
+            } )()
+            print(:3)
+        }
+        print(:4)
+    

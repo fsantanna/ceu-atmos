@@ -1,0 +1,3 @@
+        val T = task () {}
+        val t = spawn T()
+    

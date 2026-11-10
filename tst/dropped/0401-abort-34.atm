@@ -1,0 +1,15 @@
+        spawn (task () {
+            print(:1)
+            val co = coroutine.create (func () {
+                defer {
+                    print(:ok)
+                }
+                print(:2)
+                coroutine.yield()
+                print(:999)
+            })
+            coroutine.resume(co)
+            print(:3)
+            coroutine@('close')(co)
+        }) ()
+    

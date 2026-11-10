@@ -1,0 +1,7 @@
+        val T = task () {
+            val me = task
+            print(me ?? :xtask)
+            print(me == xtask())
+        }
+        spawn T()
+    

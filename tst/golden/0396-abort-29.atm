@@ -1,0 +1,15 @@
+        val f = func () {
+            val x = []
+            emit @(:global)(:)
+        }
+        spawn (task () {
+            spawn (task () {
+                await(true)
+                f()
+                print(:nooo)
+            }) ()
+            await(true)
+        }) ()
+        emit(:)
+        print(:ok)
+    

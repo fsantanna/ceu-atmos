@@ -1,0 +1,11 @@
+        task T () {
+            await(:step)
+        }
+        spawn {
+            loop on T() {
+                print(:tick)
+            }
+        }
+        emit(:step)
+        emit(:step)
+    

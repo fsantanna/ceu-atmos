@@ -1,0 +1,18 @@
+        val t = func (v) {
+            var vx = v
+            print(vx)          ;; 1
+            set vx = coroutine.yield(vx+1)
+            print(vx)          ;; 3
+            set vx = coroutine.yield(vx+1)
+            print(vx)          ;; 5
+            return (vx+1)
+        }
+        val a = coroutine.create(t)
+        val _,v = coroutine.resume(a,1)
+        print(v)
+        val _,v = coroutine.resume(a,v+1)
+        print(v)              ;; 4
+        val _,v = coroutine.resume(a,v+1)
+        print(v)              ;; 6
+
+    

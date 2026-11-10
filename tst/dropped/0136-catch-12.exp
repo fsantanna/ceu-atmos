@@ -1,0 +1,4 @@
+==> ERROR:
+|  [C]:-1 (loop)
+v  [string "anon.atm"]:3 (throw) <- [C]:-1 (task)
+==> Z

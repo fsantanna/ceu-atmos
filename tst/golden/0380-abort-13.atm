@@ -1,0 +1,14 @@
+        spawn (task () {
+            ;;await(true)
+            do {
+                spawn (task () {
+                    await(true)
+                }) ()
+                await(true)
+            }
+            emit([])
+        })()
+        ;;emit(:)
+        emit(:)
+        print(:ok)
+    

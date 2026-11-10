@@ -1,0 +1,10 @@
+        spawn {
+            spawn {
+                await(true)
+                10
+            }
+            (func (it) { print(it.ret) }) (await(true))
+        }
+        emit(:)
+        print(:ok)
+    

@@ -1,0 +1,8 @@
+        val T = task (a) {
+            print(a)
+            val b = await(true)
+            print(b)
+        }
+        spawn T(10)
+        emit(:ok)
+    

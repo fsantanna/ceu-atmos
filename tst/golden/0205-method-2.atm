@@ -1,0 +1,5 @@
+        func f (v) { return(10) }
+        func g (v) { return(v) }
+        val v = 99->f()->g()
+        print(v)
+    

@@ -1,0 +1,11 @@
+        print(1)
+        val x = loop {
+            print(2)
+            if true {
+                break(10)
+            }
+            print(99)
+        }
+        print(3)
+        print(x)
+    

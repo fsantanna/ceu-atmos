@@ -1,0 +1,6 @@
+        spawn {
+            par :any { await <:X || :Y> } with { await(:Z) }
+            print(:ok)
+        }
+        emit(:Y)
+    

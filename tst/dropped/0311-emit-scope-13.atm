@@ -1,0 +1,23 @@
+        var T1 = task () {
+            await(true)
+            spawn (task () {                ;; tail spawn: unpinned, lives
+                val xevt = await(true)      ;; through the in-flight emit
+                print(:1)                   ;; before dying with T1
+                var v = xevt
+            } )()
+        }
+        pin t1 = spawn T1()
+        var T2 = task () {
+            await(true)
+            val xevt = await(true)
+            ;;print(:2)
+            do {
+                var v = xevt
+                ;;print(:evt, v, xevt)
+            }
+        }
+        pin t2 = spawn T2()
+        emit :t []                        ;; GC = {}
+        ;;print(`:number CEU_GC.free`)
+        print(:ok)
+    

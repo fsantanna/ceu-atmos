@@ -1,0 +1,17 @@
+        spawn {
+            par {
+                loop on :X {
+                    print("x")
+                }
+            } with {
+                loop on 10ms {
+                    print("ms")
+                }
+            }
+        }
+        emit @:global 10ms
+        emit(:X)
+        emit @:global 5ms
+        emit(:X)
+        emit @:global 5ms
+    

@@ -1,0 +1,7 @@
+        spawn {
+            loop it on :X {
+                print(it.v)
+            }
+        }
+        emit <-- :X [v=10]
+    

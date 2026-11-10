@@ -1,0 +1,10 @@
+        var f = func (v) {  ;; *** v is no longer fleeting ***
+            val x = v@1    ;; v also holds x, both are fleeting -> unsafe
+            X.print(x)      ;; x will be freed and v would contain dangling pointer
+        }
+        var T = task () {
+            f(await(true))
+        }
+        spawn T()
+        emit :t [[1]]
+    

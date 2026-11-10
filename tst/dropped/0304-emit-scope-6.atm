@@ -1,0 +1,22 @@
+        var tk
+        set tk = task (v) {
+            print(v)
+            val e1 = await until (func(e) { e && e@(1) })
+            X.print(e1)
+            val e2 = await until (\{ it && it@1 })
+            X.print(e2)
+        }
+        print(:1)
+        spawn (tk) (10)
+        spawn (tk) (10)
+        val ok,e = catch true {
+            return ((func () {
+                print(:2)
+                emit :t [[20]]
+                print(:3)
+                emit :t [[@(30)=30]]
+                return(true)
+            }) ())
+        }
+        print(e)
+    

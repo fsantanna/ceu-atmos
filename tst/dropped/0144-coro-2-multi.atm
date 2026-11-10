@@ -1,0 +1,9 @@
+        val F = func (a,b) {
+            val c,d = coroutine.yield(a+1,b*2)
+            (c+1, d*2)
+        }
+        val f = coroutine.create(F)
+        val _,a,b = coroutine.resume(f,1,2)
+        val _,c,d = coroutine.resume(f,a+1,b*2)
+        print(c, d)
+    

@@ -1,0 +1,9 @@
+        task tsk () {
+            var e = await until (func (e) { ((e??:X) && (e.v==10), e) })
+            X.print(e)
+        }
+        spawn tsk()
+        emit(:X [v=99])
+        emit <-- :X [v=10]
+        emit(:X [v=10])
+    

@@ -1,0 +1,5 @@
+        val T1 = func () { }
+        val T2 = func () { }
+        print(T1 == T1)
+        print(T1 == T2)
+    

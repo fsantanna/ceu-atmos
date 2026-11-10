@@ -1,0 +1,3 @@
+==> ERROR:
+ v  0484-task-promote-nontask-err-1.atm:3 (throw)
+==> invalid spawn : expected task prototype

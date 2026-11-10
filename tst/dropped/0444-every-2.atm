@@ -1,0 +1,9 @@
+        spawn {
+            loop v on :X [10] {
+                print(:X, v@1)
+            }
+        }
+        emit(:X)
+        emit(:Y)
+        emit :X [10]
+    

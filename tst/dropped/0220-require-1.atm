@@ -1,0 +1,3 @@
+        val Z,f = require "z"
+        print(f, Z.f(10))
+    

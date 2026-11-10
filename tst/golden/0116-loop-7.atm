@@ -1,0 +1,11 @@
+        var n = 0
+        var i = 5
+        loop {
+            if i == 0 {
+                break()
+            }
+            set n = n + i
+            set i = i - 1
+        }
+        print(n)
+    

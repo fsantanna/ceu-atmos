@@ -1,0 +1,15 @@
+        spawn {
+            watching :X {
+                await(:Y)
+                print(:y)
+                await(:Z)
+                print(:z)
+            }
+            print(:x)
+        }
+        print(:antes)
+        emit(:Y)
+        emit(:X)
+        emit(:Z)
+        print(:depois)
+    

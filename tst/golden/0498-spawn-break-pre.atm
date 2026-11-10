@@ -1,0 +1,12 @@
+        val T = task () {
+            val v = loop {
+                spawn {
+                    break(10)
+                }
+                await(false)
+            }
+            print(v)
+        }
+        spawn T()
+        print(:end)
+    

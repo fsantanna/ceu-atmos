@@ -1,0 +1,10 @@
+        val U = task () {
+            defer { print(:U_gone) }
+            await(false)
+        }
+        val T = task () {
+            spawn U()
+        }
+        pin t = await T()
+        print(t ?? :xtask)
+    

@@ -1,0 +1,19 @@
+        val T = task () {
+            print :1
+            await(true)
+            print :2
+        }
+        pin t = xtask(T)
+
+        print :A
+        toggle t (false)
+        emit :X
+
+        print :B
+        spawn t()
+        emit :X
+
+        print :C
+        toggle t (true)
+        emit :X
+    

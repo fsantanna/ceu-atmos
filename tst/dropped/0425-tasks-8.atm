@@ -1,0 +1,13 @@
+        pin ts = tasks()
+        print(type(ts))
+        var T
+        set T = task (v) {
+            print(v)
+            val evt = await(true)
+            print(evt)
+        }
+        do {
+            spawn @ts T(1)
+        }
+        emit(:2)
+    

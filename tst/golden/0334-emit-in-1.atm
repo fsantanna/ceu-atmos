@@ -1,0 +1,3 @@
+        emit @(nil)(:ok)
+        print(:ok)
+    

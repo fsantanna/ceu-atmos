@@ -1,0 +1,5 @@
+        do {
+            pin ts = tasks()
+        }
+        print(:ok)
+    

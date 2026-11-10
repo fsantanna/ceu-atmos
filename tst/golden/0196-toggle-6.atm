@@ -1,0 +1,7 @@
+        val T = task () {
+            nil
+        }
+        pin t = spawn T()
+        toggle t (false)
+        print 'ok'
+    

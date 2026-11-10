@@ -1,0 +1,6 @@
+        val s = trim """
+            Hello
+            World
+        """
+        print(s)
+    

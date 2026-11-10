@@ -1,0 +1,20 @@
+        print(:1)
+        var x = 0
+        do :X {
+            loop {
+                if x == 2 {
+                    escape (:X)
+                }
+                set x = x + 1
+                print(:2)
+                spawn (task () {
+                    defer {
+                        print(:defer)
+                    }
+                    await(false)
+                }) ()
+                print(:3)
+            }
+        }
+        print(:4)
+    

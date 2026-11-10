@@ -1,0 +1,13 @@
+        spawn {
+            await(1min2s3ms)
+            print(:ok)
+        }
+        emit @:global 1min
+        print(:1)
+        emit @:global 2s
+        print(:2)
+        emit @:global 1ms
+        print(:3)
+        emit @:global 2ms
+        print(:4)
+    

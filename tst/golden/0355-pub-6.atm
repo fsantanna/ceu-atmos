@@ -1,0 +1,2 @@
+        print(pub)  ;; now runs inside task
+    

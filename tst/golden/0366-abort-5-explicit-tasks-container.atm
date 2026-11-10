@@ -1,0 +1,20 @@
+        spawn {
+            pin ts = tasks()
+            spawn @ts (task () {
+                defer {
+                    print(:1)
+                }
+                await(true)
+                print(:no1)
+            }) ()
+            spawn @ts (task () {
+                defer {
+                    print(:2)
+                }
+                await(true)
+                print(:no2)
+            }) ()
+            abort(ts)
+            emit(true)
+        }
+    

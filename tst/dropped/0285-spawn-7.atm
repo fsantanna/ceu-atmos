@@ -1,0 +1,6 @@
+        val T = func (v) {
+        }
+        val t = do :X {
+            escape(:X, (xtask(task() { })))
+        }
+    

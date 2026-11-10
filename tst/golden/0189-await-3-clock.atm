@@ -1,0 +1,8 @@
+        spawn {
+            await(10s100ms)
+            print(:y)
+        }
+        emit @:global 10s
+        print(:x)
+        emit @:global 100ms
+    

@@ -1,0 +1,10 @@
+        func f (v) {
+            if v > 0 {
+                val x = f(v - 1)
+                [x] ;; invalid return
+            } else {
+                0
+            }
+        }
+        X.print(f(3))
+    

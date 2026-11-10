@@ -1,0 +1,30 @@
+        val f = func (t) {
+            defer {
+                print(:ok)
+            }
+            print(:1)
+            emit @t(:)
+            print(:no)
+        }
+        spawn (task () {
+            val T = task () {
+                await(true)
+                await(true)
+                print(:2)
+            }
+            pin t = spawn T()
+            spawn (task () {
+                await(true)
+                do {
+                    f(t)
+                    print(:no)
+                }
+                print(:no)
+            } )()
+            await(true)
+            print(:3)
+        })()
+        print(:0)
+        emit(:)
+        print(:4)
+    

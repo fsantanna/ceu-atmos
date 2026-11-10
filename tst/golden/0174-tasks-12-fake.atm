@@ -1,0 +1,11 @@
+        val T = task () {
+            set pub = 10
+            print(pub)
+            spawn {
+                set pub = 20
+                print(pub)
+            }
+            print(pub)
+        }
+        spawn T()
+    

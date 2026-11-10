@@ -1,0 +1,12 @@
+        print(:1)
+        catch :Y {
+            print(:2)
+            catch :X {
+                print(:3)
+                throw(:Y)
+                print(:4)
+            }
+            print(:5)
+        }
+        print(:6)
+    

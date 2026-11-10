@@ -1,0 +1,6 @@
+        spawn {
+            print(await(10ms))
+            print(await(10ms))
+        }
+        emit @:global 25ms              ;; late: 15ms, then 5ms
+    

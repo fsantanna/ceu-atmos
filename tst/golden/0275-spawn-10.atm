@@ -1,0 +1,10 @@
+        var T = task () {
+            do {
+                X.print((await(true)).tag)
+            }
+        }
+        pin t = spawn T()
+        ;;print(:1111)
+        emit :x []
+        ;;print(:2222)
+    
