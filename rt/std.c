@@ -630,6 +630,7 @@ void atm_std_init (void) {
     field(atm_g_atmos, "status", atmos_status);
     field(atm_g_atmos, "next",   atmos_next);
 
+    atm_lib_load_init();
     atm_lib_string_init();
     atm_lib_vector_init();
     atm_lib_os_init();

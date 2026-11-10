@@ -1,0 +1,36 @@
+;; X.load reads values written with the constructors of the language
+X.print(X.load("[1, 2, 3]"))
+X.print(X.load(" [ x=10, y=[1,[2]], 'a', :T [ v=true ] ] ;; end "))
+print(X.load("10"), X.load("-10"), X.load("1.5"), X.load("'s'"), X.load(":a.b"), X.load("nil"), X.load("true"))
+print(type(X.load("10")), X.load("10") + 1, X.load("1e2"), X.load("0x10"))
+val t = X.load("[]")
+print(#t, t ?? :table)
+
+val c = X.loadfile("inc/data.atm")
+print(c ?? :Config, c.name, c.version, c.scale, c.debug, c.none)
+print(c.size@0, c.size@1, #c.size)
+print(c.keys.l.shot, c.keys.r.move@3, c.state ?? :game)
+print(c@10, c.t, c@("s p"))
+print(string.len(c.text), string.find(c.text, '"quoted"'))
+print(c.esc)
+X.print(c.neg)
+
+;; the result is a regular value
+set c.size@+ = 32
+print(#c.size)
+
+;; errors
+print(catch true { X.load("[1, 2") })
+print(catch true { X.load("[1 2]") })
+print(catch true { X.load("[x=]") })
+print(catch true { X.load("1 + 2") })
+print(catch true { X.load("f(1)") })
+print(catch true { X.load("[x=y]") })
+print(catch true { X.load("\n\n[1,\n 'abc]") })
+print(catch true { X.load("[1] [2]") })
+print(catch true { X.load(";;; open") })
+print(catch true { X.load("") })
+print(catch true { X.load(10) })
+print(catch true { X.loadfile("inc/nope.atm") })
+print(catch true { X.load("[@(nil)=1]") })
+print(catch true { X.load("func () {}") })

@@ -1,0 +1,27 @@
+[1, 2, 3]
+[a, :T [v=true], x=10, y=[1, [2]]]
+10	-10	1.5	s	a.b	nil	true
+number	11	100.0	16
+0	true
+true	rocks	5	1.5	false	nil
+640	480	2
+Left Shift	Down	true
+ten	-3	255
+17	8	15
+tab	here\ AA
+[-1, -2.5, 1000.0, 0.02]
+3
+false	invalid load : line 1 : expected ',' or ']'
+false	invalid load : line 1 : expected ',' or ']'
+false	invalid load : line 1 : expected value
+false	invalid load : line 1 : expected end of input
+false	invalid load : line 1 : unexpected name : expected value
+false	invalid load : line 1 : unexpected name : expected value
+false	invalid load : line 4 : unterminated string
+false	invalid load : line 1 : expected end of input
+false	invalid load : line 1 : unterminated comment
+false	invalid load : line 1 : expected value
+false	invalid argument to 'load' : expected string : got number
+false	invalid load : cannot read file : inc/nope.atm
+false	invalid load : line 1 : invalid key
+false	invalid load : line 1 : unexpected name : expected value

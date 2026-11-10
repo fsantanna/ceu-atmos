@@ -72,5 +72,6 @@ void atm_lib_os_init (void);
 void atm_lib_os_quit (void);
 void atm_lib_io_init (void);
 void atm_lib_io_quit (void);
+void atm_lib_load_init (void);
 
 #endif

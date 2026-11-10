@@ -1,0 +1,27 @@
+;; Data for load-01.atm: only constructors.
+:Config [
+    name    = "rocks",          ;; a field
+    version = 5,
+    scale   = 1.5,
+    debug   = false,
+    none    = nil,
+    size    = [640, 480],       ;; a vector
+    keys    = [
+        l = [ move=['A','D','W','S'], shot='Left Shift' ],
+        r = [ move=['Left','Right','Up','Down'], shot='Right Shift' ],
+    ],
+    ;;;
+    A comment over
+    multiple lines.
+    ;;;
+    state   = :game.paused,
+    @(10)   = "ten",
+    @:t     = -3,
+    @"s p"  = 0xFF,
+    text    = """
+line 1
+"quoted"
+""",
+    esc     = "tab\there\\ \x41\065",
+    neg     = [-1, -2.5, 1e3, 2e-2],
+]

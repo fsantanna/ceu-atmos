@@ -2853,10 +2853,54 @@ tables recursively.
 - `X.tostring(v)`: deep string representation of `v`
 - `X.print(...)`: `print` using `X.tostring` on each argument
 - `X.copy(v)`: deep copy of `v`
+- `X.load(s)`, `X.loadfile(path)`: reads a value written as data
 - `X.xin(v, t)`, `X.nin(v, t)`: membership ("in" and "not in")
 - `X.gte(a, b)`, `X.lte(a, b)`: deep ordering ("sup" and "sub")
 - `X.gt(a, b)`, `X.lt(a, b)`: strict deep ordering
 - `X.eq(a, b)`, `X.neq(a, b)`: deep equality
+
+### Load
+
+The function `X.load(s)` reads the value written in the string `s`, and
+`X.loadfile(path)` reads it from a file.
+They are meant for data, such as configuration files, in the way of JSON.
+
+The value is written with the constructors of the language only:
+
+```
+Value : `nil´ | `true´ | `false´
+      | [`-´] NUM | STR | TAG
+      | [TAG] `[´ { Entry `,´ } `]´
+Entry : ID `=´ Value
+      | `@´ Key `=´ Value
+      | Value
+Key   : `(´ Value `)´ | NUM | STR | TAG
+```
+
+There are no variables, operations, functions, or calls: a text with any of
+them is an error.
+[Comments](#comments) are accepted.
+
+The result is a regular value, with new tables that can be modified.
+An invalid text raises an error with the line of the problem.
+
+Examples:
+
+```
+;; config.atm
+:Config [
+    title = "Rocks",        ;; a field
+    size  = [640, 480],     ;; a vector
+    keys  = [ l='A', r='D' ],
+    state = :game.paused,
+]
+```
+
+```
+val c = X.loadfile("config.atm")
+print(c ?? :Config, c.title, c.size@0)      ;; --> true, Rocks, 640
+print(X.load("[1, [2, 3]]")@1@0)            ;; --> 2
+```
 
 ### Membership
 

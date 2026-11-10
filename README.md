@@ -124,6 +124,9 @@ lib/    libraries in Atmos: sdl.atm
   `print(val x = 1)`, is a compile error.
 - `include "file.atm"` joins files at compile time: the statements of
   the file take the place of the include. There is no `require`.
+- `X.load(s)` and `X.loadfile(path)` read data written with the
+  constructors of the language, as a JSON of Atmos: tables, vectors,
+  tags, numbers, strings, and comments. No expressions.
 - Native literals are C code, not Lua: `` `:number strlen("abc")` ``.
     - A leading tag converts the expression: `:number`, `:boolean`,
       `:string`, `:value`. With no tag, the code is a statement.
