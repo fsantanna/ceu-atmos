@@ -1,0 +1,18 @@
+task T (v) {
+    await(:go)
+    v * 2
+}
+spawn (task () {
+    val v, t = await T(10)
+    print(v, t ?? :xtask)
+    print(await T(1))
+})()
+emit(:go)
+emit(:go)
+task Now (v) { v }
+spawn (task () {
+    val v = await Now(5)
+    print(v)
+    val a, b = await <Now(1) && Now(2)>
+    print(a, b)
+})()

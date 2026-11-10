@@ -17,11 +17,21 @@ static uint32_t TIME = 1;
 static AStatus node_abort (ANode* n);
 static AStatus emit_top   (ANode* n, AVal evt);
 
+// The running task was aborted by what it just did.
+static AStatus chk_aborted (AStatus st) {
+    if (st==A_OK && a_cur!=NULL && a_cur->aborted) {
+        return A_ABORT;
+    }
+    return st;
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // PATTERNS
 ///////////////////////////////////////////////////////////////////////////////
 
 typedef enum {
+    // value, classified when the await starts
+    PK_VAL,
     // any event / never
     PK_TRUE, PK_FALSE,
     // event ?? value
@@ -29,97 +39,371 @@ typedef enum {
     // table =>= event
     PK_GTE,
     // termination of a task
-    PK_TASK
+    PK_TASK,
+    // T(...): becomes PK_TASK when the await starts
+    PK_SPAWN,
+    // [p] until (f) / [p] while (f)
+    PK_UNTIL, PK_WHILE,
+    // !p / p && q / p || q
+    PK_NOT, PK_AND, PK_OR
 } PKind;
 
-typedef struct APatt {
-    PKind kind;
-    AVal  v;
-} APatt;
+struct APatt {
+    PKind  kind;
+    // value, task, prototype, or predicate
+    AVal   v;
+    // arguments of a spawn
+    AVal   args;
+    // the task was spawned by the pattern, which aborts it at the end
+    int    own;
+    APatt* a;
+    APatt* b;
+    // &&: operands already satisfied, and their first results
+    int    da;
+    int    db;
+    AVal   ra;
+    AVal   rb;
+};
 
-static void patt_free (APatt* p) {
-    if (p != NULL) {
-        a_dec(p->v);
-        free(p);
-    }
+static APatt* patt_new (PKind kind) {
+    APatt* p = calloc(1, sizeof(APatt));
+    p->kind = kind;
+    return p;
 }
 
-// Classifies a value as a pattern.
-static AStatus patt_val (APatt** ret, AVal v) {
-    PKind kind;
-    switch (v.type) {
-        case A_BOOL:
-            kind = v.u.b ? PK_TRUE : PK_FALSE;
-            break;
-        case A_TAB:
-            kind = PK_GTE;
-            break;
-        case A_XTASK:
-            kind = PK_TASK;
-            break;
-        case A_STR:
-            kind = PK_IS;
-            break;
-        case A_NIL:
-            return a_error("invalid await : invalid event pattern");
-        case A_TASKS:
-            return a_error("invalid await : unexpected tasks pool");
-        case A_FUNC:
-            return a_error("invalid await : unexpected function");
-        case A_NUM:
-            return a_error("invalid await : clock : not implemented");
-        default:
-            return a_error("invalid await : unexpected %s", a_typename(v));
-    }
-    APatt* p = malloc(sizeof(APatt));
-    p->kind = kind;
-    p->v    = v;
+APatt* a_pt_val (AVal v) {
+    APatt* p = patt_new(PK_VAL);
+    p->v = v;
     a_inc(v);
-    *ret = p;
+    return p;
+}
+
+APatt* a_pt_spawn (AVal proto, AVal args) {
+    APatt* p = patt_new(PK_SPAWN);
+    p->v    = proto;
+    p->args = args;
+    a_inc(proto);
+    a_inc(args);
+    return p;
+}
+
+APatt* a_pt_pred (int until, APatt* base, AVal f) {
+    APatt* p = patt_new(until ? PK_UNTIL : PK_WHILE);
+    p->a = base;
+    p->v = f;
+    a_inc(f);
+    return p;
+}
+
+APatt* a_pt_not (APatt* a) {
+    APatt* p = patt_new(PK_NOT);
+    p->a = a;
+    return p;
+}
+
+APatt* a_pt_bin (int and, APatt* a, APatt* b) {
+    APatt* p = patt_new(and ? PK_AND : PK_OR);
+    p->a = a;
+    p->b = b;
+    return p;
+}
+
+// Aborts the tasks the pattern spawned.
+static void patt_stop (APatt* p) {
+    if (p == NULL) {
+        return;
+    }
+    if (p->kind==PK_TASK && p->own) {
+        node_abort((ANode*)p->v.u.o);
+    }
+    patt_stop(p->a);
+    patt_stop(p->b);
+}
+
+static void patt_free (APatt* p) {
+    if (p == NULL) {
+        return;
+    }
+    patt_stop(p);
+    patt_free(p->a);
+    patt_free(p->b);
+    a_dec(p->v);
+    a_dec(p->args);
+    a_dec(p->ra);
+    a_dec(p->rb);
+    free(p);
+}
+
+static void pay1 (AVal v) {
+    a_pay_clear();
+    a_pay_addc(v);
+}
+
+static void pay_task (AVal t) {
+    a_pay_clear();
+    a_pay_addc(A_TASK_OF(t)->ret);
+    a_pay_addc(t);
+}
+
+// Calls a predicate on a value. The result is the first value
+// returned (owned).
+static AStatus pred (AVal f, AVal it, AVal* res) {
+    int base = a_top;
+    a_pushc(it);
+    AStatus st = a_call(f, base);
+    if (st != A_OK) {
+        return st;
+    }
+    *res = a_nil();
+    a_ret1(res, base);
     return A_OK;
 }
 
-// The pattern is satisfied before any event: results in the payload.
-static int patt_start (APatt* p) {
-    if (p->kind==PK_TASK && A_TASK_OF(p->v)->status==T_DONE) {
-        a_pay_clear();
-        a_pay_addc(A_TASK_OF(p->v)->ret);
-        a_pay_addc(p->v);
-        return 1;
+// The base of an until/while was satisfied with `it` (the first value
+// in the payload): applies the predicate.
+//  - until: holds if the result does, which replaces `it` unless true
+//  - while: holds if the result does not, with `it`
+static AStatus patt_pred (APatt* p, int* done) {
+    AVal it = a_nil();
+    a_pay_take(&it, 0);
+    a_pay_clear();
+    AVal res;
+    AStatus st = pred(p->v, it, &res);
+    if (st != A_OK) {
+        a_dec(it);
+        return st;
     }
-    return 0;
+    int ok = a_truthy(res);
+    if (p->kind == PK_UNTIL) {
+        *done = ok;
+        if (ok) {
+            pay1((res.type==A_BOOL) ? it : res);
+        }
+    } else {
+        *done = !ok;
+        if (!ok) {
+            pay1(it);
+        }
+    }
+    a_dec(it);
+    a_dec(res);
+    return A_OK;
 }
 
-// The event satisfies the pattern: results in the payload.
-static int patt_match (APatt* p, AVal evt) {
-    int ok = 0;
+static AStatus patt_start (APatt* p, int* done);
+
+// Starts an until/while again after its predicate rejected the base.
+static AStatus patt_again (APatt* p) {
+    int done = 0;
+    patt_stop(p->a);
+    AStatus st = patt_start(p->a, &done);
+    // a base that is satisfied at once waits for the next event
+    a_pay_clear();
+    return st;
+}
+
+// Establishes a pattern. Sets `done` if it is satisfied before any
+// event, with the results in the payload.
+static AStatus patt_start (APatt* p, int* done) {
+    AStatus st = A_OK;
+    *done = 0;
+    switch (p->kind) {
+        case PK_VAL:
+            switch (p->v.type) {
+                case A_BOOL:
+                    p->kind = p->v.u.b ? PK_TRUE : PK_FALSE;
+                    break;
+                case A_TAB:
+                    p->kind = PK_GTE;
+                    break;
+                case A_STR:
+                    p->kind = PK_IS;
+                    break;
+                case A_XTASK:
+                    p->kind = PK_TASK;
+                    return patt_start(p, done);
+                case A_NIL:
+                    return a_error("invalid await : invalid event pattern");
+                case A_TASKS:
+                    return a_error("invalid await : unexpected tasks pool");
+                case A_FUNC:
+                    return a_error("invalid await : unexpected function");
+                case A_NUM:
+                    return a_error("invalid await : clock : not implemented");
+                default:
+                    return a_error("invalid await : unexpected %s",
+                        a_typename(p->v));
+            }
+            break;
+
+        case PK_TASK:
+            if (A_TASK_OF(p->v)->status == T_DONE) {
+                pay_task(p->v);
+                *done = 1;
+            }
+            break;
+
+        case PK_SPAWN: {
+            // the task runs inside the awaiting task
+            if (p->v.type != A_TASK) {
+                return a_error("invalid spawn : expected task prototype");
+            }
+            int base = a_top;
+            a_tab_unpack(p->args);
+            AVal t = a_nil();
+            st = a_spawn(&t, p->v, a_nil(), base);
+            a_set(&p->v, t);
+            p->kind = PK_TASK;
+            p->own  = 1;
+            if (st != A_OK) {
+                return st;
+            }
+            return patt_start(p, done);
+        }
+
+        case PK_UNTIL:
+        case PK_WHILE:
+            if (p->a == NULL) {
+                // the predicate alone is first tested with no event
+                pay1(a_nil());
+                return patt_pred(p, done);
+            }
+            st = patt_start(p->a, done);
+            if (st==A_OK && *done) {
+                st = patt_pred(p, done);
+                if (st==A_OK && !*done) {
+                    st = patt_again(p);
+                }
+            }
+            break;
+
+        case PK_NOT:
+            st = patt_start(p->a, done);
+            *done = 0;
+            a_pay_clear();
+            break;
+
+        case PK_AND:
+            st = patt_start(p->a, &p->da);
+            if (st==A_OK && p->da) {
+                a_pay_take(&p->ra, 0);
+            }
+            if (st == A_OK) {
+                st = patt_start(p->b, &p->db);
+            }
+            if (st==A_OK && p->db) {
+                a_pay_take(&p->rb, 0);
+            }
+            if (st==A_OK && p->da && p->db) {
+                a_pay_clear();
+                a_pay_addc(p->ra);
+                a_pay_addc(p->rb);
+                *done = 1;
+            }
+            break;
+
+        case PK_OR:
+            st = patt_start(p->a, done);
+            if (st==A_OK && !*done) {
+                st = patt_start(p->b, done);
+            }
+            break;
+
+        default:
+            break;
+    }
+    return st;
+}
+
+// Tests an event against a pattern. Sets `done` if it is satisfied,
+// with the results in the payload.
+static AStatus patt_match (APatt* p, AVal evt, int* done) {
+    AStatus st = A_OK;
+    *done = 0;
     switch (p->kind) {
         case PK_TRUE:
-            ok = 1;
-            break;
-        case PK_FALSE:
-            ok = 0;
+            *done = 1;
             break;
         case PK_IS:
-            ok = a_is(evt, p->v);
+            *done = a_is(evt, p->v);
             break;
         case PK_GTE:
-            ok = (evt.type != A_XTASK) && a_gte(p->v, evt);
+            *done = (evt.type != A_XTASK) && a_gte(p->v, evt);
             break;
         case PK_TASK:
             if (a_eq(evt, p->v)) {
-                a_pay_clear();
-                a_pay_addc(A_TASK_OF(p->v)->ret);
-                a_pay_addc(p->v);
-                return 1;
+                pay_task(p->v);
+                *done = 1;
             }
-            return 0;
+            return A_OK;
+
+        case PK_UNTIL:
+        case PK_WHILE:
+            if (p->a == NULL) {
+                pay1(evt);
+                return patt_pred(p, done);
+            }
+            st = patt_match(p->a, evt, done);
+            if (st==A_OK && *done) {
+                st = patt_pred(p, done);
+                if (st==A_OK && !*done) {
+                    st = patt_again(p);
+                }
+            }
+            return st;
+
+        case PK_NOT:
+            st = patt_match(p->a, evt, done);
+            if (st != A_OK) {
+                return st;
+            }
+            if (*done) {
+                // the operand matched: it starts again
+                *done = 0;
+                patt_stop(p->a);
+                st = patt_start(p->a, done);
+                *done = 0;
+                a_pay_clear();
+                return st;
+            }
+            *done = 1;
+            break;
+
+        case PK_AND:
+            if (!p->da) {
+                st = patt_match(p->a, evt, &p->da);
+                if (st==A_OK && p->da) {
+                    a_pay_take(&p->ra, 0);
+                }
+            }
+            if (st==A_OK && !p->db) {
+                st = patt_match(p->b, evt, &p->db);
+                if (st==A_OK && p->db) {
+                    a_pay_take(&p->rb, 0);
+                }
+            }
+            if (st==A_OK && p->da && p->db) {
+                a_pay_clear();
+                a_pay_addc(p->ra);
+                a_pay_addc(p->rb);
+                *done = 1;
+            }
+            return st;
+
+        case PK_OR:
+            st = patt_match(p->a, evt, done);
+            if (st==A_OK && !*done) {
+                st = patt_match(p->b, evt, done);
+            }
+            return st;
+
+        default:
+            break;
     }
-    if (ok) {
-        a_pay_clear();
-        a_pay_addc(evt);
+    if (*done) {
+        pay1(evt);
     }
-    return ok;
+    return st;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -314,14 +598,6 @@ static AStatus node_abort (ANode* n) {
     return st;
 }
 
-// The running task was aborted by what it just did.
-static AStatus chk_aborted (AStatus st) {
-    if (st==A_OK && a_cur!=NULL && a_cur->aborted) {
-        return A_ABORT;
-    }
-    return st;
-}
-
 AStatus a_abort (AVal v) {
     if (v.type!=A_XTASK && v.type!=A_TASKS) {
         return a_error("invalid abort : expected task");
@@ -359,10 +635,19 @@ static AStatus emit_node (ANode* n, uint32_t time, AVal evt) {
                 t->exit = st;
                 st = task_resume(t, R_EXIT);
             }
-        } else if (t->status==T_SUSPENDED && t->time<time &&
-                   patt_match(t->awt,evt))
-        {
-            st = task_resume(t, R_EVENT);
+        } else if (t->status==T_SUSPENDED && t->time<time) {
+            // predicates run in the context of the awaiting task
+            int done = 0;
+            ATask* prev = a_cur;
+            a_cur = t;
+            st = patt_match(t->awt, evt, &done);
+            a_cur = prev;
+            if (st != A_OK) {
+                t->exit = st;
+                st = task_resume(t, R_EXIT);
+            } else if (done) {
+                st = task_resume(t, R_EVENT);
+            }
         }
     }
 
@@ -483,7 +768,10 @@ AStatus a_spawn (AVal* dst, AVal proto, AVal pool, int base) {
 
     ATask* t = task_new(A_FUNC_OF(proto), up, base);
     // a task in a pool is owned by the pool
-    t->node.hdr.pinned = (pool.type == A_TASKS);
+    if (pool.type == A_TASKS) {
+        t->node.hdr.pinned = 1;
+        t->pool = A_TASKS_OF(pool);
+    }
     a_cpy(dst, a_obj(&t->node.hdr));
     return chk_aborted(task_resume(t, R_START));
 }
@@ -504,27 +792,35 @@ AStatus a_tasks (AVal* dst, AVal max) {
 // AWAIT
 ///////////////////////////////////////////////////////////////////////////////
 
-AStatus a_await_val (ATask* t, AVal v) {
+AStatus a_await (ATask* t, APatt* p) {
     if (t->aborted) {
+        patt_free(p);
         return A_ABORT;
     }
-    APatt* p = NULL;
-    AStatus st = patt_val(&p, v);
-    if (st != A_OK) {
+    t->time = TIME;
+    int done = 0;
+    AStatus st = chk_aborted(patt_start(p, &done));
+    if (st!=A_OK || done) {
+        // the results must survive the abort of spawned tasks
+        APay pay;
+        a_pay_save(&pay);
+        patt_free(p);
+        a_pay_restore(&pay);
         return st;
     }
-    if (patt_start(p)) {
-        patt_free(p);
-        return A_OK;
-    }
-    t->awt  = p;
-    t->time = TIME;
+    t->awt = p;
     return A_AWAIT;
 }
 
 AStatus a_resumed (ATask* t, AKind k) {
-    patt_free(t->awt);
+    // the payload (results or exit) must survive the abort of the
+    // tasks the pattern spawned
+    APatt* p = t->awt;
     t->awt = NULL;
+    APay pay;
+    a_pay_save(&pay);
+    patt_free(p);
+    a_pay_restore(&pay);
     switch (k) {
         case R_ABORT: return A_ABORT;
         case R_EXIT:  return t->exit;
@@ -572,8 +868,12 @@ AStatus a_pin (AVal* slot) {
 }
 
 AStatus a_chk_task (AVal v) {
-    // the running task and its ancestors outlive the current scope
+    // the running task and its ancestors outlive the current scope,
+    // and a terminated task needs no owner
     if (v.u.o->pinned || is_up((ANode*)v.u.o)) {
+        return A_OK;
+    }
+    if (v.type==A_XTASK && A_TASK_OF(v)->status==T_DONE) {
         return A_OK;
     }
     return a_error("invalid assignment : expected pinned value");

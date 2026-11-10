@@ -1,0 +1,11 @@
+val x = 10
+spawn (task () {
+    val a = 10
+    await <:X until (a || 20)>
+    print(:ok)
+    await until (x > 5)
+    print(:now)
+    val v = await until (\{ :immediate })
+    print(v)
+})()
+emit :X [10]

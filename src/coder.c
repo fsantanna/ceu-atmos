@@ -1539,17 +1539,114 @@ static void gen_suspend (Unit* u, Dst d) {
     store_pay(u, d);
 }
 
+// A pattern is eager: its values, task prototypes, arguments, and
+// predicates are evaluated once, in order, before the await starts.
+static void patt_eval (Unit* u, Patt* p, Opnd* os, int* n) {
+    switch (p->kind) {
+        case PT_VAL:
+            os[(*n)++] = gen_expr(u, p->e);
+            break;
+        case PT_SPAWN: {
+            os[(*n)++] = gen_expr(u, p->e);
+            // the arguments wait in a table
+            Opnd t = opnd_tmp(u);
+            out(u, "a_set(&%s, a_tab());", t.c);
+            Dst m = dst_multi(u);
+            gen_args(u, &p->args, m.n, NULL);
+            out(u, "a_tab_fill(%s, 0, %s);", t.c, m.n);
+            os[(*n)++] = t;
+            break;
+        }
+        case PT_ANY:
+        case PT_ALL:
+            err(p->tk, "await pattern : not implemented");
+            break;
+        case PT_UNTIL:
+        case PT_WHILE:
+            if (p->a != NULL) {
+                patt_eval(u, p->a, os, n);
+            }
+            os[(*n)++] = gen_expr(u, p->e);
+            break;
+        case PT_NOT:
+            patt_eval(u, p->a, os, n);
+            break;
+        case PT_AND:
+        case PT_OR:
+            patt_eval(u, p->a, os, n);
+            patt_eval(u, p->b, os, n);
+            break;
+    }
+}
+
+// Builds the runtime pattern from the evaluated operands, as one C
+// variable per node. Returns the variable of the root.
+static const char* patt_build (Unit* u, Patt* p, Opnd* os, int* n, int* k) {
+    const char* a = NULL;
+    const char* b = NULL;
+    const char* c = NULL;
+    switch (p->kind) {
+        case PT_VAL:
+            c = xfmt("a_pt_val(%s)", os[(*n)++].c);
+            break;
+        case PT_SPAWN:
+            c = xfmt("a_pt_spawn(%s, %s)", os[*n].c, os[*n+1].c);
+            *n += 2;
+            break;
+        case PT_ANY:
+        case PT_ALL:
+            break;
+        case PT_UNTIL:
+        case PT_WHILE:
+            a = (p->a != NULL) ? patt_build(u, p->a, os, n, k) : "NULL";
+            c = xfmt("a_pt_pred(%d, %s, %s)", p->kind==PT_UNTIL, a,
+                os[(*n)++].c);
+            break;
+        case PT_NOT:
+            a = patt_build(u, p->a, os, n, k);
+            c = xfmt("a_pt_not(%s)", a);
+            break;
+        case PT_AND:
+        case PT_OR:
+            a = patt_build(u, p->a, os, n, k);
+            b = patt_build(u, p->b, os, n, k);
+            c = xfmt("a_pt_bin(%d, %s, %s)", p->kind==PT_AND, a, b);
+            break;
+    }
+    const char* v = xfmt("p%d", (*k)++);
+    out(u, "    APatt* %s = %s;", v, c);
+    return v;
+}
+
+static int patt_size (Patt* p) {
+    if (p == NULL) {
+        return 0;
+    }
+    return 2 + patt_size(p->a) + patt_size(p->b);
+}
+
+// Establishes an await on a pattern and suspends.
+static void gen_await_patt (Unit* u, Patt* p, int lin, Dst d) {
+    Opnd* os = xalloc(patt_size(p) * sizeof(Opnd));
+    int n = 0;
+    patt_eval(u, p, os, &n);
+
+    out(u, "a_lin = %d;", lin);
+    out(u, "{");
+    int i = 0;
+    int k = 0;
+    const char* v = patt_build(u, p, os, &i, &k);
+    out(u, "    st = a_await(t, %s);", v);
+    out(u, "}");
+    for (int j=0; j<n; j++) {
+        opnd_rel(u, os[j]);
+    }
+    gen_suspend(u, d);
+}
+
 // await P
 static void gen_await (Unit* u, Expr* e, Dst d) {
-    Patt* p = e->u.await.p;
-    if (p->kind != PT_VAL) {
-        err(p->tk, "await pattern : not implemented");
-    }
-    Opnd v = gen_expr(u, p->e);
-    out(u, "a_lin = %d;", e->tk.lin);
-    out(u, "st = a_await_val(t, %s);", v.c);
-    opnd_rel(u, v);
-    gen_suspend(u, d);
+    gen_await_patt(u, e->u.await.p, e->tk.lin, d);
 }
 
 // emit @to (e)

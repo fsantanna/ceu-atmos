@@ -1,0 +1,5 @@
+slow_abort
+got	X
+end
+all
+:A [2]	:B [1]

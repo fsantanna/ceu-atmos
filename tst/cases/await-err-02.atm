@@ -1,0 +1,8 @@
+spawn (task () {
+    await <:X until (it.x.y)>
+    print(:no)
+})()
+emit(:Y)
+print(:1)
+emit(:X)
+print(:no)

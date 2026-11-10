@@ -550,6 +550,8 @@ typedef struct ATask {
     struct APatt* awt;
     AVal     pub;
     AVal     ret;
+    // pool it was spawned in, for identification only
+    struct ATasks* pool;
 } ATask;
 
 // Pool of tasks, with an optional limit (-1 for none).
@@ -577,9 +579,29 @@ AStatus a_abort (AVal v);
 // emit @to (evt): `to` is nil for the default target.
 AStatus a_emit (AVal to, AVal evt);
 
-// Establishes an await on a value. Returns A_OK if it is satisfied at
-// once (results in the payload), or A_AWAIT if the task must suspend.
-AStatus a_await_val (struct ATask* t, AVal v);
+// Await patterns are built from the leaves up, then handed to
+// `a_await`. Values are borrowed; operands are taken over.
+typedef struct APatt APatt;
+
+// Value: boolean, tag, table, or task.
+APatt* a_pt_val (AVal v);
+
+// T(...): spawns the prototype with the arguments in a table.
+APatt* a_pt_spawn (AVal proto, AVal args);
+
+// [p] until (f)  /  [p] while (f): `base` may be NULL.
+APatt* a_pt_pred (int until, APatt* base, AVal f);
+
+// !p
+APatt* a_pt_not (APatt* a);
+
+// p && q  /  p || q
+APatt* a_pt_bin (int and, APatt* a, APatt* b);
+
+// Establishes an await, taking over the pattern. Returns A_OK if it
+// is satisfied at once (results in the payload), or A_AWAIT if the
+// task must suspend.
+AStatus a_await (struct ATask* t, APatt* p);
 
 // Status a task continues with after it is resumed at an await.
 AStatus a_resumed (struct ATask* t, AKind k);

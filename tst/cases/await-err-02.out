@@ -1,0 +1,5 @@
+1
+==> ERROR:
+ |  await-err-02.atm:7 (call)
+ v  await-err-02.atm:2 (throw)
+==> invalid index : expected table : got string

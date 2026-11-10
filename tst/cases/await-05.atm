@@ -1,0 +1,19 @@
+task Slow () {
+    defer { print(:slow_abort) }
+    await(:never)
+}
+spawn (task () {
+    val e = await <Slow() || :X>
+    print(:got, e)
+})()
+emit(:X)
+print(:end)
+var n = 0
+spawn (task () {
+    await <:A && :B && :C>
+    print(:all)
+    val x, y = await <:A && :B>
+    X.print(x, y)
+})()
+emit(:C) ; emit(:A) ; emit(:A) ; emit(:B)
+emit(:B [1]) ; emit(:A [2])

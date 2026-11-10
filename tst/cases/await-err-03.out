@@ -1,0 +1,3 @@
+==> ERROR:
+ v  await-err-03.atm:2 (throw)
+==> invalid spawn : expected task prototype

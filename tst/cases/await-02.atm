@@ -1,0 +1,22 @@
+spawn (task () {
+    await <<:X || :Y> && :Z>
+    print(:ok)
+})()
+print(:antes)
+emit(:X)
+emit(:Z)
+print(:depois)
+spawn (task () {
+    await <!:X && :Y>
+    print(:ok2)
+})()
+print(:antes2)
+emit(:Y)
+print(:depois2)
+spawn (task () {
+    await <!:X || :Y>
+    print(:2)
+})()
+emit(:X)
+print :1
+emit(:Y)
