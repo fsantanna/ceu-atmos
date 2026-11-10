@@ -1,0 +1,3 @@
+==> ERROR:
+ v  cset-err-03.atm:2 (throw)
+==> invalid operation '-' : expected number : got string

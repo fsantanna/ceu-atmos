@@ -1,0 +1,20 @@
+var x = 10
+set x += 1
+set x -= 3
+set x *= 2
+print(x)
+set x /= 4
+set x //= 1
+set x %= 3
+print(x)
+var s = "a"
+set s ++= "b"
+set s ++= 1
+print(s)
+var b = 1
+set b <<= 4
+set b |= 1
+set b &= ~16
+set b ^= 3
+set b >>= 1
+print(b)

@@ -155,7 +155,7 @@ void ast_dump (Expr* e) {
         case E_SET:
             printf("(set");
             dump_list(&e->u.set.dsts);
-            printf(" = ");
+            printf(" %s= ", (e->u.set.op != NULL) ? e->u.set.op : "");
             ast_dump(e->u.set.src);
             printf(")");
             break;

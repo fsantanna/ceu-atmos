@@ -1,0 +1,6 @@
+spawn {
+    var n = 0
+    set n += await(:X)
+}
+print(:1)
+emit(:X)

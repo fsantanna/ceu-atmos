@@ -1,0 +1,4 @@
+1
+==> ERROR:
+ v  cset-err-04.atm:3 (throw)
+==> invalid operation '+' : expected number : got string

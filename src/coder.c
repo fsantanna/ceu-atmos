@@ -66,6 +66,8 @@ typedef struct Unit {
     int cleanup;
     // extra indentation of the generated lines
     int ind;
+    // source line of the statement being compiled
+    int lin;
     // finalizers of the enclosing block
     struct Defer* defs;
     int ndefs;
@@ -539,7 +541,8 @@ static Opnd gen_logic (Unit* u, Expr* e) {
     return d;
 }
 
-static Opnd gen_bin (Unit* u, Expr* e) {
+// Applies a binary operator to two operands, consuming them.
+static Opnd gen_binop (Unit* u, Tk tk, const char* op, Opnd x, Opnd y) {
     // operator, runtime function, swapped operands
     static const char* OPS[][3] = {
         { "+",  "a_add",  "" }, { "-",  "a_sub", ""  },
@@ -550,11 +553,11 @@ static Opnd gen_bin (Unit* u, Expr* e) {
         { ">",  "a_lt",  "x" }, { ">=", "a_le",  "x" },
         { NULL, NULL, NULL }
     };
-    // operator, predicate, negated, swapped operands
-    static const char* PREDS[][4] = {
-        { "==",  "a_eq",  "",  ""  }, { "!=",  "a_eq",  "!", ""  },
-        { "??",  "a_is",  "",  ""  }, { "!?",  "a_is",  "!", ""  },
-        { NULL, NULL, NULL, NULL }
+    // operator, predicate, negated
+    static const char* PREDS[][3] = {
+        { "==",  "a_eq",  ""  }, { "!=",  "a_eq",  "!" },
+        { "??",  "a_is",  ""  }, { "!?",  "a_is",  "!" },
+        { NULL, NULL, NULL }
     };
     // operator, bitwise operation
     static const char* BITS[][2] = {
@@ -562,23 +565,13 @@ static Opnd gen_bin (Unit* u, Expr* e) {
         { "<<", "A_SHL"  }, { ">>", "A_SHR" },
         { NULL, NULL }
     };
-    const char* op = e->tk.str;
 
-    if (!strcmp(op,"&&") || !strcmp(op,"||")) {
-        return gen_logic(u, e);
-    }
-
-    Opnd x = gen_expr(u, e->u.bin.e1);
-    Opnd y = gen_expr(u, e->u.bin.e2);
     Opnd d = opnd_tmp(u);
-
     int done = 0;
     for (int i=0; PREDS[i][0]!=NULL; i++) {
         if (!strcmp(PREDS[i][0], op)) {
-            int swap = (PREDS[i][3][0] != '\0');
             out(u, "a_set(&%s, a_bool(%s%s(%s, %s)));",
-                d.c, PREDS[i][2], PREDS[i][1],
-                swap ? y.c : x.c, swap ? x.c : y.c);
+                d.c, PREDS[i][2], PREDS[i][1], x.c, y.c);
             done = 1;
         }
     }
@@ -597,12 +590,21 @@ static Opnd gen_bin (Unit* u, Expr* e) {
         }
     }
     if (!done) {
-        err(e->tk, "operator not implemented");
+        err(tk, "operator not implemented");
     }
-
     opnd_rel(u, x);
     opnd_rel(u, y);
     return d;
+}
+
+static Opnd gen_bin (Unit* u, Expr* e) {
+    const char* op = e->tk.str;
+    if (!strcmp(op,"&&") || !strcmp(op,"||")) {
+        return gen_logic(u, e);
+    }
+    Opnd x = gen_expr(u, e->u.bin.e1);
+    Opnd y = gen_expr(u, e->u.bin.e2);
+    return gen_binop(u, e->tk, op, x, y);
 }
 
 // [ e, id=e, @(k)=e ]: positional entries are numbered from 0, and
@@ -834,6 +836,7 @@ static void gen_block_x (Unit* u, List* es, Dst d, Hnd h) {
         out0(u, "#line %d %s", es->v[i]->tk.lin,
             quote(FILENAME, strlen(FILENAME)));
         out(u, "a_lin = %d;", es->v[i]->tk.lin);
+        u->lin = es->v[i]->tk.lin;
         gen(u, es->v[i], (i == es->n-1) ? d : dst_none());
     }
     if (es->n == 0) {
@@ -1012,9 +1015,67 @@ static void gen_assign (Unit* u, Loc l, Opnd v) {
     opnd_rel(u, l.t);
 }
 
+// Reads the current value of a destination into a temporary.
+static Opnd gen_read (Unit* u, Loc l) {
+    Opnd d = opnd_tmp(u);
+    if (l.e->tag == E_ACC) {
+        out(u, "a_cpy(&%s, %s);", d.c, var_c(u,l.e->var));
+    } else if (l.e->tag == E_PUB) {
+        out(u, "{");
+        out(u, "    AVal* pub;");
+        out(u, "    if ((st = a_pub(&pub)) != A_OK) goto CL_%d;", u->cleanup);
+        out(u, "    a_cpy(&%s, *pub);", d.c);
+        out(u, "}");
+    } else {
+        switch (l.e->u.index.kind) {
+            case IDX_EXPR:
+                out_try(u, "a_index(&%s, %s, %s)", d.c, l.t.c, l.k.c);
+                break;
+            case IDX_LAST:
+                out_try(u, "a_index_last(&%s, %s)", d.c, l.t.c);
+                break;
+            case IDX_NEXT:
+                // the next position is always empty
+                break;
+        }
+    }
+    return d;
+}
+
+// set x += e: the destination is evaluated once.
+// `&&=` and `||=` only evaluate and assign if needed.
+static void gen_set_op (Unit* u, Expr* e) {
+    const char* op = e->u.set.op;
+    Loc l = gen_loc(u, e->u.set.dsts.v[0]);
+    Opnd cur = gen_read(u, l);
+
+    if (!strcmp(op,"&&") || !strcmp(op,"||")) {
+        out(u, "if (%sa_truthy(%s)) {", (op[0] == '&') ? "" : "!", cur.c);
+        u->ind++;
+        opnd_rel(u, cur);
+        gen_assign(u, l, gen_expr(u,e->u.set.src));
+        u->ind--;
+        out(u, "} else {");
+        u->ind++;
+        opnd_rel(u, cur);
+        opnd_rel(u, l.k);
+        opnd_rel(u, l.t);
+        u->ind--;
+        out(u, "}");
+        return;
+    }
+
+    Opnd v = gen_expr(u, e->u.set.src);
+    gen_assign(u, l, gen_binop(u, e->tk, op, cur, v));
+}
+
 // set x = e  |  set t@k, y = e
 // Tables and keys are evaluated before the values.
 static void gen_set (Unit* u, Expr* e) {
+    if (e->u.set.op != NULL) {
+        gen_set_op(u, e);
+        return;
+    }
     int k = e->u.set.dsts.n;
     Loc* ls = xalloc(k * sizeof(Loc));
     for (int i=0; i<k; i++) {
@@ -1731,6 +1792,7 @@ static void gen_suspend (Unit* u, Dst d) {
     out(u, "    return A_AWAIT;");
     out0(u, "AW_%d:", pc);
     out(u, "    base = a_top;");
+    out(u, "    a_lin = %d;", u->lin);
     out(u, "    st = a_resumed(t, k);");
     out(u, "}");
     out(u, "if (st != A_OK) goto CL_%d;", u->cleanup);

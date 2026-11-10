@@ -1,0 +1,19 @@
+var v
+set v ||= :default
+set v ||= print(:no)
+print(v)
+var w = 1
+set w &&= :two
+print(w)
+set w &&= nil
+set w &&= print(:no)
+print(w)
+val t = []
+set t.cache ||= [1]
+set t.cache ||= print(:no)
+X.print(t)
+var c = 0
+val f = \{ set c += it ; c }
+print(f(1), f(2), f(3))
+loop i in 3 { set c += i }
+print(c)

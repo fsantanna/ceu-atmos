@@ -407,7 +407,14 @@ static Expr* parser_dcl (void) {
     return dcl;
 }
 
-// set x, t@1 = e
+// Compound assignment operators.
+static const char* SETS[] = {
+    "+=", "-=", "*=", "/=", "//=", "%=", "++=",
+    "&=", "|=", "^=", "<<=", ">>=", "&&=", "||=",
+    NULL
+};
+
+// set x, t@1 = e  |  set x += e
 static Expr* parser_set (void) {
     Expr* set = mk(E_SET, TK0);
     do {
@@ -418,7 +425,16 @@ static Expr* parser_set (void) {
         }
         list_add(&set->u.set.dsts, e);
     } while (accept_str(","));
-    accept_str_err("=");
+    if (check_op(SETS)) {
+        // a single destination, updated in place
+        if (set->u.set.dsts.n != 1) {
+            err(TK1, "invalid assignment : expected single destination");
+        }
+        next();
+        set->u.set.op = xstrndup(TK0.str, TK0.len-1);
+    } else {
+        accept_str_err("=");
+    }
     set->u.set.src = parser();
     return set;
 }

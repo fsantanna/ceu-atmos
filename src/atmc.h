@@ -197,7 +197,9 @@ struct Expr {
         // tk is val, var, or pin
         struct { int n; Tk* ids; Expr* set; }           dcl;
         // proto: `func f () {}` declares `f` if it is unknown
-        struct { List dsts; Expr* src; int proto; }     set;
+        // op: binary operator of a compound assignment, or NULL
+        struct { List dsts; Expr* src; int proto; const char* op; }
+                                                        set;
         struct { List es; }                             block;
         // esc: has an escape tag (in tk)
         struct { int esc; Expr* blk; }                  xdo;

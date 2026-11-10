@@ -1,0 +1,10 @@
+spawn {
+    var n = 0
+    set n += (await(:X)).v
+    set n ||= await(:never)
+    var m
+    set m ||= await(:Y)
+    print(n, m)
+}
+emit(:X [v=5])
+emit(:Y)

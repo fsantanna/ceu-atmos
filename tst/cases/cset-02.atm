@@ -1,0 +1,17 @@
+val t = [1, 2, v=[x=10]]
+var n = 0
+func idx () { set n += 1 ; 0 }
+set t@(idx()) += 10
+set t@# *= 5
+set t.v.x -= 1
+X.print(t)
+print(n)
+set t@+ ||= 99
+X.print(t)
+task T () {
+    set pub = 1
+    set pub += 1
+    set pub <<= 3
+    print(pub)
+}
+spawn T()

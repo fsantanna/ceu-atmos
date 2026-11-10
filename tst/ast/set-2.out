@@ -1,0 +1,8 @@
+(set x += 1)
+(set (@ t i) -= 2)
+(set s ++= "!")
+(set v ||= d)
+(set (@ t "x") <<= 1)
+(set pub *= 2)
+(set (@ t #) //= 2)
+(set x += (* y 2))
