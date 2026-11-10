@@ -450,6 +450,8 @@ def main ():
             open(os.path.join(golden, name+'.atm'), 'w').write(src)
             # the trace shows the name of the file
             out = run(src, name, c['flags'])
+            # addresses change from one build to another
+            out = re.sub(r': 0x[0-9a-f]+', ': 0x?', out)
             open(os.path.join(golden, name+'.out'), 'w').write(out.rstrip('\n') + '\n')
             if c['flags']:
                 open(os.path.join(golden, name+'.flags'), 'w').write(' '.join(c['flags']) + '\n')

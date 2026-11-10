@@ -1,4 +1,4 @@
-ok	xtask: 0x511000000900
+ok	xtask: 0x?
 ==> ERROR:
  v  0346-task-term-2.atm:5 (throw)
 ==> invalid assignment : unexpected pinned value

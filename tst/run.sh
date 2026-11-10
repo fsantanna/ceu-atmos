@@ -6,7 +6,8 @@
 #   tst/run.sh lex        one suite (lex, ast, cases, golden)
 #
 # Each case is a `NAME.atm` with the expected output in `NAME.out`
-# (stdout followed by stderr).
+# (stdout followed by stderr). An address, as in `function: 0x5040...`,
+# is compared as `function: 0x?`.
 
 cd "$(dirname "$0")"
 
@@ -37,7 +38,8 @@ for suite in $suites; do
         if [ -f $name.flags ]; then
             more=$(cat $name.flags)
         fi
-        out=$($ATMOS $flags $more $atm 2>&1)
+        # addresses change from one build to another
+        out=$($ATMOS $flags $more $atm 2>&1 | sed -E 's/: 0x[0-9a-f]+/: 0x?/g')
         if [ "$out" == "$(cat $name.out)" ]; then
             pass=$((pass+1))
         else

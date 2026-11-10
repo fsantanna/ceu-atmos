@@ -1,2 +1,3 @@
 build/
 /atmos
+__pycache__/
