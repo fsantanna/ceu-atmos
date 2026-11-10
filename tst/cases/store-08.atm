@@ -1,0 +1,38 @@
+;; a task confined to a block ends with it, even if nobody pinned it
+task T (id, v) {
+    defer { print(:dead, id, v@0) }
+    await(:X)
+    print(:awake, id, v@0)
+    await(false)
+}
+func sp (id, v) {
+    spawn T(id, v)
+}
+do {
+    pin a = [1]
+    ;; dropped
+    sp(:a, a)
+    ;; rejected
+    print(catch true { val x = sp(:b, a) })
+    do {
+        pin b = [2]
+        sp(:c, b)
+        ;; returned, but it cannot leave
+        print(catch true {
+            pin y = do {
+                pin c = [3]
+                sp(:d, c)
+            }
+        })
+        emit(:X)
+        print(:1)
+    }
+    print(:2)
+    emit(:X)
+    print(:3)
+}
+print(:4)
+;; a free task lives with its parent
+sp(:e, [5])
+emit(:X)
+print(:5)

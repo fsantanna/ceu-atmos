@@ -1134,6 +1134,9 @@ AStatus a_spawn (AVal* dst, AVal proto, AVal pool, int base) {
     }
 
     ATask* t = task_new(A_FUNC_OF(proto), up, base);
+    if (a_cur!=NULL && t->mindepth>a_cur->conf) {
+        a_cur->conf = t->mindepth;
+    }
     // the body is one deeper than the block the task is attached to
     t->depth = a_depth + 1;
     // a task in a pool is owned by the pool
@@ -1460,6 +1463,21 @@ static void xfer (AVal v, int d) {
     }
 }
 
+// Aborts a task or pool at the end of its block. The abort runs
+// defers: the pending exit is set aside meanwhile.
+static AStatus blk_abort (ANode* n, AStatus st) {
+    APay pay;
+    a_pay_save(&pay);
+    AStatus st2 = node_abort(n);
+    if (st2 == A_OK) {
+        a_pay_restore(&pay);
+    } else {
+        a_pay_drop(&pay);
+        st = st2;
+    }
+    return st;
+}
+
 AStatus a_blk_xfer (AStatus st, AVal* vs, int n) {
     int d = a_depth - 1;
     if (st != A_OK) {
@@ -1467,15 +1485,39 @@ AStatus a_blk_xfer (AStatus st, AVal* vs, int n) {
         n  = a_pay_n;
     }
     // all or nothing
+    int ok = 1;
     for (int i=0; i<n; i++) {
-        if (!xfer_chk(vs[i],d)) {
-            return a_err_pinned();
+        ok = ok && xfer_chk(vs[i], d);
+    }
+    if (ok) {
+        for (int i=0; i<n; i++) {
+            xfer(vs[i], d);
+        }
+    } else {
+        st = a_err_pinned();
+    }
+
+    // tasks confined to this block that nobody pinned
+    ATask* me = a_cur;
+    if (me==NULL || me->conf<a_depth) {
+        return st;
+    }
+    int any = 0;
+    for (int i=0; i<me->node.ndns; i++) {
+        ANode* c = me->node.dns[i];
+        if (c->hdr.type!=A_XTASK || c->dead || c->hdr.pinned) {
+            continue;
+        }
+        ATask* t = (ATask*) c;
+        if (!t->tra && t->status!=T_DONE && t->mindepth>=a_depth) {
+            st = blk_abort(c, st);
+            any = 1;
+            // the abort may rearrange the tree: scan again
+            i = -1;
         }
     }
-    for (int i=0; i<n; i++) {
-        xfer(vs[i], d);
-    }
-    return st;
+    me->conf = d;
+    return any ? chk_aborted(st) : st;
 }
 
 AStatus a_chk_task (AVal v) {
@@ -1515,17 +1557,7 @@ AStatus a_pin_end (AVal* slot, AStatus st) {
         return st;
     }
     ANode* n = (ANode*) v.u.o;
-
-    // the abort runs defers: the pending exit is set aside
-    APay pay;
-    a_pay_save(&pay);
-    AStatus st2 = node_abort(n);
-    if (st2 == A_OK) {
-        a_pay_restore(&pay);
-    } else {
-        a_pay_drop(&pay);
-        st = st2;
-    }
+    st = blk_abort(n, st);
 
     // a pool leaves the tree with its block
     if (n->hdr.type==A_TASKS && !n->dead) {

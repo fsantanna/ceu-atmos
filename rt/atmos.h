@@ -610,6 +610,8 @@ typedef struct ATask {
     int      bdepth;
     // depth of the deepest pinned argument: the task cannot leave it
     int      mindepth;
+    // upper bound of `mindepth` among the tasks it spawned
+    int      conf;
     struct APatt* awt;
     AVal     pub;
     AVal     ret;
@@ -758,6 +760,8 @@ static inline AStatus a_chk_tab (ATab* t, AVal v) {
 // unpinned and flow out as fresh values, along with what they hold.
 // The values are `vs[0..n)` if the block ends normally, or else the
 // payload of the exit. Fails for a task that is confined to the block.
+// Then, tasks confined to the block that were left unpinned are
+// aborted, since nothing else would end them before the block does.
 AStatus a_blk_xfer (AStatus st, AVal* vs, int n);
 
 // Sets the pub of a task, or of the running task if NULL.
