@@ -44,7 +44,8 @@ structured, deterministic concurrency.
 - **Inline frames for structured constructs.**
     - `par`, `watching`, `loop on`, `toggle on` keep their locals inline
       in the owner's frame.
-    - v1 allocates one small header per transparent block (see Tasks).
+    - A transparent block is a trail: a small record inside the frame
+      of its task, with no allocation (see Tasks).
     - No more lowering to lambdas or Lua closures.
 - **Non-local exits as status codes.**
     - Errors, `escape`, `break`, `return` all propagate as a returned
@@ -489,13 +490,38 @@ typedef AStatus (*AResume) (ATask* t, AKind k, AVal evt);
 - **Transparent blocks** (`spawn {}`, `par` branches, `watching`,
   `toggle on`) share the frame of their owner task.
     - Their locals are slots of the owner's frame: no frame allocation.
-    - v1 allocates one refcounted header per transparent block.
-        - The termination of a task is emitted as a value, and another
-          task may keep that value.
-        - Embedding the header inline is a later optimization.
     - `return`/`break`/`throw`/`escape` cross to the owner with their
       values, matching `tst/throw.lua` (pre and pos cases).
     - They delegate `pub` and `emit` to the owner.
+- **Trails**, as in Céu. A trail is a line of execution of a task: its
+  body, or a transparent block nested in it.
+    - The trails of a prototype are known at compile time, since a
+      function cannot await and a block that starts in a loop ends with
+      the iteration. So is their tree: a block that starts another is
+      its parent.
+    - The frame of a task holds one record per trail (72 bytes), then
+      the slots. A record has the resumption point, the await, and the
+      state of the trail. Nothing is allocated when a block starts.
+    - Each trail has its own C function. The static description of the
+      prototype has, per trail, the function, the parent, the first
+      child, the next sibling, and the level of its outermost block.
+    - The pattern of an await with a single leaf (a tag, a task, a
+      duration) lives in the record. Only composite patterns are built
+      as trees.
+    - State that few trails need is allocated on demand: the pending
+      exit of a block that waits, the filters of a `toggle on`.
+    - Only tasks and pools are nodes of the tree. A node keeps the
+      trail of its parent that spawned it.
+    - Order. Siblings in the static tree are in source order, which is
+      also the order they start in. The children of a trail are its
+      nested trails and the nodes it spawned, merged in the order they
+      started: a trail keeps how many children its task had when it
+      started, and the count is adjusted when dead children leave.
+    - The termination of a block is still an event, as in the
+      reference: `await(true)` sees it, with the result in `ret`. Since
+      the block has no identity, the event is a terminated task made up
+      for the occasion. The parent that waits for its blocks (`par
+      :all`, `toggle on`) is awakened by that event.
 - **Main chunk** is a task (it may `await`).
 - **Pools.** `tasks(n)` is a list of heap tasks with an optional limit.
     - `spawn @ts` fails with `nil` when full.
@@ -558,6 +584,19 @@ typedef AStatus (*AResume) (ATask* t, AKind k, AVal evt);
     - A task that waits is not resumed by anything else. An abort only
       turns its pending exit into an abort, so whoever aborts it from
       outside gets control back before it has ended.
+- **Exit to a running parent.** A block exits across to its parent
+  (`break`, `return`, `escape`, `throw`, the join of a `par :any`). If
+  the parent is suspended, the exit is raised at its await. If it is
+  running, it is below in the C stack, in the call that led to the
+  exit (it emitted, or it is still starting its blocks).
+    - The exit waits in the parent, which takes it when control
+      returns to it, at that call.
+    - What the current block of the parent started stops at once, as in
+      a late exit: suspended ones no longer react, and running ones
+      unwind when control returns to them. This is what aborts a
+      `watching` whose body emits its own event.
+    - Whatever else is running in between is not affected, and the emit
+      in course goes on for the others.
     - Known limit: two running tasks of the same block unwind in the
       order of the C stack, not in the reverse order of declaration.
     - Only blocks of tasks wait. In a function the case cannot occur:
@@ -828,7 +867,27 @@ Agreed after `atmos-lang/atmos@5977b07`.
 
 ### Accepted
 
-- Heap header for transparent blocks (Settled decisions, Tasks).
+- Transparent blocks as trails inside the frame of their task (Tasks),
+  after the implementation of Céu. Measured with 1000 live tasks and
+  `-O2`, minimum of 9 runs, before and after:
+
+  | Task | Bytes | Spawn | Wake | Skip | Abort |
+  |---|---|---|---|---|---|
+  | awaits forever | 426 / 298 | 265 / 180 ns | | 9 / 10 ns | 92 / 66 ns |
+  | one loop | 456 / 330 | 127 / 109 | 73 / 50 | 15 / 15 | 90 / 87 |
+  | game object (table, pub, par of 2) | 1873 / 1066 | 1218 / 757 | 124 / 88 | 42 / 33 | 680 / 341 |
+  | par of 2 loops | 1338 / 537 | 388 / 204 | 163 / 110 | 47 / 38 | 375 / 262 |
+  | par of 4 loops | 2202 / 777 | 640 / 301 | 332 / 217 | 105 / 65 | 802 / 377 |
+  | 3 spawn blocks | 1803 / 697 | 472 / 230 | 323 / 208 | 82 / 59 | 447 / 310 |
+  | 3 nested watching | 3051 / 808 | 1171 / 331 | 246 / 123 | 202 / 87 | 1452 / 473 |
+
+    - A branch costs about 120 bytes (the record and its slots), down
+      from 430.
+    - Structures: `ATask` 160 bytes (was 248), `ATrail` 72, `ANode` 64.
+- An exit of a child waits in a parent that is running (Scheduler).
+  Before, it travelled down the C stack as the status of whatever was
+  in between: a suspended block further up took it as its own, and so
+  did any task that was running in between.
 - `spawn {}` inside `func` is a compile error in v1 (Language delta).
 - `catch` only catches `throw` (Language delta).
 - Lexical `break`/`until`/`while` (Language delta).
