@@ -55,7 +55,8 @@ int a_is (AVal v, AVal x) {
         return 0;
     }
     AStr* sx = A_STR_OF(x);
-    if (!strcmp(a_typename(v), sx->s)) {
+    const char* type = a_typename(v);
+    if (type[0]==sx->s[0] && !strcmp(type,sx->s)) {
         return 1;
     }
     if (v.type == A_STR) {
