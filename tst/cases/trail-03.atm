@@ -1,0 +1,26 @@
+;; tasks die in between: the order of the remaining ones holds
+task T (id, n) {
+    loop i in n {
+        await(:E)
+        print(:task, id, i)
+    }
+}
+spawn {
+    pin a = spawn T(:a, 1)
+    spawn {
+        loop on :E { print(:block, 1) }
+    }
+    pin b = spawn T(:b, 2)
+    spawn {
+        loop on :E { print(:block, 2) }
+    }
+    pin c = spawn T(:c, 3)
+    spawn {
+        loop on :E { print(:block, 3) }
+    }
+    await(false)
+}
+loop i in 4 {
+    print(:emit, i)
+    emit(:E)
+}

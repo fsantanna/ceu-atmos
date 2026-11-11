@@ -1,0 +1,37 @@
+;; a block that starts again in a loop goes after the tasks that
+;; started in between and are still alive
+task T (id) {
+    defer { print(:dead, id) }
+    loop on :E {
+        print(:task, id)
+    }
+}
+func keep (t) { nil }
+spawn {
+    var i = 0
+    loop {
+        set i += 1
+        val j = i
+        spawn {
+            loop on :E {
+                print(:block, j)
+            }
+        }
+        keep(spawn T(j))
+        await(:next)
+        while i < 3
+    }
+    print(:done)
+    await(false)
+}
+emit(:E)
+print("--")
+emit(:next)
+emit(:E)
+print("--")
+emit(:next)
+emit(:E)
+print("--")
+emit(:next)
+emit(:E)
+print(:end)

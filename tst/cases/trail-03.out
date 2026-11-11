@@ -1,0 +1,22 @@
+emit	0
+task	a	0
+block	1
+task	b	0
+block	2
+task	c	0
+block	3
+emit	1
+block	1
+task	b	1
+block	2
+task	c	1
+block	3
+emit	2
+block	1
+block	2
+task	c	2
+block	3
+emit	3
+block	1
+block	2
+block	3

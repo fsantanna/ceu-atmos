@@ -1,0 +1,37 @@
+;; nested blocks, values of par :all and of toggle on
+spawn {
+    val a, b, c = par :all {
+        val x, y = par :all {
+            await(:A)
+            1
+        } with {
+            await(:B)
+            2
+        }
+        x + y
+    } with {
+        await(:A)
+        10
+    } with {
+        20
+    }
+    print(a, b, c)
+    val v = toggle on :T {
+        loop i in 3 {
+            await(:E)
+            print(:e, i)
+        }
+        :ok
+    }
+    print(v)
+}
+emit(:B)
+emit(:A)
+emit(:E)
+emit(:T [false])
+emit(:E)
+emit(:E)
+emit(:T [true])
+emit(:E)
+emit(:E)
+print(:end)

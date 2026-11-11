@@ -578,6 +578,7 @@ AStatus a_call (AVal f, int base);
 ///////////////////////////////////////////////////////////////////////////////
 
 struct ATask;
+struct ATrail;
 typedef struct APatt APatt;
 
 // Why a task is resumed:
@@ -591,18 +592,39 @@ typedef enum {
     R_START, R_EVENT, R_EXIT, R_ABORT, R_LATE
 } AKind;
 
-// Generated: runs a task from its resumption point until it awaits
+// A trail is a line of execution of a task: its body, or a transparent
+// block nested in it (a branch of a `par`, a `spawn {...}`, the block
+// of a `toggle on`). A transparent block has no identity: it shares
+// the frame of its task, and its state lives inside that frame. The
+// trails of a prototype are known at compile time, and so is their
+// tree: a block that spawns another is its parent.
+
+// Generated: runs a trail from its resumption point until it awaits
 // (A_AWAIT) or terminates (any other status).
-typedef AStatus (*AResume) (struct ATask* t, AKind k);
+typedef AStatus (*AResume) (struct ATask* t, struct ATrail* tr, AKind k);
+
+// Static description of a trail.
+typedef struct ATrailD {
+    AResume resume;
+    // tree of trails: parent, first child, and next sibling (-1 for
+    // none). Siblings are in source order.
+    int16_t up;
+    int16_t kid;
+    int16_t next;
+    // nesting level of its outermost block: 0 for the body of the task
+    int16_t level;
+} ATrailD;
 
 // Static description of a task prototype.
 typedef struct AProto {
-    AResume resume;
     // slots of the frame; parameters take the first ones, then a
     // table with the extra arguments, if variadic
     int nslots;
     int npar;
     int dots;
+    // trails: the first one is the body
+    int ntrails;
+    const ATrailD* trails;
 } AProto;
 
 // New task prototype with `ncap` empty captures (owned).
@@ -628,68 +650,101 @@ typedef struct ANode {
     uint8_t toggled;
     struct APatt** filt;
     int    nfilt;
-    // tag of the events that toggle the node automatically
-    AVal   tog;
+    // trail of the parent task that spawned the node
+    uint16_t trail;
 } ANode;
 
 typedef enum {
     T_RUNNING, T_SUSPENDED, T_DONE
 } TStatus;
 
-// Task instance. The frame is freed at termination; the header lives
-// while referenced, so `await t` and `t.pub` keep working.
-// Frame of a task, shared with its transparent blocks. It is freed
-// when the last of them terminates: a block that is aborted while
-// running only unwinds when control returns to it.
+typedef enum {
+    TR_OFF, TR_RUNNING, TR_SUSPENDED
+} TRStatus;
+
+// State of a trail that few trails need, allocated on demand.
+typedef struct ATrailX {
+    // pending exit of a block that waits: status, payload, and values
+    // on the stack
+    AStatus  wst;
+    APay     wpay;
+    AVal*    wstk;
+    int      wn;
+    // the trail that waits for this one to end
+    struct ATrail* waiter;
+    // `toggle on`: tag of the events that toggle the trail, and the
+    // filters that pass while it is off
+    AVal     tog;
+    struct APatt** filt;
+    int      nfilt;
+} ATrailX;
+
+typedef struct ATrail {
+    // the await in course
+    struct APatt* awt;
+    ATrailX* x;
+    // emit counter when the current await was established
+    uint32_t time;
+    // number of children of the task when the trail started: places
+    // the trail among the tasks and pools that its parent spawned
+    uint32_t rank;
+    int32_t  pc;
+    // depth of the block of the current await
+    int32_t  adepth;
+    // upper bound of `mindepth` among the tasks it spawned
+    int32_t  conf;
+    // tasks and pools it spawned that are still children of the task
+    uint32_t nkids;
+    // position among the trails of the task
+    uint16_t idx;
+    uint8_t  status;
+    // abort requested while running: unwinds when control returns
+    // (1: requested, 2: unwinding)
+    uint8_t  aborted;
+    // suspended in the exit of a block, until a task of the block that
+    // is running below in the C stack unwinds
+    uint8_t  waiting;
+    // its block is being left, but waits before aborting it: emits
+    // skip the trail meanwhile
+    uint8_t  doomed;
+    // toggled off: emits skip the trail, unless a filter matches
+    uint8_t  toggled;
+} ATrail;
+
+// Frame of a task: its trails, then its slots. It is freed when the
+// task terminates.
 typedef struct AFrame {
-    int  rc;
-    int  n;
-    AVal L[];
+    struct ATask* task;
+    int    n;
+    int    nt;
+    ATrail trs[];
 } AFrame;
 
+// Task instance. The frame is freed at termination; the header lives
+// while referenced, so `await t` and `t.pub` keep working.
 typedef struct ATask {
     ANode    node;
     const AProto* desc;
     AFunc*   proto;
     AFrame*  frame;
     AVal*    L;
-    int      pc;
+    // trails of the frame (NULL after termination)
+    ATrail*  trs;
+    // of the body
     uint8_t  status;
-    // transparent: no identity, owned by its enclosing task
-    uint8_t  tra;
-    // abort requested while running: unwinds when control returns
-    // (1: requested, 2: unwinding)
-    uint8_t  aborted;
-    // suspended in the exit of a block, until a task of the block that
-    // is running below in the C stack unwinds. Meanwhile it keeps the
-    // pending exit: status, payload, and values on the stack.
-    uint8_t  waiting;
-    AStatus  wst;
-    APay     wpay;
-    AVal*    wstk;
-    int      wn;
-    // the task that waits for this one to end
-    struct ATask* waiter;
-    // exit delivered by a child
-    AStatus  exit;
-    // emit counter when the current await was established
-    uint32_t time;
-    // depth of the body block, and of the block of the current await
+    // depth of the body block
     int      depth;
-    int      adepth;
-    // depth of the outermost block: the same as `depth`, except for a
-    // transparent block, which is nested somewhere in its owner
-    int      bdepth;
     // depth of the deepest pinned argument: the task cannot leave it
     int      mindepth;
-    // upper bound of `mindepth` among the tasks it spawned
-    int      conf;
-    struct APatt* awt;
     AVal     pub;
     AVal     ret;
     // pool it was spawned in, for identification only
     struct ATasks* pool;
 } ATask;
+
+// The task of a trail.
+#define A_TRAIL_TASK(tr)                                            \
+    (((AFrame*)((char*)((tr) - (tr)->idx) - offsetof(AFrame,trs)))->task)
 
 // Pool of tasks, with an optional limit (-1 for none).
 typedef struct ATasks {
@@ -700,16 +755,31 @@ typedef struct ATasks {
 #define A_TASK_OF(v)  ((ATask*)(v).u.o)
 #define A_TASKS_OF(v) ((ATasks*)(v).u.o)
 
-// Innermost running task (NULL outside the program).
-extern struct ATask* a_cur;
+// Innermost running task (NULL outside the program), and its trail
+// that is running.
+extern struct ATask*  a_cur;
+extern struct ATrail* a_trl;
+
+// The running trail was aborted by what it just did: it must unwind.
+AStatus a_chk_aborted (AStatus st);
 
 // spawn T(...): arguments at `[base,a_top)`. The pool is nil for none;
 // a full pool gives nil.
 AStatus a_spawn (AVal* dst, AVal proto, AVal pool, int base);
 
-// spawn {...}: a transparent task that shares the frame and the
-// captures of its owner.
-AStatus a_spawn_tra (AVal* dst, struct ATask* owner, const AProto* p);
+// spawn {...}, a branch of a par: starts trail `i` of the task, a
+// transparent block.
+AStatus a_trail_spawn (struct ATask* t, int i);
+
+// End of the block that started trail `i`, if it is still active: it
+// is aborted. As `a_pin_end`, the trail `me` that executes the block
+// may have to wait: `a_trail_doom` is then its `a_pin_doom`.
+int  a_trail_end (struct ATrail* me, int i, AStatus* st, int base);
+void a_trail_doom (struct ATask* t, int i);
+
+// toggle on :T with P, ... {...}: events `:T [false]` and `:T [true]`
+// toggle trail `i` from now on. Takes over the filters.
+void a_trail_toggle (struct ATask* t, int i, AVal tag, APatt** fs, int n);
 
 // Identity of the `par :any` whose branch raised the pending A_JOIN.
 extern void* a_join_key;
@@ -729,10 +799,6 @@ AVal a_tasks_tab (AVal ts);
 
 // toggle t(on) with P, ...: takes over the `n` filters.
 AStatus a_toggle (AVal t, AVal on, APatt** fs, int n);
-
-// toggle on :T with P, ... {...}: events `:T [false]` and `:T [true]`
-// toggle the task from now on. Takes over the filters.
-void a_toggle_auto (AVal t, AVal tag, APatt** fs, int n);
 
 // abort(t)
 AStatus a_abort (AVal v);
@@ -761,13 +827,16 @@ APatt* a_pt_not (APatt* a);
 // p && q  /  p || q
 APatt* a_pt_bin (int and, APatt* a, APatt* b);
 
+// Termination of the `n` trails from `lo` on, of the running task.
+APatt* a_pt_trails (int lo, int n);
+
 // Establishes an await, taking over the pattern. Returns A_OK if it
 // is satisfied at once (results in the payload), or A_AWAIT if the
-// task must suspend.
-AStatus a_await (struct ATask* t, APatt* p);
+// trail must suspend.
+AStatus a_await (struct ATrail* tr, APatt* p);
 
-// Status a task continues with after it is resumed at an await.
-AStatus a_resumed (struct ATask* t, AKind k);
+// Status a trail continues with after it is resumed at an await.
+AStatus a_resumed (struct ATrail* tr, AKind k);
 
 // The running task with an identity (owned), or nil.
 AVal a_me (void);
@@ -798,21 +867,21 @@ static inline AStatus a_chk (AVal v) {
 // the C stack, in the call that led to this exit, and only unwinds
 // when control returns to it. The block must not go on before that,
 // or its remaining defers would run before those of the task. So the
-// task `me`, which executes the block, saves the pending exit `*st`
+// trail `me`, which executes the block, saves the pending exit `*st`
 // with the values on the stack from `base` on, and the function
 // returns 1: `me` must suspend, and call `a_pin_end` again when it is
 // resumed. A block of a function (`me` is NULL) never waits.
-int a_pin_end (ATask* me, AVal* slot, AStatus* st, int base);
+int a_pin_end (ATrail* me, AVal* slot, AStatus* st, int base);
 
-// The task was resumed after the wait: restores the pending exit.
-AStatus a_pin_resumed (ATask* t);
+// The trail was resumed after the wait: restores the pending exit.
+AStatus a_pin_resumed (ATrail* tr);
 
-// End of the outermost block of a task: aborts the tasks and pools it
+// End of the outermost block of a trail: aborts the tasks and pools it
 // spawned that nobody pinned. They belong to no block, so they end
-// here, after all the finalizers of the task. It waits like
+// here, after all the finalizers of the trail. It waits like
 // `a_pin_end`, and `a_orph_doom` is its `a_pin_doom`.
-int  a_orph_end (ATask* me, AStatus* st, int base);
-void a_orph_doom (ATask* me);
+int  a_orph_end (ATrail* me, AStatus* st, int base);
+void a_orph_doom (ATrail* me);
 
 // The block of the pin waits before it gets to abort this value. From
 // the moment the block is left, its tasks execute nothing but their

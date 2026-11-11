@@ -353,9 +353,7 @@ AStatus a_call (AVal f, int base) {
     a_dec(f);
 
     // the call aborted the running task: it unwinds
-    if (st==A_OK && a_cur!=NULL && a_cur->aborted) {
-        st = A_ABORT;
-    }
+    st = a_chk_aborted(st);
 
     if (st != A_OK) {
         if (st == A_ERROR) {

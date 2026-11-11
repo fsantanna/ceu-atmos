@@ -1,0 +1,26 @@
+;; a branch aborts the par from the inside, with tasks in the branches
+task T (id) {
+    defer { print(:dead, id) }
+    await(false)
+}
+spawn {
+    defer { print(:outer) }
+    watching :stop {
+        defer { print(:w1) }
+        spawn T(1)
+        par {
+            defer { print(:p1) }
+            spawn T(2)
+            await(:go)
+            emit(:stop)
+            print(:no)
+        } with {
+            defer { print(:p2) }
+            pin t = spawn T(3)
+            await(false)
+        }
+    }
+    print(:after)
+}
+emit(:go)
+print(:end)

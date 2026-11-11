@@ -1,0 +1,20 @@
+block	1
+task	1
+--
+task	1
+block	2
+task	2
+--
+task	1
+task	2
+block	3
+task	3
+--
+done
+task	1
+task	2
+task	3
+end
+dead	1
+dead	2
+dead	3

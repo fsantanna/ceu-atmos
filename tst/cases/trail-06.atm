@@ -1,0 +1,32 @@
+;; many blocks of many tasks, started and aborted repeatedly
+task T (id) {
+    var n = 0
+    watching :kill {
+        par {
+            loop on :E { set n += 1 }
+        } with {
+            loop on :E { set n += 10 }
+        } with {
+            watching :half {
+                loop on :E { set n += 100 }
+            }
+            await(false)
+        }
+    }
+    n
+}
+pin ts = tasks()
+loop r in 3 {
+    loop i in 5 {
+        spawn @ts T(i)
+    }
+    emit(:E)
+    emit(:half)
+    emit(:E)
+    spawn {
+        val v = await :any ts
+        print(:first, v)
+    }
+    emit(:kill)
+    print(:round, r, #ts)
+}

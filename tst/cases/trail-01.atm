@@ -1,0 +1,27 @@
+;; children of a trail react in the order they started: tasks and
+;; transparent blocks alike
+task T (id) {
+    await(:E)
+    print(:task, id)
+}
+spawn T(1)
+spawn {
+    await(:E)
+    print(:block, 2)
+}
+spawn T(3)
+par {
+    await(:E)
+    print(:par, 4)
+} with {
+    spawn T(5)
+    spawn {
+        await(:E)
+        print(:block, 6)
+    }
+    await(:E)
+    print(:par, 7)
+} with {
+    emit(:E)
+    print(:end)
+}

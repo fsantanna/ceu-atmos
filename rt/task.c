@@ -6,8 +6,9 @@
 
 #include "atmos.h"
 
-ATask* a_cur = NULL;
-void*  a_join_key = NULL;
+ATask*  a_cur = NULL;
+ATrail* a_trl = NULL;
+void*   a_join_key = NULL;
 
 // Root of the task tree.
 static ATasks ROOT;
@@ -27,21 +28,27 @@ static ATask* MAIN = NULL;
 static int    ARGC = 0;
 static char** ARGV = NULL;
 
-static AStatus node_abort (ANode* n);
-static AStatus task_resume (ATask* t, AKind k);
-static void    wait_set (ATask* t, AStatus st);
-static AStatus emit_top   (ANode* n, AVal evt);
-static AStatus emit_self  (ANode* n, uint32_t time, AVal evt);
+// Exit that a child delivers to a trail resumed with R_EXIT.
+static AStatus EXIT = A_OK;
 
-// The running task was aborted by what it just did. It is told only
+static AStatus node_abort (ANode* n);
+static AStatus trail_abort (ATask* t, ATrail* tr);
+static AStatus trail_resume (ATask* t, ATrail* tr, AKind k);
+static void    wait_set (ATrail* tr, AStatus st);
+static AStatus emit_top   (ANode* n, AVal evt);
+static AStatus emit_trail (ATask* t, ATrail* tr, uint32_t time, AVal evt);
+
+// The running trail was aborted by what it just did. It is told only
 // once: from then on it unwinds, and its defers execute normally.
-static AStatus chk_aborted (AStatus st) {
-    if (st==A_OK && a_cur!=NULL && a_cur->aborted==1) {
-        a_cur->aborted = 2;
+AStatus a_chk_aborted (AStatus st) {
+    if (st==A_OK && a_trl!=NULL && a_trl->aborted==1) {
+        a_trl->aborted = 2;
         return A_ABORT;
     }
     return st;
 }
+
+#define chk_aborted a_chk_aborted
 
 ///////////////////////////////////////////////////////////////////////////////
 // PATTERNS
@@ -65,7 +72,9 @@ typedef enum {
     // :any ts / :all ts
     PK_ANY, PK_ALL,
     // duration / any clock tick
-    PK_CLK, PK_TICK
+    PK_CLK, PK_TICK,
+    // termination of trails `da` to `da+db-1` of the awaiting task
+    PK_TRAILS
 } PKind;
 
 struct APatt {
@@ -134,6 +143,13 @@ APatt* a_pt_bin (int and, APatt* a, APatt* b) {
     APatt* p = patt_new(and ? PK_AND : PK_OR);
     p->a = a;
     p->b = b;
+    return p;
+}
+
+APatt* a_pt_trails (int lo, int n) {
+    APatt* p = patt_new(PK_TRAILS);
+    p->da = lo;
+    p->db = n;
     return p;
 }
 
@@ -220,6 +236,16 @@ static AStatus patt_pred (APatt* p, int* done) {
 }
 
 static AStatus patt_start (APatt* p, int* done);
+
+// The `n` trails of a task from `lo` on have all terminated.
+static int trails_off (ATask* t, int lo, int n) {
+    for (int i=lo; i<lo+n; i++) {
+        if (t->trs[i].status != TR_OFF) {
+            return 0;
+        }
+    }
+    return 1;
+}
 
 // A timer expires with how late it is, or reports the time it still
 // needs.
@@ -365,6 +391,13 @@ static AStatus patt_start (APatt* p, int* done) {
             }
             break;
 
+        case PK_TRAILS:
+            *done = trails_off(a_cur, p->da, p->db);
+            if (*done) {
+                a_pay_clear();
+            }
+            break;
+
         default:
             break;
     }
@@ -466,6 +499,16 @@ static AStatus patt_match (APatt* p, AVal evt, int* done) {
             }
             return A_OK;
 
+        case PK_TRAILS:
+            // a trail of the task terminated (and it was the last one)
+            if (evt.type==A_XTASK && A_TASK_OF(evt)->desc==NULL &&
+                trails_off(a_cur,p->da,p->db))
+            {
+                a_pay_clear();
+                *done = 1;
+            }
+            return A_OK;
+
         case PK_ANY:
         case PK_ALL:
             // a task of the pool terminated (and it was the last one)
@@ -491,13 +534,21 @@ static AStatus patt_match (APatt* p, AVal evt, int* done) {
 // TREE
 ///////////////////////////////////////////////////////////////////////////////
 
+// The tree has tasks and pools as nodes. A task keeps its children in
+// spawn order, each with the trail that spawned it. The trails of a
+// task form a static tree of their own, with siblings in source order,
+// which is also the order they start in. The children of a trail are
+// then its nested trails and the nodes it spawned, merged in the order
+// they started: a trail keeps how many children the task had by then.
+
 static void node_init (ANode* n, AType type) {
     memset(n, 0, sizeof(ANode));
     n->hdr.rc   = 1;
     n->hdr.type = type;
 }
 
-// Appends a child, taking over one reference.
+// Appends a child, spawned by the running trail if the parent is the
+// running task. Takes over one reference.
 static void node_add (ANode* up, ANode* n) {
     if (up->ndns == up->cdns) {
         up->cdns = (up->cdns == 0) ? 4 : up->cdns*2;
@@ -505,14 +556,30 @@ static void node_add (ANode* up, ANode* n) {
     }
     up->dns[up->ndns++] = n;
     n->up = up;
+    if (up == (ANode*)a_cur) {
+        n->trail = a_trl->idx;
+        a_trl->nkids++;
+    }
 }
 
 // Removes the dead children, releasing them.
 static void node_sweep (ANode* n) {
+    ATrail* trs = (n->hdr.type == A_XTASK) ? ((ATask*)n)->trs : NULL;
+    int nt = (trs != NULL) ? ((ATask*)n)->desc->ntrails : 0;
     int k = 0;
     for (int i=0; i<n->ndns; i++) {
         ANode* dn = n->dns[i];
         if (dn->dead) {
+            if (trs != NULL) {
+                trs[dn->trail].nkids--;
+                // the trails that started after it move back along
+                // with the children that did
+                for (int j=1; j<nt; j++) {
+                    if (trs[j].rank > (uint32_t)k) {
+                        trs[j].rank--;
+                    }
+                }
+            }
             dn->up = NULL;
             a_dec(a_obj(&dn->hdr));
         } else {
@@ -542,17 +609,6 @@ static void node_trav (ANode* n, int inc) {
     }
 }
 
-// Releases the frame of a task that terminated.
-static void frame_dec (ATask* t) {
-    AFrame* f = t->frame;
-    t->frame = NULL;
-    t->L = NULL;
-    if (f!=NULL && --f->rc==0) {
-        a_clrs(f->L, f->n);
-        free(f);
-    }
-}
-
 // Releases the toggle state of a node.
 static void node_untoggle (ANode* n) {
     for (int i=0; i<n->nfilt; i++) {
@@ -564,13 +620,61 @@ static void node_untoggle (ANode* n) {
     n->toggled = 0;
 }
 
+static ATrailX* trail_x (ATrail* tr) {
+    if (tr->x == NULL) {
+        tr->x = calloc(1, sizeof(ATrailX));
+    }
+    return tr->x;
+}
+
+// Releases the state of a trail, which becomes inactive.
+static void trail_off (ATrail* tr) {
+    patt_free(tr->awt);
+    tr->awt = NULL;
+    ATrailX* x = tr->x;
+    if (x != NULL) {
+        tr->x = NULL;
+        for (int i=0; i<x->nfilt; i++) {
+            patt_free(x->filt[i]);
+        }
+        free(x->filt);
+        a_dec(x->tog);
+        a_pay_drop(&x->wpay);
+        for (int i=0; i<x->wn; i++) {
+            a_dec(x->wstk[i]);
+        }
+        free(x->wstk);
+        free(x);
+    }
+    tr->status  = TR_OFF;
+    tr->aborted = 0;
+    tr->waiting = 0;
+    tr->doomed  = 0;
+    tr->toggled = 0;
+}
+
+// Releases the frame of a task that terminated.
+static void frame_free (ATask* t) {
+    AFrame* f = t->frame;
+    if (f == NULL) {
+        return;
+    }
+    AVal* L = t->L;
+    t->frame = NULL;
+    t->L     = NULL;
+    t->trs   = NULL;
+    for (int i=0; i<f->nt; i++) {
+        trail_off(&f->trs[i]);
+    }
+    a_clrs(L, f->n);
+    free(f);
+}
+
 void a_node_free (ANode* n) {
     node_untoggle(n);
-    a_dec(n->tog);
     if (n->hdr.type == A_XTASK) {
         ATask* t = (ATask*) n;
-        patt_free(t->awt);
-        frame_dec(t);
+        frame_free(t);
         if (t->proto != NULL) {
             a_dec(a_obj(&t->proto->hdr));
         }
@@ -580,24 +684,10 @@ void a_node_free (ANode* n) {
     free(n->dns);
 }
 
-// The enclosing task with an identity (transparent tasks and pools
-// are skipped), or NULL.
-static ATask* task_of (ANode* n) {
-    while (n != NULL) {
-        if (n->hdr.type==A_XTASK && !((ATask*)n)->tra) {
-            return (ATask*) n;
-        }
-        n = n->up;
-    }
-    return NULL;
-}
-
 // Depth of the block that a task or pool is attached to: its pin
 // block, or the block of the spawn while it is not pinned.
 static int node_adepth (ANode* n) {
-    if (n->hdr.type==A_XTASK && ((ATask*)n)->tra) {
-        return ((ATask*)n)->bdepth - 1;
-    } else if (n->hdr.type==A_XTASK && ((ATask*)n)->pool!=NULL) {
+    if (n->hdr.type==A_XTASK && ((ATask*)n)->pool!=NULL) {
         // a task in a pool follows the pin of the pool
         return node_adepth(&((ATask*)n)->pool->node);
     } else if (n->hdr.pinned) {
@@ -619,87 +709,185 @@ static int is_up (ANode* n) {
     return 0;
 }
 
+// Iteration over the children of a trail, in the order they started.
+// The task must be under traversal meanwhile, so that its children
+// keep their positions. Children that start meanwhile may or may not
+// be visited.
+typedef struct KIt {
+    ATask* t;
+    int    up;
+    int    cnt;
+    int    k;
+    int    j;
+} KIt;
+
+static void kit_init (KIt* it, ATask* t, ATrail* tr) {
+    it->t   = t;
+    it->up  = tr->idx;
+    it->cnt = t->node.ndns;
+    it->k   = (tr->nkids > 0) ? 0 : it->cnt;
+    it->j   = t->desc->trails[tr->idx].kid;
+}
+
+// Next child: 1 for a trail, 2 for a node, 0 at the end.
+static int kit_next (KIt* it, ATrail** tr, ANode** n) {
+    ATask* t = it->t;
+    if (t->trs == NULL) {
+        // the task terminated meanwhile
+        return 0;
+    }
+    while (it->k<it->cnt && t->node.dns[it->k]->trail!=it->up) {
+        it->k++;
+    }
+    while (it->j>=0 && t->trs[it->j].status==TR_OFF) {
+        it->j = t->desc->trails[it->j].next;
+    }
+    int hk = (it->k < it->cnt);
+    if (it->j>=0 && (!hk || t->trs[it->j].rank<=(uint32_t)it->k)) {
+        *tr = &t->trs[it->j];
+        it->j = t->desc->trails[it->j].next;
+        return 1;
+    }
+    if (hk) {
+        *n = t->node.dns[it->k++];
+        return 2;
+    }
+    return 0;
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // RESUME
 ///////////////////////////////////////////////////////////////////////////////
 
-// The task terminated with `st`. Returns the status its resumer
-// continues with.
-static AStatus task_end (ATask* t, AStatus st) {
-    t->status = T_DONE;
-    patt_free(t->awt);
-    t->awt = NULL;
+// Termination of a transparent block: as for a task, it is an emit of
+// a task to the subtree of its task. The block has no identity, so the
+// event is a terminated task made up for the occasion, with the result
+// of the block.
+static AStatus trail_emit (ATask* t, AVal ret) {
+    ATask* x = calloc(1, sizeof(ATask));
+    node_init(&x->node, A_XTASK);
+    x->node.dead = 1;
+    x->status = T_DONE;
+    x->ret    = ret;
+    AStatus st = emit_top(&t->node, a_obj(&x->node.hdr));
+    a_dec(a_obj(&x->node.hdr));
+    return st;
+}
 
-    // its blocks already aborted the children: these are leftovers,
+// The trail terminated with `st`. Returns the status its resumer
+// continues with.
+static AStatus trail_end (ATask* t, ATrail* tr, AStatus st) {
+    // the result of a transparent block arrives in the payload
+    AVal ret = a_nil();
+    if (tr->idx>0 && st==A_OK) {
+        a_pay_take(&ret, 0);
+        a_pay_clear();
+    }
+    patt_free(tr->awt);
+    tr->awt = NULL;
+
+    // its blocks already ended what it started: these are leftovers,
     // such as a pool that was never pinned
     node_trav(&t->node, 1);
-    for (int i=0; i<t->node.ndns; i++) {
-        ANode* dn = t->node.dns[i];
-        node_abort(dn);
-        if (dn->hdr.type==A_TASKS && !dn->dead) {
-            node_died(dn);
+    KIt it;
+    kit_init(&it, t, tr);
+    ATrail* c = NULL;
+    ANode*  n = NULL;
+    int kind;
+    while ((kind = kit_next(&it,&c,&n)) != 0) {
+        if (kind == 1) {
+            trail_abort(t, c);
+        } else {
+            node_abort(n);
+            if (n->hdr.type==A_TASKS && !n->dead) {
+                node_died(n);
+            }
         }
     }
     node_trav(&t->node, -1);
 
-    // the frame goes with the last task that shares it; the header
-    // stays
-    frame_dec(t);
-    a_dec(a_obj(&t->proto->hdr));
-    t->proto = NULL;
+    ATrail* w = (tr->x != NULL) ? tr->x->waiter : NULL;
+    int idx = tr->idx;
+    trail_off(tr);
 
-    // owner: the enclosing task with an identity (beyond its pool)
-    ANode* up = t->node.up;
-    if (up!=NULL && up->hdr.type==A_TASKS) {
-        up = up->up;
+    if (idx > 0) {
+        // a transparent block
+        switch (st) {
+            case A_OK:
+                st = trail_emit(t, ret);
+                break;
+            case A_ABORT:
+                st = A_OK;
+                break;
+            default:
+                break;
+        }
+    } else {
+        // the task itself: the frame goes, the header stays
+        t->status = T_DONE;
+        frame_free(t);
+        a_dec(a_obj(&t->proto->hdr));
+        t->proto = NULL;
+
+        // owner: the enclosing task (beyond its pool)
+        ANode* own = t->node.up;
+        if (own!=NULL && own->hdr.type==A_TASKS) {
+            own = own->up;
+        }
+        node_died(&t->node);
+
+        switch (st) {
+            case A_OK:
+                // termination is an emit of the task itself to the
+                // subtree of its owner
+                st = emit_top((own != NULL) ? own : &ROOT.node,
+                    a_obj(&t->node.hdr));
+                break;
+            case A_ABORT:
+                st = A_OK;
+                break;
+            default:
+                break;
+        }
     }
-    ATask* owner = task_of(up);
-    node_died(&t->node);
 
-    switch (st) {
-        case A_OK:
-            // termination is an emit of the task itself to the
-            // subtree of its owner
-            st = emit_top((owner != NULL) ? &owner->node : &ROOT.node,
-                a_obj(&t->node.hdr));
-            break;
-        case A_ABORT:
-            st = A_OK;
-            break;
-        default:
-            break;
-    }
-
-    // a block waited for this task to go on with its exit: an exit of
-    // the task replaces the pending one, as if it had ended in time
-    ATask* w = t->waiter;
+    // a block waited for this trail to go on with its exit: an exit of
+    // the trail replaces the pending one, as if it had ended in time
     if (w != NULL) {
-        t->waiter = NULL;
         if (st != A_OK) {
             wait_set(w, st);
         }
-        st = task_resume(w, R_LATE);
+        st = trail_resume(A_TRAIL_TASK(w), w, R_LATE);
     }
     return st;
 }
 
-static AStatus task_resume (ATask* t, AKind k) {
-    ATask* prev = a_cur;
+static AStatus trail_resume (ATask* t, ATrail* tr, AKind k) {
+    ATask*  ptask  = a_cur;
+    ATrail* ptrail = a_trl;
     AVal me = a_obj(&t->node.hdr);
     a_inc(me);
     a_cur = t;
-    t->status = T_RUNNING;
+    a_trl = tr;
+    tr->status = TR_RUNNING;
+    if (tr->idx == 0) {
+        t->status = T_RUNNING;
+    }
     int lin   = a_lin;
     int depth = a_depth;
-    AStatus st = t->desc->resume(t, k);
+    AStatus st = t->desc->trails[tr->idx].resume(t, tr, k);
     a_lin   = lin;
     a_depth = depth;
-    a_cur = prev;
+    a_cur = ptask;
+    a_trl = ptrail;
     if (st == A_AWAIT) {
-        t->status = T_SUSPENDED;
+        tr->status = TR_SUSPENDED;
+        if (tr->idx == 0) {
+            t->status = T_SUSPENDED;
+        }
         st = A_OK;
     } else {
-        st = task_end(t, st);
+        st = trail_end(t, tr, st);
     }
     a_dec(me);
     return st;
@@ -709,51 +897,81 @@ static AStatus task_resume (ATask* t, AKind k) {
 // ABORT
 ///////////////////////////////////////////////////////////////////////////////
 
-// Replaces the exit that a waiting task keeps: the payload becomes
+// Replaces the exit that a waiting trail keeps: the payload becomes
 // the current one.
-static void wait_set (ATask* t, AStatus st) {
-    a_pay_drop(&t->wpay);
-    for (int i=0; i<t->wn; i++) {
-        a_dec(t->wstk[i]);
+static void wait_set (ATrail* tr, AStatus st) {
+    ATrailX* x = trail_x(tr);
+    a_pay_drop(&x->wpay);
+    for (int i=0; i<x->wn; i++) {
+        a_dec(x->wstk[i]);
     }
-    free(t->wstk);
-    t->wstk = NULL;
-    t->wn   = 0;
-    a_pay_save(&t->wpay);
-    t->wst = st;
+    free(x->wstk);
+    x->wstk = NULL;
+    x->wn   = 0;
+    a_pay_save(&x->wpay);
+    x->wst = st;
 }
 
-// Children first, in spawn order, then the task itself: a suspended
-// task unwinds now; a running one, when control returns to it.
+// Children first, in the order they started, then the trail itself: a
+// suspended trail unwinds now; a running one, when control returns to
+// it.
+static AStatus trail_abort (ATask* t, ATrail* tr) {
+    if (tr->status == TR_OFF) {
+        return A_OK;
+    }
+    AStatus st = A_OK;
+    node_trav(&t->node, 1);
+    KIt it;
+    kit_init(&it, t, tr);
+    ATrail* c = NULL;
+    ANode*  n = NULL;
+    int kind;
+    while (st==A_OK && (kind = kit_next(&it,&c,&n))!=0) {
+        st = (kind == 1) ? trail_abort(t, c) : node_abort(n);
+    }
+    node_trav(&t->node, -1);
+    if (t->trs==NULL || tr->status==TR_OFF) {
+        return st;
+    }
+
+    if (tr->waiting) {
+        // already leaving a block: goes on as an abort
+        if (tr->x->wst != A_ABORT) {
+            wait_set(tr, A_ABORT);
+        }
+    } else if (tr->status == TR_SUSPENDED) {
+        AStatus st2 = trail_resume(t, tr, R_ABORT);
+        if (st == A_OK) {
+            st = st2;
+        }
+    } else if (tr->status==TR_RUNNING && !tr->aborted) {
+        // unwinds when control returns to it
+        tr->aborted = 1;
+    }
+    return st;
+}
+
 static AStatus node_abort (ANode* n) {
     if (n->dead) {
         return A_OK;
     }
     AStatus st = A_OK;
-    node_trav(n, 1);
-    int cnt = n->ndns;
-    for (int i=0; i<cnt && st==A_OK; i++) {
-        st = node_abort(n->dns[i]);
-    }
-    node_trav(n, -1);
-
+    AVal me = a_obj(&n->hdr);
+    a_inc(me);
     if (n->hdr.type == A_XTASK) {
         ATask* t = (ATask*) n;
-        if (t->waiting) {
-            // already leaving a block: goes on as an abort
-            if (t->wst != A_ABORT) {
-                wait_set(t, A_ABORT);
-            }
-        } else if (t->status == T_SUSPENDED) {
-            AStatus st2 = task_resume(t, R_ABORT);
-            if (st == A_OK) {
-                st = st2;
-            }
-        } else if (t->status==T_RUNNING && !t->aborted) {
-            // unwinds when control returns to it
-            t->aborted = 1;
+        if (t->trs != NULL) {
+            st = trail_abort(t, &t->trs[0]);
         }
+    } else {
+        node_trav(n, 1);
+        int cnt = n->ndns;
+        for (int i=0; i<cnt && st==A_OK; i++) {
+            st = node_abort(n->dns[i]);
+        }
+        node_trav(n, -1);
     }
+    a_dec(me);
     return st;
 }
 
@@ -770,37 +988,29 @@ AStatus a_abort (AVal v) {
 
 static AStatus emit_node (ANode* n, uint32_t time, AVal evt);
 
-// Starts the filters of a node that was toggled off.
-static AStatus toggle_off (ANode* n) {
-    n->toggled = 1;
+// Starts the filters of a node or trail that was toggled off.
+static AStatus filt_start (APatt** fs, int n) {
     AStatus st = A_OK;
-    for (int i=0; i<n->nfilt && st==A_OK; i++) {
+    for (int i=0; i<n && st==A_OK; i++) {
         int done = 0;
-        st = patt_start(n->filt[i], &done);
+        st = patt_start(fs[i], &done);
         a_pay_clear();
     }
     return st;
 }
 
-// A node toggled on receives a zero tick, which awakes `await(true)`
-// and lets its timers report again.
-static AStatus toggle_on (ANode* n) {
-    n->toggled = 0;
-    return emit_node(n, ++TIME, a_int(0));
-}
-
-// A toggled-off node only reacts to events that match a filter,
+// What is toggled off only reacts to events that match a filter,
 // which then starts again.
-static AStatus toggle_pass (ANode* n, AVal evt, int* pass) {
+static AStatus filt_pass (APatt** fs, int n, AVal evt, int* pass) {
     AStatus st = A_OK;
     *pass = 0;
-    for (int i=0; i<n->nfilt && st==A_OK; i++) {
+    for (int i=0; i<n && st==A_OK; i++) {
         int done = 0;
-        st = patt_match(n->filt[i], evt, &done);
+        st = patt_match(fs[i], evt, &done);
         if (st==A_OK && done) {
             *pass = 1;
-            patt_stop(n->filt[i]);
-            st = patt_start(n->filt[i], &done);
+            patt_stop(fs[i]);
+            st = patt_start(fs[i], &done);
         }
         a_pay_clear();
     }
@@ -808,23 +1018,106 @@ static AStatus toggle_pass (ANode* n, AVal evt, int* pass) {
 }
 
 // The event is `:T [b]` for the tag of an automatic toggle.
-static int toggle_evt (ANode* n, AVal evt, int* on) {
-    if (n->tog.type==A_NIL || evt.type!=A_TAB) {
+static int toggle_evt (AVal tog, AVal evt, int* on) {
+    if (tog.type==A_NIL || evt.type!=A_TAB) {
         return 0;
     }
     AVal k = a_strz("tag");
     AVal tag = a_tab_get(A_TAB_OF(evt), k);
     a_dec(k);
     AVal b = a_tab_get(A_TAB_OF(evt), a_int(0));
-    if (b.type!=A_BOOL || !a_gte(n->tog, tag)) {
+    if (b.type!=A_BOOL || !a_gte(tog, tag)) {
         return 0;
     }
     *on = b.u.b;
     return 1;
 }
 
-// Traverses a subtree: the children in order, then the node itself at
-// its await.
+// Traverses the subtree of a trail: its children in order, then the
+// trail itself at its await.
+static AStatus emit_self (ATask* t, ATrail* tr, uint32_t time, AVal evt) {
+    AStatus st = A_OK;
+    node_trav(&t->node, 1);
+    KIt it;
+    kit_init(&it, t, tr);
+    ATrail* c = NULL;
+    ANode*  n = NULL;
+    int kind;
+    while (st==A_OK && (kind = kit_next(&it,&c,&n))!=0) {
+        st = (kind == 1) ? emit_trail(t, c, time, evt)
+                         : emit_node(n, time, evt);
+    }
+    node_trav(&t->node, -1);
+    if (t->trs == NULL) {
+        return st;
+    }
+
+    if (st != A_OK) {
+        // a child exited: raised at the await of the parent, or
+        // propagated if the parent is on the C stack
+        if (tr->waiting) {
+            // leaving a block: replaces the pending exit
+            wait_set(tr, st);
+            st = A_OK;
+        } else if (tr->status == TR_SUSPENDED) {
+            EXIT = st;
+            st = trail_resume(t, tr, R_EXIT);
+        }
+    } else if (tr->status==TR_SUSPENDED && !tr->waiting && tr->time<time) {
+        // predicates run in the context of the awaiting trail
+        int done  = 0;
+        int depth = a_depth;
+        ATask*  ptask  = a_cur;
+        ATrail* ptrail = a_trl;
+        a_cur   = t;
+        a_trl   = tr;
+        a_depth = tr->adepth;
+        st = patt_match(tr->awt, evt, &done);
+        a_cur   = ptask;
+        a_trl   = ptrail;
+        a_depth = depth;
+        if (st != A_OK) {
+            EXIT = st;
+            st = trail_resume(t, tr, R_EXIT);
+        } else if (done) {
+            st = trail_resume(t, tr, R_EVENT);
+        }
+    }
+    return st;
+}
+
+// A trail toggled on receives a zero tick, which awakes `await(true)`
+// and lets its timers report again.
+static AStatus emit_trail (ATask* t, ATrail* tr, uint32_t time, AVal evt) {
+    if (tr->status==TR_OFF || tr->doomed) {
+        return A_OK;
+    }
+    AStatus st = A_OK;
+    int pass = 1;
+    if (tr->toggled) {
+        st = filt_pass(tr->x->filt, tr->x->nfilt, evt, &pass);
+    }
+    if (st==A_OK && pass) {
+        st = emit_self(t, tr, time, evt);
+    }
+
+    // automatic toggle, after the trail has seen the event
+    int on;
+    if (st==A_OK && t->trs!=NULL && tr->status!=TR_OFF && tr->x!=NULL &&
+        toggle_evt(tr->x->tog,evt,&on))
+    {
+        if (on && tr->toggled) {
+            tr->toggled = 0;
+            st = emit_trail(t, tr, ++TIME, a_int(0));
+        } else if (!on && !tr->toggled) {
+            tr->toggled = 1;
+            st = filt_start(tr->x->filt, tr->x->nfilt);
+        }
+    }
+    return st;
+}
+
+// Traverses the subtree of a node.
 static AStatus emit_node (ANode* n, uint32_t time, AVal evt) {
     if (n->dead || n->doomed) {
         return A_OK;
@@ -835,66 +1128,25 @@ static AStatus emit_node (ANode* n, uint32_t time, AVal evt) {
     AStatus st = A_OK;
     int pass = 1;
     if (n->toggled) {
-        st = toggle_pass(n, evt, &pass);
+        st = filt_pass(n->filt, n->nfilt, evt, &pass);
     }
     if (st==A_OK && pass) {
-        st = emit_self(n, time, evt);
-    }
-
-    // automatic toggle, after the node has seen the event
-    int on;
-    if (st==A_OK && !n->dead && toggle_evt(n,evt,&on)) {
-        if (on && n->toggled) {
-            st = toggle_on(n);
-        } else if (!on && !n->toggled) {
-            st = toggle_off(n);
+        if (n->hdr.type == A_XTASK) {
+            ATask* t = (ATask*) n;
+            if (t->trs != NULL) {
+                st = emit_trail(t, &t->trs[0], time, evt);
+            }
+        } else {
+            node_trav(n, 1);
+            int cnt = n->ndns;
+            for (int i=0; i<cnt && st==A_OK; i++) {
+                st = emit_node(n->dns[i], time, evt);
+            }
+            node_trav(n, -1);
         }
     }
 
     a_dec(me);
-    return st;
-}
-
-static AStatus emit_self (ANode* n, uint32_t time, AVal evt) {
-    AStatus st = A_OK;
-    node_trav(n, 1);
-    int cnt = n->ndns;
-    for (int i=0; i<cnt && st==A_OK; i++) {
-        st = emit_node(n->dns[i], time, evt);
-    }
-    node_trav(n, -1);
-
-    if (n->hdr.type == A_XTASK) {
-        ATask* t = (ATask*) n;
-        if (st != A_OK) {
-            // a child exited: raised at the await of the parent, or
-            // propagated if the parent is on the C stack
-            if (t->waiting) {
-                // leaving a block: replaces the pending exit
-                wait_set(t, st);
-                st = A_OK;
-            } else if (t->status == T_SUSPENDED) {
-                t->exit = st;
-                st = task_resume(t, R_EXIT);
-            }
-        } else if (t->status==T_SUSPENDED && !t->waiting && t->time<time) {
-            // predicates run in the context of the awaiting task
-            int done  = 0;
-            int depth = a_depth;
-            ATask* prev = a_cur;
-            a_cur   = t;
-            a_depth = t->adepth;
-            st = patt_match(t->awt, evt, &done);
-            a_cur   = prev;
-            a_depth = depth;
-            if (st != A_OK) {
-                t->exit = st;
-                st = task_resume(t, R_EXIT);
-            } else if (done) {
-                st = task_resume(t, R_EVENT);
-            }
-        }
-    }
     return st;
 }
 
@@ -920,17 +1172,27 @@ AStatus a_toggle (AVal t, AVal on, APatt** fs, int n) {
     }
 
     if (on.u.b) {
+        // a zero tick awakes `await(true)` and lets the timers report
         node_untoggle(x);
-        return chk_aborted(toggle_on(x));
+        return chk_aborted(emit_node(x, ++TIME, a_int(0)));
     }
     x->filt = malloc((n > 0 ? n : 1) * sizeof(APatt*));
     memcpy(x->filt, fs, n * sizeof(APatt*));
     x->nfilt = n;
-    return toggle_off(x);
+    x->toggled = 1;
+    return filt_start(x->filt, x->nfilt);
 }
 
-void a_toggle_auto (AVal t, AVal tag, APatt** fs, int n) {
-    ANode* x = (ANode*) t.u.o;
+void a_trail_toggle (ATask* t, int i, AVal tag, APatt** fs, int n) {
+    ATrail* tr = &t->trs[i];
+    if (tr->status == TR_OFF) {
+        // the block has already terminated
+        for (int j=0; j<n; j++) {
+            patt_free(fs[j]);
+        }
+        return;
+    }
+    ATrailX* x = trail_x(tr);
     a_cpy(&x->tog, tag);
     x->filt = malloc((n > 0 ? n : 1) * sizeof(APatt*));
     memcpy(x->filt, fs, n * sizeof(APatt*));
@@ -944,8 +1206,7 @@ static AStatus emit_top (ANode* n, AVal evt) {
 // Target of an emit: :task (default), :parent, :global, a task or
 // pool, or a number of levels up.
 static AStatus emit_to (ANode** ret, AVal to) {
-    ATask* me = task_of((ANode*)a_cur);
-    ANode* n  = (me != NULL) ? &me->node : &ROOT.node;
+    ANode* n = (a_cur != NULL) ? &a_cur->node : &ROOT.node;
     double lvl = 0;
 
     if (to.type == A_NIL) {
@@ -966,14 +1227,12 @@ static AStatus emit_to (ANode** ret, AVal to) {
         return a_error("invalid emit : invalid target");
     }
 
-    // transparent tasks are invisible, pools count
+    // pools count
     for (; lvl>0; lvl--) {
-        do {
-            n = n->up;
-            if (n == NULL) {
-                return a_error("invalid emit : invalid target");
-            }
-        } while (n->hdr.type==A_XTASK && ((ATask*)n)->tra);
+        n = n->up;
+        if (n == NULL) {
+            return a_error("invalid emit : invalid target");
+        }
     }
     *ret = n;
     return A_OK;
@@ -996,35 +1255,61 @@ static AStatus emit_tick (double us) {
     return st;
 }
 
+// Depth of the outermost block of a trail.
+static int trail_bdepth (ATask* t, int i) {
+    return t->depth + t->desc->trails[i].level;
+}
+
 // A pinned event only reaches tasks that live inside its pin block.
 // Depths only compare along a chain of blocks, so the target must be
-// in the subtree of the task that owns the pin block.
+// in the subtree of the trail that owns the pin block.
 static AStatus emit_chk (ANode* n, AVal evt) {
     int p = a_pdepth(evt);
     if (p == 0) {
         return A_OK;
     }
-    // owner: the first task upwards that starts outside the pin block
-    ANode* own = (ANode*) a_cur;
-    while (own != NULL) {
-        if (own->hdr.type==A_XTASK && ((ATask*)own)->bdepth<=p) {
-            break;
+    // owner: the first trail upwards that starts outside the pin block
+    ATask* t = a_cur;
+    int    i = (a_trl != NULL) ? a_trl->idx : 0;
+    while (t!=NULL && trail_bdepth(t,i)>p) {
+        if (i > 0) {
+            i = t->desc->trails[i].up;
+        } else {
+            // the trail that spawned the task, beyond its pool
+            ANode* x = &t->node;
+            do {
+                i = x->trail;
+                x = x->up;
+            } while (x!=NULL && x->hdr.type!=A_XTASK);
+            t = (ATask*) x;
         }
-        own = own->up;
     }
-    if (own == NULL) {
+    if (t == NULL) {
         return a_err_pinned();
     }
-    // the owner itself: only if pinned in its outermost block
-    if (n == own) {
-        return (((ATask*)own)->bdepth == p) ? A_OK : a_err_pinned();
+    // the owner itself: only if pinned in the outermost block of the
+    // task
+    if (n == &t->node) {
+        return (i==0 && t->depth==p) ? A_OK : a_err_pinned();
     }
     // otherwise, a subtree attached inside the pin block
     ANode* c = n;
-    while (c!=NULL && c->up!=own) {
+    while (c!=NULL && c->up!=&t->node) {
         c = c->up;
     }
-    if (c==NULL || node_adepth(c)<p) {
+    if (c == NULL) {
+        return a_err_pinned();
+    }
+    // it is attached to the owner, or to a trail nested in the owner
+    // that starts inside the pin block
+    int j = c->trail;
+    if (j == i) {
+        return (node_adepth(c) >= p) ? A_OK : a_err_pinned();
+    }
+    while (j>0 && t->desc->trails[j].up!=i) {
+        j = t->desc->trails[j].up;
+    }
+    if (j<=0 || trail_bdepth(t,j)-1<p) {
         return a_err_pinned();
     }
     return A_OK;
@@ -1093,10 +1378,16 @@ static ATask* task_new (AFunc* f, ANode* up, int base) {
     t->desc  = p;
     t->proto = f;
     a_inc(a_obj(&f->hdr));
-    t->frame = calloc(1, sizeof(AFrame) + p->nslots*sizeof(AVal));
-    t->frame->rc = 1;
-    t->frame->n  = p->nslots;
-    t->L = t->frame->L;
+    t->frame = calloc(1, sizeof(AFrame) + p->ntrails*sizeof(ATrail) +
+        p->nslots*sizeof(AVal));
+    t->frame->task = t;
+    t->frame->n    = p->nslots;
+    t->frame->nt   = p->ntrails;
+    t->trs = t->frame->trs;
+    t->L   = (AVal*) (t->trs + p->ntrails);
+    for (int i=0; i<p->ntrails; i++) {
+        t->trs[i].idx = i;
+    }
     t->status = T_RUNNING;
     // a task is confined like its prototype, if it is a closure
     t->mindepth = a_pdepth(a_obj(&f->hdr));
@@ -1161,8 +1452,8 @@ AStatus a_spawn (AVal* dst, AVal proto, AVal pool, int base) {
     }
 
     ATask* t = task_new(A_FUNC_OF(proto), up, base);
-    if (a_cur!=NULL && t->mindepth>a_cur->conf) {
-        a_cur->conf = t->mindepth;
+    if (a_trl!=NULL && t->mindepth>a_trl->conf) {
+        a_trl->conf = t->mindepth;
     }
     // the body is one deeper than the block the task is attached to
     t->depth = a_depth + 1;
@@ -1175,28 +1466,16 @@ AStatus a_spawn (AVal* dst, AVal proto, AVal pool, int base) {
             t->depth = pool.u.o->depth + 1;
         }
     }
-    t->bdepth = t->depth;
     a_cpy(dst, a_obj(&t->node.hdr));
-    return chk_aborted(task_resume(t, R_START));
+    return chk_aborted(trail_resume(t, &t->trs[0], R_START));
 }
 
-AStatus a_spawn_tra (AVal* dst, ATask* owner, const AProto* p) {
-    ATask* t = calloc(1, sizeof(ATask));
-    node_init(&t->node, A_XTASK);
-    t->tra   = 1;
-    t->desc  = p;
-    t->proto = owner->proto;
-    a_inc(a_obj(&t->proto->hdr));
-    t->frame = owner->frame;
-    t->frame->rc++;
-    t->L = owner->L;
-    // a transparent block is a nested block of its owner
-    t->depth  = owner->depth;
-    t->bdepth = a_depth + 1;
-    t->status = T_RUNNING;
-    node_add(&owner->node, &t->node);
-    a_cpy(dst, a_obj(&t->node.hdr));
-    return chk_aborted(task_resume(t, R_START));
+AStatus a_trail_spawn (ATask* t, int i) {
+    ATrail* tr = &t->trs[i];
+    tr->rank = t->node.ndns;
+    tr->conf = 0;
+    tr->pc   = 0;
+    return chk_aborted(trail_resume(t, tr, R_START));
 }
 
 AStatus a_tasks (AVal* dst, AVal max) {
@@ -1215,13 +1494,13 @@ AStatus a_tasks (AVal* dst, AVal max) {
 // AWAIT
 ///////////////////////////////////////////////////////////////////////////////
 
-AStatus a_await (ATask* t, APatt* p) {
-    if (t->aborted) {
+AStatus a_await (ATrail* tr, APatt* p) {
+    if (tr->aborted) {
         patt_free(p);
         return A_ABORT;
     }
-    t->time   = TIME;
-    t->adepth = a_depth;
+    tr->time   = TIME;
+    tr->adepth = a_depth;
     int done = 0;
     AStatus st = chk_aborted(patt_start(p, &done));
     if (st!=A_OK || done) {
@@ -1232,22 +1511,22 @@ AStatus a_await (ATask* t, APatt* p) {
         a_pay_restore(&pay);
         return st;
     }
-    t->awt = p;
+    tr->awt = p;
     return A_AWAIT;
 }
 
-AStatus a_resumed (ATask* t, AKind k) {
+AStatus a_resumed (ATrail* tr, AKind k) {
     // the payload (results or exit) must survive the abort of the
     // tasks the pattern spawned
-    APatt* p = t->awt;
-    t->awt = NULL;
+    APatt* p = tr->awt;
+    tr->awt = NULL;
     APay pay;
     a_pay_save(&pay);
     patt_free(p);
     a_pay_restore(&pay);
     switch (k) {
         case R_ABORT: return A_ABORT;
-        case R_EXIT:  return t->exit;
+        case R_EXIT:  return EXIT;
         default:      return A_OK;
     }
 }
@@ -1257,27 +1536,25 @@ AStatus a_resumed (ATask* t, AKind k) {
 ///////////////////////////////////////////////////////////////////////////////
 
 AVal a_me (void) {
-    ATask* me = task_of((ANode*)a_cur);
-    if (me == NULL) {
+    if (a_cur == NULL) {
         return a_nil();
     }
-    AVal v = a_obj(&me->node.hdr);
+    AVal v = a_obj(&a_cur->node.hdr);
     a_inc(v);
     return v;
 }
 
 AStatus a_pub (AVal** ref) {
-    ATask* me = task_of((ANode*)a_cur);
-    if (me == NULL) {
+    if (a_cur == NULL) {
         return a_error("invalid pub : expected enclosing task");
     }
-    *ref = &me->pub;
+    *ref = &a_cur->pub;
     return A_OK;
 }
 
 AStatus a_pub_set (ATask* t, AVal v) {
     if (t == NULL) {
-        t = task_of((ANode*)a_cur);
+        t = a_cur;
         if (t == NULL) {
             return a_error("invalid pub : expected enclosing task");
         }
@@ -1525,25 +1802,28 @@ AStatus a_blk_xfer (AStatus st, AVal* vs, int n) {
     }
 
     // tasks confined to this block that nobody pinned
-    ATask* me = a_cur;
-    if (me==NULL || me->conf<a_depth) {
+    ATask*  me = a_cur;
+    ATrail* tr = a_trl;
+    if (me==NULL || tr->conf<a_depth) {
         return st;
     }
     int any = 0;
     for (int i=0; i<me->node.ndns; i++) {
         ANode* c = me->node.dns[i];
-        if (c->hdr.type!=A_XTASK || c->dead || c->hdr.pinned) {
+        if (c->hdr.type!=A_XTASK || c->dead || c->hdr.pinned ||
+            c->trail!=tr->idx)
+        {
             continue;
         }
         ATask* t = (ATask*) c;
-        if (!t->tra && t->status!=T_DONE && t->mindepth>=a_depth) {
+        if (t->status!=T_DONE && t->mindepth>=a_depth) {
             st = blk_abort(c, st);
             any = 1;
             // the abort may rearrange the tree: scan again
             i = -1;
         }
     }
-    me->conf = d;
+    tr->conf = d;
     return any ? chk_aborted(st) : st;
 }
 
@@ -1574,34 +1854,66 @@ void a_pin_clr (AVal* slot) {
     }
 }
 
-// A task of the block that has not ended after its abort: it is
-// running below in the C stack, or it waits for one that is.
-static ATask* late_of (ANode* n) {
+// A trail has not ended after its abort: it is running below in the C
+// stack, or it waits for one that is.
+static int trail_late (ATrail* tr) {
+    return tr->status==TR_RUNNING || (tr->status!=TR_OFF && tr->waiting);
+}
+
+// A trail in a subtree that has not ended after the abort of the
+// subtree.
+static ATrail* late_of (ANode* n) {
     if (n->hdr.type == A_XTASK) {
         ATask* t = (ATask*) n;
-        int late = (t->status==T_RUNNING || t->waiting);
-        return (!n->dead && late) ? t : NULL;
+        if (n->dead || t->trs==NULL) {
+            return NULL;
+        }
+        return trail_late(&t->trs[0]) ? &t->trs[0] : NULL;
     }
     for (int i=0; i<n->ndns; i++) {
-        ATask* t = late_of(n->dns[i]);
-        if (t != NULL) {
-            return t;
+        ATrail* tr = late_of(n->dns[i]);
+        if (tr != NULL) {
+            return tr;
         }
     }
     return NULL;
 }
 
-// Marks the tasks in a subtree that are running, to unwind when
+// Marks the trails in a subtree that are running, to unwind when
 // control returns to them.
+static void node_stop (ANode* n);
+
+static void trail_stop (ATask* t, ATrail* tr) {
+    if (tr->status == TR_OFF) {
+        return;
+    }
+    if (tr->status==TR_RUNNING && !tr->aborted) {
+        tr->aborted = 1;
+    }
+    KIt it;
+    kit_init(&it, t, tr);
+    ATrail* c = NULL;
+    ANode*  n = NULL;
+    int kind;
+    while ((kind = kit_next(&it,&c,&n)) != 0) {
+        if (kind == 1) {
+            trail_stop(t, c);
+        } else {
+            node_stop(n);
+        }
+    }
+}
+
 static void node_stop (ANode* n) {
     if (n->dead) {
         return;
     }
     if (n->hdr.type == A_XTASK) {
         ATask* t = (ATask*) n;
-        if (t->status==T_RUNNING && !t->aborted) {
-            t->aborted = 1;
+        if (t->trs != NULL) {
+            trail_stop(t, &t->trs[0]);
         }
+        return;
     }
     for (int i=0; i<n->ndns; i++) {
         node_stop(n->dns[i]);
@@ -1620,30 +1932,41 @@ void a_pin_doom (AVal* slot) {
     node_stop(n);
 }
 
-// The task suspends the exit of a block until `late` ends. It keeps
+void a_trail_doom (ATask* t, int i) {
+    ATrail* tr = &t->trs[i];
+    if (tr->status == TR_OFF) {
+        return;
+    }
+    tr->doomed = 1;
+    trail_stop(t, tr);
+}
+
+// The trail suspends the exit of a block until `late` ends. It keeps
 // the pending exit meanwhile.
-static void wait_for (ATask* me, ATask* late, AStatus st, int base) {
-    late->waiter = me;
-    me->waiting  = 1;
-    me->wst = st;
-    a_pay_save(&me->wpay);
-    me->wn   = a_top - base;
-    me->wstk = malloc((me->wn + 1) * sizeof(AVal));
-    memcpy(me->wstk, a_stk+base, me->wn * sizeof(AVal));
+static void wait_for (ATrail* me, ATrail* late, AStatus st, int base) {
+    trail_x(late)->waiter = me;
+    ATrailX* x = trail_x(me);
+    me->waiting = 1;
+    x->wst = st;
+    a_pay_save(&x->wpay);
+    x->wn   = a_top - base;
+    x->wstk = malloc((x->wn + 1) * sizeof(AVal));
+    memcpy(x->wstk, a_stk+base, x->wn * sizeof(AVal));
     a_top = base;
 }
 
-int a_orph_end (ATask* me, AStatus* st, int base) {
-    for (int i=0; i<me->node.ndns; i++) {
-        ANode* n = me->node.dns[i];
-        if (n->dead) {
+int a_orph_end (ATrail* me, AStatus* st, int base) {
+    ATask* t = A_TRAIL_TASK(me);
+    for (int i=0; i<t->node.ndns; i++) {
+        ANode* n = t->node.dns[i];
+        if (n->dead || n->trail!=me->idx) {
             continue;
         }
         // the node may leave the tree when it dies
         AVal ref = a_obj(&n->hdr);
         a_inc(ref);
         *st = blk_abort(n, *st);
-        ATask* late = late_of(n);
+        ATrail* late = late_of(n);
         if (late != NULL) {
             a_dec(ref);
             wait_for(me, late, *st, base);
@@ -1663,17 +1986,18 @@ int a_orph_end (ATask* me, AStatus* st, int base) {
     return 0;
 }
 
-void a_orph_doom (ATask* me) {
-    for (int i=0; i<me->node.ndns; i++) {
-        ANode* n = me->node.dns[i];
-        if (!n->dead && !n->hdr.pinned) {
+void a_orph_doom (ATrail* me) {
+    ATask* t = A_TRAIL_TASK(me);
+    for (int i=0; i<t->node.ndns; i++) {
+        ANode* n = t->node.dns[i];
+        if (!n->dead && !n->hdr.pinned && n->trail==me->idx) {
             n->doomed = 1;
             node_stop(n);
         }
     }
 }
 
-int a_pin_end (ATask* me, AVal* slot, AStatus* st, int base) {
+int a_pin_end (ATrail* me, AVal* slot, AStatus* st, int base) {
     AVal v = *slot;
     // only what is still pinned in this very block
     if (v.type<A_STR || !v.u.o->pinned || v.u.o->depth!=(uint32_t)a_depth) {
@@ -1688,7 +2012,7 @@ int a_pin_end (ATask* me, AVal* slot, AStatus* st, int base) {
     *st = blk_abort(n, *st);
 
     // the block waits for what could not be aborted yet
-    ATask* late = (me != NULL) ? late_of(n) : NULL;
+    ATrail* late = (me != NULL) ? late_of(n) : NULL;
     if (late != NULL) {
         wait_for(me, late, *st, base);
         return 1;
@@ -1702,19 +2026,45 @@ int a_pin_end (ATask* me, AVal* slot, AStatus* st, int base) {
     return 0;
 }
 
-AStatus a_pin_resumed (ATask* t) {
-    t->waiting = 0;
-    for (int i=0; i<t->wn; i++) {
-        a_push(t->wstk[i]);
+int a_trail_end (ATrail* me, int i, AStatus* st, int base) {
+    ATask*  t  = A_TRAIL_TASK(me);
+    ATrail* tr = &t->trs[i];
+    if (tr->status == TR_OFF) {
+        return 0;
     }
-    free(t->wstk);
-    t->wstk = NULL;
-    t->wn   = 0;
-    a_pay_restore(&t->wpay);
-    t->wpay.v   = NULL;
-    t->wpay.n   = 0;
-    t->wpay.cap = 0;
-    return t->wst;
+    // the abort runs defers: the pending exit is set aside meanwhile
+    APay pay;
+    a_pay_save(&pay);
+    AStatus st2 = trail_abort(t, tr);
+    if (st2 == A_OK) {
+        a_pay_restore(&pay);
+    } else {
+        a_pay_drop(&pay);
+        *st = st2;
+    }
+    // the block waits for what could not be aborted yet
+    if (trail_late(tr)) {
+        wait_for(me, tr, *st, base);
+        return 1;
+    }
+    *st = chk_aborted(*st);
+    return 0;
+}
+
+AStatus a_pin_resumed (ATrail* tr) {
+    ATrailX* x = tr->x;
+    tr->waiting = 0;
+    for (int i=0; i<x->wn; i++) {
+        a_push(x->wstk[i]);
+    }
+    free(x->wstk);
+    x->wstk = NULL;
+    x->wn   = 0;
+    a_pay_restore(&x->wpay);
+    x->wpay.v   = NULL;
+    x->wpay.n   = 0;
+    x->wpay.cap = 0;
+    return x->wst;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1735,11 +2085,10 @@ AStatus a_main (const AProto* p) {
         a_push(a_strz(ARGV[i]));
     }
     MAIN = task_new(A_FUNC_OF(proto), &ROOT.node, base);
-    MAIN->depth  = 1;
-    MAIN->bdepth = 1;
+    MAIN->depth = 1;
     a_inc(a_obj(&MAIN->node.hdr));
     a_dec(proto);
-    return task_resume(MAIN, R_START);
+    return trail_resume(MAIN, &MAIN->trs[0], R_START);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1751,6 +2100,7 @@ void a_task_init (int argc, char** argv) {
     ARGV = argv;
     MAIN = NULL;
     a_cur = NULL;
+    a_trl = NULL;
 }
 
 void a_task_quit (void) {

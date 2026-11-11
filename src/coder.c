@@ -54,6 +54,11 @@ typedef struct Unit {
     int task;
     // transparent block: shares the slots of the unit of its task
     struct Unit* root;
+    // trail of the unit: 0 for the body of the task
+    int trail;
+    // unit of a task: its trails, with their C functions
+    struct Trail* trs;
+    int ntrs;
     // number of resumption points
     int npcs;
     // number of slots in `L`
@@ -82,12 +87,22 @@ typedef struct Unit {
     int orph;
 } Unit;
 
-// Finalizer of a block: a defer (flag slot and body), or a pin (the
-// storage of the pinned task or pool).
+// Static description of a trail: its C function, parent, and the
+// nesting level of its outermost block.
+typedef struct Trail {
+    const char* fn;
+    int up;
+    int level;
+} Trail;
+
+// Finalizer of a block: a defer (flag slot and body), a pin (the
+// storage of the pinned task or pool), or a trail that the block
+// started.
 typedef struct Defer {
     int   flag;
     Expr* e;
     const char* pin;
+    int   trail;
     // pin written by the user: its value may leave the block
     int   user;
     // the tasks of the unit that nobody pinned: they end with its
@@ -761,6 +776,7 @@ static Blk blk_open (Unit* u) {
         u->defs[0].flag = -1;
         u->defs[0].e    = NULL;
         u->defs[0].pin  = NULL;
+        u->defs[0].trail = -1;
         u->defs[0].user = 0;
         u->defs[0].orph = 1;
         u->ndefs = 1;
@@ -809,28 +825,40 @@ static void blk_close (Unit* u, Blk b, Dst d, Hnd h) {
     }
 
     for (int i=nmine-1; i>=0; i--) {
-        if (mine[i].pin!=NULL && u->task && !u->indefer) {
-            // a task of the block that is running only unwinds when
-            // control returns to it: the exit waits for that, so that
-            // the finalizers still run from the inside out
+        // A task of the block that is running only unwinds when control
+        // returns to it: the exit waits for that, so that the
+        // finalizers still run from the inside out. Trails and orphans
+        // only exist in tasks, outside defers.
+        const char* end = NULL;
+        if (mine[i].trail >= 0) {
+            end = xfmt("a_trail_end(tr, %d, &st, base)", mine[i].trail);
+        } else if (mine[i].orph) {
+            // the tasks that nobody pinned
+            end = "a_orph_end(tr, &st, base)";
+        } else if (mine[i].pin!=NULL && u->task && !u->indefer) {
+            end = xfmt("a_pin_end(tr, &%s, &st, base)", mine[i].pin);
+        }
+        if (end != NULL) {
             int pc = ++u->npcs;
             out0(u, "LW_%d: ;", pc);
-            out(u, "if (a_pin_end(t, &%s, &st, base)) {", mine[i].pin);
+            out(u, "if (%s) {", end);
             // the other tasks of the block stop meanwhile
             for (int j=0; j<i; j++) {
-                if (mine[j].pin != NULL) {
+                if (mine[j].trail >= 0) {
+                    out(u, "    a_trail_doom(t, %d);", mine[j].trail);
+                } else if (mine[j].pin != NULL) {
                     out(u, "    a_pin_doom(&%s);", mine[j].pin);
                 } else if (mine[j].orph) {
-                    out(u, "    a_orph_doom(t);");
+                    out(u, "    a_orph_doom(tr);");
                 }
             }
-            out(u, "    t->pc = %d;", pc);
+            out(u, "    tr->pc = %d;", pc);
             out(u, "    return A_AWAIT;");
             out0(u, "AW_%d:", pc);
             out(u, "    base = a_top;");
             out(u, "    a_lin = %d;", u->lin);
             out(u, "    a_depth = D + %d;", u->level);
-            out(u, "    st = a_pin_resumed(t);");
+            out(u, "    st = a_pin_resumed(tr);");
             if (d.kind == D_MULTI) {
                 out(u, "    %s = a_top - base;", d.n);
             }
@@ -840,25 +868,6 @@ static void blk_close (Unit* u, Blk b, Dst d, Hnd h) {
         }
         if (mine[i].pin != NULL) {
             out(u, "a_pin_end(NULL, &%s, &st, 0);", mine[i].pin);
-            continue;
-        }
-        if (mine[i].orph) {
-            // the tasks that nobody pinned, with the same wait
-            int pc = ++u->npcs;
-            out0(u, "LW_%d: ;", pc);
-            out(u, "if (a_orph_end(t, &st, base)) {");
-            out(u, "    t->pc = %d;", pc);
-            out(u, "    return A_AWAIT;");
-            out0(u, "AW_%d:", pc);
-            out(u, "    base = a_top;");
-            out(u, "    a_lin = %d;", u->lin);
-            out(u, "    a_depth = D + %d;", u->level);
-            out(u, "    st = a_pin_resumed(t);");
-            if (d.kind == D_MULTI) {
-                out(u, "    %s = a_top - base;", d.n);
-            }
-            out(u, "    goto LW_%d;", pc);
-            out(u, "}");
             continue;
         }
         int id = ++u->nlabels;
@@ -1000,6 +1009,7 @@ static void gen_defer (Unit* u, Expr* e) {
     u->defs[u->ndefs].flag = flag;
     u->defs[u->ndefs].e    = e;
     u->defs[u->ndefs].pin  = NULL;
+    u->defs[u->ndefs].trail = -1;
     u->defs[u->ndefs].user = 0;
     u->defs[u->ndefs].orph = 0;
     u->ndefs++;
@@ -1012,7 +1022,20 @@ static void gen_pin_end (Unit* u, const char* slot, int user) {
     u->defs[u->ndefs].flag = -1;
     u->defs[u->ndefs].e    = NULL;
     u->defs[u->ndefs].pin  = slot;
+    u->defs[u->ndefs].trail = -1;
     u->defs[u->ndefs].user = user;
+    u->defs[u->ndefs].orph = 0;
+    u->ndefs++;
+}
+
+// The enclosing block aborts the trail on exit.
+static void gen_trail_end (Unit* u, int trail) {
+    u->defs = realloc(u->defs, (u->ndefs+1) * sizeof(Defer));
+    u->defs[u->ndefs].flag = -1;
+    u->defs[u->ndefs].e    = NULL;
+    u->defs[u->ndefs].pin  = NULL;
+    u->defs[u->ndefs].trail = trail;
+    u->defs[u->ndefs].user = 0;
     u->defs[u->ndefs].orph = 0;
     u->ndefs++;
 }
@@ -1667,7 +1690,7 @@ static void unit_emit (Unit* u, Buf* c) {
         buf_add(c, xfmt("    int n%d = 0;\n", i));
     }
     if (u->task) {
-        buf_add(c, "    switch (t->pc) {\n");
+        buf_add(c, "    switch (tr->pc) {\n");
         for (int i=1; i<=u->npcs; i++) {
             buf_add(c, xfmt("        case %d: goto AW_%d;\n", i, i));
         }
@@ -1679,6 +1702,16 @@ static void unit_emit (Unit* u, Buf* c) {
     if (!u->task) {
         buf_add(c, xfmt("    a_clrs(L, %d);\n", n));
     }
+}
+
+// Adds a trail to the task of a unit. Returns its position.
+static int trail_new (Unit* u, const char* fn, int up, int level) {
+    Unit* r = (u->root != NULL) ? u->root : u;
+    r->trs = realloc(r->trs, (r->ntrs+1) * sizeof(Trail));
+    r->trs[r->ntrs].fn    = fn;
+    r->trs[r->ntrs].up    = up;
+    r->trs[r->ntrs].level = level;
+    return r->ntrs++;
 }
 
 // Compiles a task prototype (or the main chunk) to a resume function
@@ -1704,11 +1737,12 @@ static const char* gen_task (Proto* p, Var** pars, int npar, List* body,
         u.nslots++;
     }
     u.orph = 1;
+    const char* name = xfmt("T%d", p->id);
+    trail_new(&u, name, -1, 0);
     gen_block(&u, body, dst_slot("t->ret"));
 
-    const char* name = xfmt("T%d", p->id);
     const char* sig = xfmt(
-        "static AStatus %s (ATask* t, AKind k)", name);
+        "static AStatus %s (ATask* t, ATrail* tr, AKind k)", name);
     buf_add(&DECLS, xfmt("%s;\n", sig));
 
     Buf* c = &FUNCS;
@@ -1721,8 +1755,26 @@ static const char* gen_task (Proto* p, Var** pars, int npar, List* body,
     buf_add(c, "    }\n");
     buf_add(c, "    return st;\n");
     buf_add(c, "}\n\n");
-    buf_add(c, xfmt("static const AProto P%d = { %s, %d, %d, %d };\n\n",
-        p->id, name, (u.nslots > 0) ? u.nslots : 1, npar, p->dots));
+    // the trails, with their tree: siblings in source order
+    buf_add(c, xfmt("static const ATrailD P%d_T[] = {\n", p->id));
+    for (int i=0; i<u.ntrs; i++) {
+        int kid  = -1;
+        int next = -1;
+        for (int j=u.ntrs-1; j>i; j--) {
+            if (u.trs[j].up == i) {
+                kid = j;
+            }
+            if (u.trs[j].up == u.trs[i].up) {
+                next = j;
+            }
+        }
+        buf_add(c, xfmt("    { %s, %d, %d, %d, %d },\n", u.trs[i].fn,
+            u.trs[i].up, kid, (i == 0) ? -1 : next, u.trs[i].level));
+    }
+    buf_add(c, "};\n");
+    buf_add(c, xfmt(
+        "static const AProto P%d = { %d, %d, %d, %d, P%d_T };\n\n",
+        p->id, (u.nslots > 0) ? u.nslots : 1, npar, p->dots, u.ntrs, p->id));
     return xfmt("P%d", p->id);
 }
 
@@ -1894,17 +1946,15 @@ static void gen_spawn (Unit* u, Expr* e, Dst d) {
     }
 }
 
-// Number of transparent units generated.
-static int NTRA = 0;
-
-// Compiles a transparent block to a resume function that shares the
-// slots of its task. Returns the name of its static description.
+// Compiles a transparent block as trail `id` of its task: a resume
+// function that shares the slots of the task.
 //
 // As a branch of a `par :any`, its values are raised as a join for
-// the par identified by slot `key`. Any other exit crosses to the
-// owner unchanged.
-static const char* gen_tra (Unit* up, List* body, ParMode mode, int key,
-                            int lin)
+// the par identified by slot `key`. Otherwise, its first value is the
+// result of the block, which also goes to `ret`, if given. Any other
+// exit crosses to the parent unchanged.
+static void gen_tra (Unit* up, int id, List* body, ParMode mode, int key,
+                     const char* ret, int lin)
 {
     Unit u;
     memset(&u, 0, sizeof(u));
@@ -1912,7 +1962,8 @@ static const char* gen_tra (Unit* up, List* body, ParMode mode, int key,
     u.npar  = up->npar;
     u.task  = 1;
     u.root  = (up->root != NULL) ? up->root : up;
-    // a transparent block is a nested block of its owner
+    u.trail = id;
+    // a transparent block is a nested block of its parent
     u.level = up->level;
     u.orph  = 1;
 
@@ -1923,12 +1974,21 @@ static const char* gen_tra (Unit* up, List* body, ParMode mode, int key,
         out(&u, "a_join_key = &L[%d];", key);
         out(&u, "st = A_JOIN;");
     } else {
-        gen_block(&u, body, dst_slot("t->ret"));
+        // its first value travels in the payload, to the event of its
+        // termination
+        Opnd r = opnd_tmp(&u);
+        gen_block(&u, body, dst_slot(r.c));
+        if (ret != NULL) {
+            out(&u, "a_cpy(&%s, %s);", ret, r.c);
+        }
+        out(&u, "a_pay_clear();");
+        out(&u, "a_pay_addc(%s);", r.c);
+        opnd_rel(&u, r);
     }
 
-    int id = ++NTRA;
-    const char* name = xfmt("T%d_%d", u.proto->id, id);
-    const char* sig = xfmt("static AStatus %s (ATask* t, AKind k)", name);
+    const char* name = u.root->trs[id].fn;
+    const char* sig = xfmt(
+        "static AStatus %s (ATask* t, ATrail* tr, AKind k)", name);
     buf_add(&DECLS, xfmt("%s;\n", sig));
 
     Buf* c = &FUNCS;
@@ -1936,20 +1996,23 @@ static const char* gen_tra (Unit* up, List* body, ParMode mode, int key,
     unit_emit(&u, c);
     buf_add(c, "    return st;\n");
     buf_add(c, "}\n\n");
-    buf_add(c, xfmt("static const AProto P%d_%d = { %s, 0, 0, 0 };\n\n",
-        u.proto->id, id, name));
-    return xfmt("P%d_%d", u.proto->id, id);
 }
 
-// Spawns a transparent block into `slot`, which a block must abort on
-// exit.
-static void gen_spawn_tra (Unit* u, Expr* blk, ParMode mode, int key,
-                           const char* slot)
+// A new trail for a transparent block that starts in the current
+// block, which must abort it on exit.
+static int gen_trail (Unit* u) {
+    Unit* r = (u->root != NULL) ? u->root : u;
+    const char* fn = xfmt("T%d_%d", u->proto->id, r->ntrs);
+    return trail_new(u, fn, u->trail, u->level + 1);
+}
+
+// Starts a transparent block as the trail `id`.
+static void gen_spawn_tra (Unit* u, int id, Expr* blk, ParMode mode, int key,
+                           const char* ret)
 {
-    const char* p = gen_tra(u, &blk->u.block.es, mode, key, blk->tk.lin);
+    gen_tra(u, id, &blk->u.block.es, mode, key, ret, blk->tk.lin);
     out(u, "a_lin = %d;", lin_of(blk->tk));
-    out_try(u, "a_spawn_tra(&%s, t, &%s)", slot, p);
-    out_try(u, "a_pin(&%s)", slot);
+    out_try(u, "a_trail_spawn(t, %d)", id);
 }
 
 static void gen_suspend (Unit* u, Dst d);
@@ -1976,26 +2039,26 @@ static void gen_par (Unit* u, Expr* e, Dst d) {
     }
 
     Blk b = blk_open(u);
-    // on exit, the branches are aborted in spawn order
-    const char** ts = xalloc(k * sizeof(char*));
+    // the branches take consecutive trails; on exit, they are aborted
+    // in spawn order
+    int lo = 0;
     for (int i=0; i<k; i++) {
-        ts[i] = opnd_tmp(u).c;
+        int id = gen_trail(u);
+        lo = (i == 0) ? id : lo;
     }
     for (int i=k-1; i>=0; i--) {
-        gen_pin_end(u, ts[i], 0);
+        gen_trail_end(u, lo+i);
     }
     for (int i=0; i<k; i++) {
-        gen_spawn_tra(u, e->u.par.blks.v[i], mode, h.joink, ts[i]);
+        gen_spawn_tra(u, lo+i, e->u.par.blks.v[i], mode, h.joink,
+            (mode == PAR_ALL) ? rs[i].c : NULL);
     }
     if (mode == PAR_ALL) {
-        for (int i=0; i<k; i++) {
-            out(u, "st = a_await(t, a_pt_val(%s));", ts[i]);
-            gen_suspend(u, dst_slot(rs[i].c));
-        }
+        out(u, "st = a_await(tr, a_pt_trails(%d, %d));", lo, k);
     } else {
-        out(u, "st = a_await(t, a_pt_val(a_bool(0)));");
-        gen_suspend(u, dst_none());
+        out(u, "st = a_await(tr, a_pt_val(a_bool(0)));");
     }
+    gen_suspend(u, dst_none());
     blk_close(u, b, dst_none(), h);
 
     if (mode == PAR_ALL) {
@@ -2028,13 +2091,13 @@ static void gen_par (Unit* u, Expr* e, Dst d) {
 static void gen_suspend (Unit* u, Dst d) {
     int pc = ++u->npcs;
     out(u, "if (st == A_AWAIT) {");
-    out(u, "    t->pc = %d;", pc);
+    out(u, "    tr->pc = %d;", pc);
     out(u, "    return A_AWAIT;");
     out0(u, "AW_%d:", pc);
     out(u, "    base = a_top;");
     out(u, "    a_lin = %d;", u->lin);
     out(u, "    a_depth = D + %d;", u->level);
-    out(u, "    st = a_resumed(t, k);");
+    out(u, "    st = a_resumed(tr, k);");
     out(u, "}");
     out(u, "if (st != A_OK) goto CL_%d;", u->cleanup);
     store_pay(u, d);
@@ -2138,7 +2201,7 @@ static void gen_await_patt (Unit* u, Patt* p, int lin, Dst d) {
     int i = 0;
     int k = 0;
     const char* v = patt_build(u, p, os, &i, &k);
-    out(u, "    st = a_await(t, %s);", v);
+    out(u, "    st = a_await(tr, %s);", v);
     out(u, "}");
     for (int j=0; j<n; j++) {
         opnd_rel(u, os[j]);
@@ -2196,21 +2259,21 @@ static void gen_toggle (Unit* u, Expr* e) {
 static void gen_toggle_on (Unit* u, Expr* e, Dst d) {
     Opnd r = opnd_tmp(u);
     Blk b = blk_open(u);
-    const char* t = opnd_tmp(u).c;
-    gen_pin_end(u, t, 0);
-    gen_spawn_tra(u, e->u.toggle_on.blk, PAR_NONE, 0, t);
+    int id = gen_trail(u);
+    gen_trail_end(u, id);
+    gen_spawn_tra(u, id, e->u.toggle_on.blk, PAR_NONE, 0, r.c);
 
     int n;
     Opnd* os = gen_filters(u, e->u.toggle_on.fs, e->u.toggle_on.nf, &n);
-    out(u, "    a_toggle_auto(%s, K[%d], fs, %d);",
-        t, konst(e->tk.str+1,e->tk.len-1), e->u.toggle_on.nf);
+    out(u, "    a_trail_toggle(t, %d, K[%d], fs, %d);",
+        id, konst(e->tk.str+1,e->tk.len-1), e->u.toggle_on.nf);
     out(u, "}");
     for (int i=0; i<n; i++) {
         opnd_rel(u, os[i]);
     }
 
-    out(u, "st = a_await(t, a_pt_val(%s));", t);
-    gen_suspend(u, dst_slot(r.c));
+    out(u, "st = a_await(tr, a_pt_trails(%d, 1));", id);
+    gen_suspend(u, dst_none());
     blk_close(u, b, dst_none(), hnd_none());
     store(u, r, d);
 }
@@ -2368,10 +2431,10 @@ static void gen (Unit* u, Expr* e, Dst d) {
             store_void(u, d);
             break;
         case E_SPAWN_BLK: {
-            // pinned to the enclosing block
-            const char* slot = opnd_tmp(u).c;
-            gen_pin_end(u, slot, 0);
-            gen_spawn_tra(u, e->u.sblk.blk, PAR_NONE, 0, slot);
+            // ends with the enclosing block
+            int id = gen_trail(u);
+            gen_trail_end(u, id);
+            gen_spawn_tra(u, id, e->u.sblk.blk, PAR_NONE, 0, NULL);
             store_void(u, d);
             break;
         }
