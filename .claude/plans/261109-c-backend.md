@@ -884,6 +884,11 @@ Agreed after `atmos-lang/atmos@5977b07`.
     - A branch costs about 120 bytes (the record and its slots), down
       from 430.
     - Structures: `ATask` 160 bytes (was 248), `ATrail` 72, `ANode` 64.
+    - Checked with the port of Pingus, built with both compilers: all
+      its tests pass, and the 159 traces of its demos are identical
+      byte by byte. Its benchmark shows no measurable difference
+      (about 37 MB and the same CPU): the game is dominated by the
+      SDL renderer and by its surfaces, not by tasks.
 - Found by the port of Pingus (`fsantanna/ceu-atmos-pingus`,
   `doc/compiler.md`):
     - `func f` inside a function or task, with `f` unknown, is a
