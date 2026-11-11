@@ -2054,9 +2054,9 @@ static void gen_par (Unit* u, Expr* e, Dst d) {
             (mode == PAR_ALL) ? rs[i].c : NULL);
     }
     if (mode == PAR_ALL) {
-        out(u, "st = a_await(tr, a_pt_trails(%d, %d));", lo, k);
+        out(u, "st = a_await_trails(tr, %d, %d);", lo, k);
     } else {
-        out(u, "st = a_await(tr, a_pt_val(a_bool(0)));");
+        out(u, "st = a_await_val(tr, a_bool(0));");
     }
     gen_suspend(u, dst_none());
     blk_close(u, b, dst_none(), h);
@@ -2197,12 +2197,17 @@ static void gen_await_patt (Unit* u, Patt* p, int lin, Dst d) {
     patt_eval(u, p, os, &n);
 
     out(u, "a_lin = %d;", lin);
-    out(u, "{");
-    int i = 0;
-    int k = 0;
-    const char* v = patt_build(u, p, os, &i, &k);
-    out(u, "    st = a_await(tr, %s);", v);
-    out(u, "}");
+    if (p->kind == PT_VAL) {
+        // a single value needs no pattern
+        out(u, "st = a_await_val(tr, %s);", os[0].c);
+    } else {
+        out(u, "{");
+        int i = 0;
+        int k = 0;
+        const char* v = patt_build(u, p, os, &i, &k);
+        out(u, "    st = a_await(tr, %s);", v);
+        out(u, "}");
+    }
     for (int j=0; j<n; j++) {
         opnd_rel(u, os[j]);
     }
@@ -2272,7 +2277,7 @@ static void gen_toggle_on (Unit* u, Expr* e, Dst d) {
         opnd_rel(u, os[i]);
     }
 
-    out(u, "st = a_await(tr, a_pt_trails(%d, 1));", id);
+    out(u, "st = a_await_trails(tr, %d, 1);", id);
     gen_suspend(u, dst_none());
     blk_close(u, b, dst_none(), hnd_none());
     store(u, r, d);

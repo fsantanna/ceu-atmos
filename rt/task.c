@@ -54,7 +54,12 @@ AStatus a_chk_aborted (AStatus st) {
 // PATTERNS
 ///////////////////////////////////////////////////////////////////////////////
 
+// A pattern is a tree. Most awaits have a single leaf, which then
+// lives inside the trail, with no allocation: an `ARoot` is a leaf, or
+// points to a tree.
+
 typedef enum {
+    PK_NONE,
     // value, classified when the await starts
     PK_VAL,
     // any event / never
@@ -63,32 +68,32 @@ typedef enum {
     PK_IS,
     // termination of a task
     PK_TASK,
+    // duration / any clock tick
+    PK_CLK, PK_TICK,
+    // :any ts / :all ts
+    PK_ANY, PK_ALL,
+    // termination of trails `lo` to `lo+n-1` of the awaiting task
+    PK_TRAILS,
+
+    // from here on, not a leaf
+
+    // an `ARoot` that points to a tree
+    PK_HEAP,
     // T(...): becomes PK_TASK when the await starts
     PK_SPAWN,
     // [p] until (f) / [p] while (f)
     PK_UNTIL, PK_WHILE,
     // !p / p && q / p || q
-    PK_NOT, PK_AND, PK_OR,
-    // :any ts / :all ts
-    PK_ANY, PK_ALL,
-    // duration / any clock tick
-    PK_CLK, PK_TICK,
-    // termination of trails `da` to `da+db-1` of the awaiting task
-    PK_TRAILS
+    PK_NOT, PK_AND, PK_OR
 } PKind;
 
 struct APatt {
-    PKind  kind;
-    // value, task, prototype, or predicate
-    AVal   v;
+    // kind, and value, task, prototype, or predicate
+    ARoot  r;
     // arguments of a spawn
     AVal   args;
-    // the task was spawned by the pattern, which aborts it at the end
-    int    own;
     APatt* a;
     APatt* b;
-    // duration: time left
-    double clk;
     // &&: operands already satisfied, and their first results
     int    da;
     int    db;
@@ -98,20 +103,20 @@ struct APatt {
 
 static APatt* patt_new (PKind kind) {
     APatt* p = calloc(1, sizeof(APatt));
-    p->kind = kind;
+    p->r.kind = kind;
     return p;
 }
 
 APatt* a_pt_val (AVal v) {
     APatt* p = patt_new(PK_VAL);
-    p->v = v;
+    p->r.v = v;
     a_inc(v);
     return p;
 }
 
 APatt* a_pt_spawn (AVal proto, AVal args) {
     APatt* p = patt_new(PK_SPAWN);
-    p->v    = proto;
+    p->r.v  = proto;
     p->args = args;
     a_inc(proto);
     a_inc(args);
@@ -121,14 +126,14 @@ APatt* a_pt_spawn (AVal proto, AVal args) {
 APatt* a_pt_pred (int until, APatt* base, AVal f) {
     APatt* p = patt_new(until ? PK_UNTIL : PK_WHILE);
     p->a = base;
-    p->v = f;
+    p->r.v = f;
     a_inc(f);
     return p;
 }
 
 APatt* a_pt_pool (int all, AVal ts) {
     APatt* p = patt_new(all ? PK_ALL : PK_ANY);
-    p->v = ts;
+    p->r.v = ts;
     a_inc(ts);
     return p;
 }
@@ -146,20 +151,13 @@ APatt* a_pt_bin (int and, APatt* a, APatt* b) {
     return p;
 }
 
-APatt* a_pt_trails (int lo, int n) {
-    APatt* p = patt_new(PK_TRAILS);
-    p->da = lo;
-    p->db = n;
-    return p;
-}
-
 // Aborts the tasks the pattern spawned.
 static void patt_stop (APatt* p) {
     if (p == NULL) {
         return;
     }
-    if (p->kind==PK_TASK && p->own) {
-        node_abort((ANode*)p->v.u.o);
+    if (p->r.kind==PK_TASK && p->r.own) {
+        node_abort((ANode*)p->r.v.u.o);
     }
     patt_stop(p->a);
     patt_stop(p->b);
@@ -172,11 +170,28 @@ static void patt_free (APatt* p) {
     patt_stop(p);
     patt_free(p->a);
     patt_free(p->b);
-    a_dec(p->v);
+    a_dec(p->r.v);
     a_dec(p->args);
     a_dec(p->ra);
     a_dec(p->rb);
     free(p);
+}
+
+// Releases the pattern of an await that is over. The trail is free to
+// await again meanwhile, since the abort of a spawned task runs code.
+static void root_free (ARoot* root) {
+    ARoot r = *root;
+    root->kind = PK_NONE;
+    root->own  = 0;
+    root->v    = a_nil();
+    if (r.kind == PK_HEAP) {
+        patt_free(r.u.p);
+    } else if (r.kind != PK_NONE) {
+        if (r.kind==PK_TASK && r.own) {
+            node_abort((ANode*)r.v.u.o);
+        }
+        a_dec(r.v);
+    }
 }
 
 static void pay1 (AVal v) {
@@ -213,13 +228,13 @@ static AStatus patt_pred (APatt* p, int* done) {
     a_pay_take(&it, 0);
     a_pay_clear();
     AVal res;
-    AStatus st = pred(p->v, it, &res);
+    AStatus st = pred(p->r.v, it, &res);
     if (st != A_OK) {
         a_dec(it);
         return st;
     }
     int ok = a_truthy(res);
-    if (p->kind == PK_UNTIL) {
+    if (p->r.kind == PK_UNTIL) {
         *done = ok;
         if (ok) {
             pay1((res.type==A_BOOL) ? it : res);
@@ -249,12 +264,148 @@ static int trails_off (ATask* t, int lo, int n) {
 
 // A timer expires with how late it is, or reports the time it still
 // needs.
-static void patt_clk (APatt* p, int* done) {
-    if (p->clk <= 0) {
-        pay1(a_numi(CLK_LATE - p->clk));
+static void leaf_clk (ARoot* r, int* done) {
+    if (r->u.clk <= 0) {
+        pay1(a_numi(CLK_LATE - r->u.clk));
         *done = 1;
-    } else if (p->clk < CLK_MIN) {
-        CLK_MIN = p->clk;
+    } else if (r->u.clk < CLK_MIN) {
+        CLK_MIN = r->u.clk;
+    }
+}
+
+// Establishes a leaf. Sets `done` if it is satisfied before any event,
+// with the results in the payload.
+static AStatus leaf_start (ARoot* r, int* done) {
+    *done = 0;
+    switch (r->kind) {
+        case PK_VAL:
+            switch (r->v.type) {
+                case A_BOOL:
+                    r->kind = r->v.u.b ? PK_TRUE : PK_FALSE;
+                    break;
+                case A_TAB:
+                    r->kind = PK_IS;
+                    break;
+                case A_STR:
+                    r->kind = !strcmp(A_STR_OF(r->v)->s,"clock") ?
+                        PK_TICK : PK_IS;
+                    break;
+                case A_INT:
+                case A_NUM:
+                    r->kind = PK_CLK;
+                    return leaf_start(r, done);
+                case A_XTASK:
+                    r->kind = PK_TASK;
+                    return leaf_start(r, done);
+                case A_NIL:
+                    return a_error("invalid await : invalid event pattern");
+                case A_TASKS:
+                    return a_error("invalid await : unexpected tasks pool");
+                case A_FUNC:
+                    return a_error("invalid await : unexpected function");
+                default:
+                    return a_error("invalid await : unexpected %s",
+                        a_typename(r->v));
+            }
+            break;
+
+        case PK_CLK:
+            // a timer counts down from its full duration
+            r->u.clk = a_dbl(r->v);
+            leaf_clk(r, done);
+            break;
+
+        case PK_TASK:
+            if (A_TASK_OF(r->v)->status == T_DONE) {
+                pay_task(r->v);
+                *done = 1;
+            }
+            break;
+
+        case PK_ANY:
+        case PK_ALL:
+            if (r->v.type != A_TASKS) {
+                return a_error("invalid await : expected tasks pool");
+            }
+            break;
+
+        case PK_TRAILS:
+            *done = trails_off(a_cur, r->u.trs.lo, r->u.trs.n);
+            if (*done) {
+                a_pay_clear();
+            }
+            break;
+
+        default:
+            break;
+    }
+    return A_OK;
+}
+
+// Tests an event against a leaf. Sets `done` if it is satisfied, with
+// the results in the payload.
+static void leaf_match (ARoot* r, AVal evt, int* done) {
+    *done = 0;
+    switch (r->kind) {
+        case PK_TRUE:
+            pay1(evt);
+            *done = 1;
+            break;
+
+        case PK_IS:
+            if (a_is(evt, r->v)) {
+                pay1(evt);
+                *done = 1;
+            }
+            break;
+
+        case PK_TASK:
+            if (a_eq(evt, r->v)) {
+                pay_task(r->v);
+                *done = 1;
+            }
+            break;
+
+        case PK_CLK:
+            if (a_isnum(evt)) {
+                r->u.clk -= a_dbl(evt);
+                leaf_clk(r, done);
+            }
+            break;
+
+        case PK_TICK:
+            if (a_isnum(evt)) {
+                a_pay_clear();
+                a_pay_addc(evt);
+                a_pay_add(a_numi(CLK_LATE));
+                *done = 1;
+            }
+            break;
+
+        case PK_ANY:
+        case PK_ALL:
+            // a task of the pool terminated (and it was the last one)
+            if (evt.type==A_XTASK && A_TASK_OF(evt)->pool==A_TASKS_OF(r->v)) {
+                if (r->kind==PK_ANY || a_tasks_len(A_TASKS_OF(r->v))==0) {
+                    pay_task(evt);
+                    a_pay_addc(r->v);
+                    *done = 1;
+                }
+            }
+            break;
+
+        case PK_TRAILS:
+            // a trail of the task terminated (and it was the last one)
+            if (evt.type==A_XTASK && A_TASK_OF(evt)->desc==NULL &&
+                trails_off(a_cur,r->u.trs.lo,r->u.trs.n))
+            {
+                a_pay_clear();
+                *done = 1;
+            }
+            break;
+
+        default:
+            break;
     }
 }
 
@@ -273,67 +424,23 @@ static AStatus patt_again (APatt* p) {
 static AStatus patt_start (APatt* p, int* done) {
     AStatus st = A_OK;
     *done = 0;
-    switch (p->kind) {
-        case PK_VAL:
-            switch (p->v.type) {
-                case A_BOOL:
-                    p->kind = p->v.u.b ? PK_TRUE : PK_FALSE;
-                    break;
-                case A_TAB:
-                    p->kind = PK_IS;
-                    break;
-                case A_STR:
-                    p->kind = !strcmp(A_STR_OF(p->v)->s,"clock") ?
-                        PK_TICK : PK_IS;
-                    break;
-                case A_INT:
-                case A_NUM:
-                    p->kind = PK_CLK;
-                    return patt_start(p, done);
-                case A_XTASK:
-                    p->kind = PK_TASK;
-                    return patt_start(p, done);
-                case A_NIL:
-                    return a_error("invalid await : invalid event pattern");
-                case A_TASKS:
-                    return a_error("invalid await : unexpected tasks pool");
-                case A_FUNC:
-                    return a_error("invalid await : unexpected function");
-                default:
-                    return a_error("invalid await : unexpected %s",
-                        a_typename(p->v));
-            }
-            break;
-
-        case PK_CLK:
-            // a timer counts down from its full duration
-            p->clk = a_dbl(p->v);
-            patt_clk(p, done);
-            break;
-
-        case PK_TASK:
-            if (A_TASK_OF(p->v)->status == T_DONE) {
-                pay_task(p->v);
-                *done = 1;
-            }
-            break;
-
+    switch (p->r.kind) {
         case PK_SPAWN: {
             // the task runs inside the awaiting task
-            if (p->v.type != A_TASK) {
+            if (p->r.v.type != A_TASK) {
                 return a_error("invalid spawn : expected task prototype");
             }
             int base = a_top;
             a_args_unpack(p->args);
             AVal t = a_nil();
-            st = a_spawn(&t, p->v, a_nil(), base);
-            a_set(&p->v, t);
-            p->kind = PK_TASK;
-            p->own  = 1;
+            st = a_spawn(&t, p->r.v, a_nil(), base);
+            a_set(&p->r.v, t);
+            p->r.kind = PK_TASK;
+            p->r.own  = 1;
             if (st != A_OK) {
                 return st;
             }
-            return patt_start(p, done);
+            return leaf_start(&p->r, done);
         }
 
         case PK_UNTIL:
@@ -384,22 +491,8 @@ static AStatus patt_start (APatt* p, int* done) {
             }
             break;
 
-        case PK_ANY:
-        case PK_ALL:
-            if (p->v.type != A_TASKS) {
-                return a_error("invalid await : expected tasks pool");
-            }
-            break;
-
-        case PK_TRAILS:
-            *done = trails_off(a_cur, p->da, p->db);
-            if (*done) {
-                a_pay_clear();
-            }
-            break;
-
         default:
-            break;
+            return leaf_start(&p->r, done);
     }
     return st;
 }
@@ -409,20 +502,7 @@ static AStatus patt_start (APatt* p, int* done) {
 static AStatus patt_match (APatt* p, AVal evt, int* done) {
     AStatus st = A_OK;
     *done = 0;
-    switch (p->kind) {
-        case PK_TRUE:
-            *done = 1;
-            break;
-        case PK_IS:
-            *done = a_is(evt, p->v);
-            break;
-        case PK_TASK:
-            if (a_eq(evt, p->v)) {
-                pay_task(p->v);
-                *done = 1;
-            }
-            return A_OK;
-
+    switch (p->r.kind) {
         case PK_UNTIL:
         case PK_WHILE:
             if (p->a == NULL) {
@@ -452,8 +532,9 @@ static AStatus patt_match (APatt* p, AVal evt, int* done) {
                 a_pay_clear();
                 return st;
             }
+            pay1(evt);
             *done = 1;
-            break;
+            return A_OK;
 
         case PK_AND:
             if (!p->da) {
@@ -483,51 +564,19 @@ static AStatus patt_match (APatt* p, AVal evt, int* done) {
             }
             return st;
 
-        case PK_CLK:
-            if (a_isnum(evt)) {
-                p->clk -= a_dbl(evt);
-                patt_clk(p, done);
-            }
-            return A_OK;
-
-        case PK_TICK:
-            if (a_isnum(evt)) {
-                a_pay_clear();
-                a_pay_addc(evt);
-                a_pay_add(a_numi(CLK_LATE));
-                *done = 1;
-            }
-            return A_OK;
-
-        case PK_TRAILS:
-            // a trail of the task terminated (and it was the last one)
-            if (evt.type==A_XTASK && A_TASK_OF(evt)->desc==NULL &&
-                trails_off(a_cur,p->da,p->db))
-            {
-                a_pay_clear();
-                *done = 1;
-            }
-            return A_OK;
-
-        case PK_ANY:
-        case PK_ALL:
-            // a task of the pool terminated (and it was the last one)
-            if (evt.type==A_XTASK && A_TASK_OF(evt)->pool==A_TASKS_OF(p->v)) {
-                if (p->kind==PK_ANY || a_tasks_len(A_TASKS_OF(p->v))==0) {
-                    pay_task(evt);
-                    a_pay_addc(p->v);
-                    *done = 1;
-                }
-            }
-            return A_OK;
-
         default:
-            break;
+            leaf_match(&p->r, evt, done);
+            return A_OK;
     }
-    if (*done) {
-        pay1(evt);
+}
+
+// The same, for the pattern of an await.
+static AStatus root_match (ARoot* r, AVal evt, int* done) {
+    if (r->kind == PK_HEAP) {
+        return patt_match(r->u.p, evt, done);
     }
-    return st;
+    leaf_match(r, evt, done);
+    return A_OK;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -629,8 +678,7 @@ static ATrailX* trail_x (ATrail* tr) {
 
 // Releases the state of a trail, which becomes inactive.
 static void trail_off (ATrail* tr) {
-    patt_free(tr->awt);
-    tr->awt = NULL;
+    root_free(&tr->root);
     ATrailX* x = tr->x;
     if (x != NULL) {
         tr->x = NULL;
@@ -783,8 +831,7 @@ static AStatus trail_end (ATask* t, ATrail* tr, AStatus st) {
         a_pay_take(&ret, 0);
         a_pay_clear();
     }
-    patt_free(tr->awt);
-    tr->awt = NULL;
+    root_free(&tr->root);
 
     // its blocks already ended what it started: these are leftovers,
     // such as a pool that was never pinned
@@ -1072,7 +1119,7 @@ static AStatus emit_self (ATask* t, ATrail* tr, uint32_t time, AVal evt) {
         a_cur   = t;
         a_trl   = tr;
         a_depth = tr->adepth;
-        st = patt_match(tr->awt, evt, &done);
+        st = root_match(&tr->root, evt, &done);
         a_cur   = ptask;
         a_trl   = ptrail;
         a_depth = depth;
@@ -1494,9 +1541,22 @@ AStatus a_tasks (AVal* dst, AVal max) {
 // AWAIT
 ///////////////////////////////////////////////////////////////////////////////
 
+// The await was satisfied at once, or failed: the results must
+// survive the abort of the tasks that the pattern spawned.
+static void root_drop (ARoot* r) {
+    APay pay;
+    a_pay_save(&pay);
+    root_free(r);
+    a_pay_restore(&pay);
+}
+
 AStatus a_await (ATrail* tr, APatt* p) {
+    ARoot r;
+    memset(&r, 0, sizeof(r));
+    r.kind = PK_HEAP;
+    r.u.p  = p;
     if (tr->aborted) {
-        patt_free(p);
+        root_free(&r);
         return A_ABORT;
     }
     tr->time   = TIME;
@@ -1504,26 +1564,59 @@ AStatus a_await (ATrail* tr, APatt* p) {
     int done = 0;
     AStatus st = chk_aborted(patt_start(p, &done));
     if (st!=A_OK || done) {
-        // the results must survive the abort of spawned tasks
-        APay pay;
-        a_pay_save(&pay);
-        patt_free(p);
-        a_pay_restore(&pay);
+        root_drop(&r);
         return st;
     }
-    tr->awt = p;
+    if (p->r.kind < PK_HEAP) {
+        // a single leaf moves into the trail
+        r = p->r;
+        a_dec(p->args);
+        free(p);
+    }
+    tr->root = r;
     return A_AWAIT;
+}
+
+// Awaits on a leaf.
+static AStatus await_leaf (ATrail* tr, ARoot* r) {
+    if (tr->aborted) {
+        root_free(r);
+        return A_ABORT;
+    }
+    tr->time   = TIME;
+    tr->adepth = a_depth;
+    int done = 0;
+    AStatus st = chk_aborted(leaf_start(r, &done));
+    if (st!=A_OK || done) {
+        root_drop(r);
+        return st;
+    }
+    tr->root = *r;
+    return A_AWAIT;
+}
+
+AStatus a_await_val (ATrail* tr, AVal v) {
+    ARoot r;
+    memset(&r, 0, sizeof(r));
+    r.kind = PK_VAL;
+    r.v    = v;
+    a_inc(v);
+    return await_leaf(tr, &r);
+}
+
+AStatus a_await_trails (ATrail* tr, int lo, int n) {
+    ARoot r;
+    memset(&r, 0, sizeof(r));
+    r.kind = PK_TRAILS;
+    r.u.trs.lo = lo;
+    r.u.trs.n  = n;
+    return await_leaf(tr, &r);
 }
 
 AStatus a_resumed (ATrail* tr, AKind k) {
     // the payload (results or exit) must survive the abort of the
     // tasks the pattern spawned
-    APatt* p = tr->awt;
-    tr->awt = NULL;
-    APay pay;
-    a_pay_save(&pay);
-    patt_free(p);
-    a_pay_restore(&pay);
+    root_drop(&tr->root);
     switch (k) {
         case R_ABORT: return A_ABORT;
         case R_EXIT:  return EXIT;

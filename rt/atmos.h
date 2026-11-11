@@ -679,9 +679,26 @@ typedef struct ATrailX {
     int      nfilt;
 } ATrailX;
 
+// Pattern of an await: a single leaf, or a tree. The value is what
+// the leaf compares to: a tag, a table, a task, a pool, a duration.
+typedef struct ARoot {
+    uint8_t kind;
+    // the task was spawned by the pattern, which aborts it at the end
+    uint8_t own;
+    AVal    v;
+    union {
+        // duration: time left
+        double clk;
+        // trails that must terminate
+        struct { int32_t lo; int32_t n; } trs;
+        // tree
+        struct APatt* p;
+    } u;
+} ARoot;
+
 typedef struct ATrail {
     // the await in course
-    struct APatt* awt;
+    ARoot    root;
     ATrailX* x;
     // emit counter when the current await was established
     uint32_t time;
@@ -827,13 +844,16 @@ APatt* a_pt_not (APatt* a);
 // p && q  /  p || q
 APatt* a_pt_bin (int and, APatt* a, APatt* b);
 
-// Termination of the `n` trails from `lo` on, of the running task.
-APatt* a_pt_trails (int lo, int n);
-
 // Establishes an await, taking over the pattern. Returns A_OK if it
 // is satisfied at once (results in the payload), or A_AWAIT if the
 // trail must suspend.
 AStatus a_await (struct ATrail* tr, APatt* p);
+
+// The same for a single value (borrowed), with no pattern to build.
+AStatus a_await_val (struct ATrail* tr, AVal v);
+
+// Awaits the termination of the `n` trails of the task from `lo` on.
+AStatus a_await_trails (struct ATrail* tr, int lo, int n);
 
 // Status a trail continues with after it is resumed at an await.
 AStatus a_resumed (struct ATrail* tr, AKind k);
