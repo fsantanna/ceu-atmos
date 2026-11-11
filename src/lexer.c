@@ -98,6 +98,7 @@ static int is_num  (int c, int x) { (void)x; return isalnum(c) || c=='.'; }
 static int is_exp  (int c, int x) { (void)x; return isalnum(c) || c=='.' || c=='-' || c=='+'; }
 static int is_eol  (int c, int x) { (void)x; return c=='\n' || c=='\0'; }
 static int is_quo  (int c, int x) { return c=='\n' || c==x; }
+static int is_esc  (int c, int x) { return c=='\n' || c==x || c=='\\'; }
 
 // Consumes while `f` holds (or until, if `neg`).
 // Returns the number of characters, or -1 at the end of the source.
@@ -220,8 +221,19 @@ static Tk quoted (int c) {
     if (n1 == 2) {
         // empty
     } else if (n1 == 1) {
-        if (read_while(is_quo, c, 1) < 0) {
-            err(mk(tag,SRC+i0,1,lin,sep), "unterminated %s", what);
+        // in a string, a backslash escapes the delimiter
+        int end = 0;
+        while (!end) {
+            if (read_while((tag == TK_STR) ? is_esc : is_quo, c, 1) < 0) {
+                err(mk(tag,SRC+i0,1,lin,sep), "unterminated %s", what);
+            }
+            end = (SRC[I] != '\\');
+            if (!end) {
+                read();
+                if (SRC[I]!='\n' && SRC[I]!='\0') {
+                    read();
+                }
+            }
         }
         if (SRC[I] != c) {
             err(mk(tag,SRC+I-1,1,lin,sep), "unterminated %s", what);

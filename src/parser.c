@@ -940,6 +940,19 @@ static Expr* parser_at_err (void) {
     return e;
 }
 
+// The next two tokens are a keyword and `=`: no expression starts
+// like this.
+static int field_key (void) {
+    if (!check_tag(TK_KEY)) {
+        return 0;
+    }
+    Lex lex = lexer_save();
+    Tk tk;
+    lexer_token(&tk);
+    lexer_restore(lex);
+    return !is_lit(tk.tag) && !strcmp(tk.str,"=");
+}
+
 // [ e, id=e, @(k)=e ]
 static Expr* parser_table (void) {
     Expr* t = mk(E_TABLE, TK0);
@@ -948,6 +961,12 @@ static Expr* parser_table (void) {
         Expr* val;
         if (accept_str("@")) {
             key = parser_at_err();
+            accept_str_err("=");
+            val = parser();
+        } else if (field_key()) {
+            // a keyword as the name of a field, as in `t.loop`
+            next();
+            key = mk(E_STR, TK0);
             accept_str_err("=");
             val = parser();
         } else {

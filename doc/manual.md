@@ -613,7 +613,11 @@ A `string` literal is a sequence of characters enclosed by an odd number
 of matching double (`"`) or single (`'`) quotes.
 Atmos supports multi-line strings when using multiple quote delimiters.
 
-`TODO: single/multi-line differences, quoting, etc`
+A string with a single delimiter is restricted to one line and supports the
+escape sequences of Lua, such as `\n`, `\t`, `\\`, `\"`, `\'`, `\xHH`, and
+`\ddd`.
+A string with three or more delimiters may span multiple lines and is taken
+verbatim, with no escape sequences.
 
 A `native` literal is a sequence of characters enclosed by an odd number
 of matching back quotes (`` ` ``).
@@ -745,7 +749,8 @@ Like [table constructors in Lua][lua-table], it accepts assignments in three
 formats:
 
 - `@(e1)=e2` maps key/index `e1` to value `e2`
-- `id=e` maps string `id` to `e` (same as `@("id")=e`)
+- `id=e` maps string `id` to `e` (same as `@("id")=e`).
+  The name may be a keyword, as in `[loop=true]`.
 - `e` maps numeric index `i` to `e` (same as `@(i)=e`), where `i` starts at `0`
   and increments after each assignment
 
@@ -2526,7 +2531,7 @@ against [await patterns](#await) in suspended tasks.
 The optional target between brackets determines the scope of the broadcast:
 
 - `:task` (default): current task
-- `:parent`: parent task
+- `:parent`: parent task, or the pool of the task, if it lives in one
 - `:global`: all tasks
 - `t: task`: the given task
 - `n: number`: `n`th level up in the task hierarchy (`0` = current task)

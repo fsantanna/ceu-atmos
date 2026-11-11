@@ -1,0 +1,5 @@
+val t = [loop=false, x=1, if=2, nil = 3, true=4, 10, 20]
+print(t.loop, t.x, t.if, t.nil, t.true, t@0, t@1)
+val u = [loop { break(5) }, if true => 6 => 7, nil, true]
+print(u@0, u@1, u@2, u@3, #u)
+print(X.dump(:T [val=1, func=[task=2]]))

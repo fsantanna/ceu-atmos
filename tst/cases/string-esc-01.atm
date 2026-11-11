@@ -1,0 +1,4 @@
+print("a\"b", 'it\'s', "back\\", "x\\\"y", #"\"")
+print("tab\tend", '"', "'")
+val t = X.load("[s=\"q\\\"q\"]")
+print(t.s, X.dump(t))
