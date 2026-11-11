@@ -1,0 +1,25 @@
+;; a block of an outer scope of the parent runs in between: it goes on,
+;; since the exit does not leave its scope
+spawn {
+    spawn {
+        await(:E)
+        emit(:X)
+        print("d continues")
+        await(:E2)
+        print("d alive")
+    }
+    await(:GO)
+    loop {
+        spawn {
+            await(:X)
+            print("x")
+            break
+        }
+        emit(:E)
+        print("no")
+    }
+    print("after loop")
+    emit(:E2)
+}
+emit(:GO)
+print("end")

@@ -672,6 +672,10 @@ typedef struct ATrailX {
     int      wn;
     // the trail that waits for this one to end
     struct ATrail* waiter;
+    // exit that a child delivered while the trail was running, which
+    // it takes when control returns to it
+    AStatus  pst;
+    APay     ppay;
     // `toggle on`: tag of the events that toggle the trail, and the
     // filters that pass while it is off
     AVal     tog;
@@ -726,6 +730,8 @@ typedef struct ATrail {
     uint8_t  doomed;
     // toggled off: emits skip the trail, unless a filter matches
     uint8_t  toggled;
+    // an exit of a child is pending
+    uint8_t  pend;
 } ATrail;
 
 // Frame of a task: its trails, then its slots. It is freed when the

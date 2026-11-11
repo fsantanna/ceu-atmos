@@ -1,0 +1,29 @@
+;; a nested block breaks the loop of its parent block, which is running:
+;; the blocks above, which are suspended, are not affected
+spawn {
+    defer { print("S ends") }
+    par {
+        defer { print("P ends") }
+        await(:GO)
+        loop {
+            spawn {
+                await(:X)
+                print("x")
+                break
+            }
+            emit(:X)
+            print("no")
+        }
+        print("after loop")
+        await(:Y)
+        print("Y")
+    } with {
+        defer { print("B2 ends") }
+        await(false)
+    }
+}
+print("main")
+emit(:GO)
+print("went")
+emit(:Y)
+print("end")

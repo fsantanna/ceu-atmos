@@ -1,0 +1,26 @@
+;; the exit crosses another task that is running
+task Z () {
+    await(:GO2)
+    emit @:global (:X)
+    print("z continues")
+}
+spawn {
+    par {
+        await(:GO)
+        loop {
+            spawn {
+                await(:X)
+                print("x")
+                break
+            }
+            emit @:global (:GO2)
+            print("no")
+        }
+        print("after loop")
+    } with {
+        await(false)
+    }
+}
+spawn Z()
+emit(:GO)
+print("end")

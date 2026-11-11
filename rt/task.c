@@ -31,20 +31,48 @@ static char** ARGV = NULL;
 // Exit that a child delivers to a trail resumed with R_EXIT.
 static AStatus EXIT = A_OK;
 
+// Resumes in course, from the innermost: each keeps the trail that
+// led to it and the depth of the block that trail was in.
+typedef struct RFrame {
+    ATrail* from;
+    int     depth;
+    struct RFrame* up;
+} RFrame;
+
+static RFrame* RSTK = NULL;
+
 static AStatus node_abort (ANode* n);
 static AStatus trail_abort (ATask* t, ATrail* tr);
 static AStatus trail_resume (ATask* t, ATrail* tr, AKind k);
 static void    wait_set (ATrail* tr, AStatus st);
+static void    exit_park (ATask* t, ATrail* tr, AStatus st);
+static void    trail_stop (ATask* t, ATrail* tr);
+static void    node_stop (ANode* n);
+static int     trail_bdepth (ATask* t, int i);
+static ATrailX* trail_x (ATrail* tr);
 static AStatus emit_top   (ANode* n, AVal evt);
 static AStatus emit_node  (ANode* n, uint32_t time, AVal evt);
 static AStatus emit_trail (ATask* t, ATrail* tr, uint32_t time, AVal evt);
 
-// The running trail was aborted by what it just did. It is told only
-// once: from then on it unwinds, and its defers execute normally.
+// The running trail was affected by what it just did: it was aborted,
+// or a child exited. It is told only once: from then on it unwinds,
+// and its defers execute normally.
 AStatus a_chk_aborted (AStatus st) {
-    if (st==A_OK && a_trl!=NULL && a_trl->aborted==1) {
-        a_trl->aborted = 2;
+    ATrail* tr = a_trl;
+    if (st!=A_OK || tr==NULL) {
+        return st;
+    }
+    if (tr->aborted == 1) {
+        tr->aborted = 2;
         return A_ABORT;
+    }
+    if (tr->pend && tr->aborted==0) {
+        tr->pend = 0;
+        a_pay_restore(&tr->x->ppay);
+        tr->x->ppay.v   = NULL;
+        tr->x->ppay.n   = 0;
+        tr->x->ppay.cap = 0;
+        return tr->x->pst;
     }
     return st;
 }
@@ -682,12 +710,14 @@ static void trail_off (ATrail* tr) {
         free(x->filt);
         a_dec(x->tog);
         a_pay_drop(&x->wpay);
+        a_pay_drop(&x->ppay);
         for (int i=0; i<x->wn; i++) {
             a_dec(x->wstk[i]);
         }
         free(x->wstk);
         free(x);
     }
+    tr->pend    = 0;
     tr->status  = TR_OFF;
     tr->aborted = 0;
     tr->waiting = 0;
@@ -918,11 +948,13 @@ static AStatus trail_resume (ATask* t, ATrail* tr, AKind k) {
     if (tr->idx == 0) {
         t->status = T_RUNNING;
     }
-    int lin   = a_lin;
-    int depth = a_depth;
+    int lin = a_lin;
+    RFrame rf = { ptrail, a_depth, RSTK };
+    RSTK = &rf;
     AStatus st = t->desc->trails[tr->idx].resume(t, tr, k);
+    RSTK = rf.up;
     a_lin   = lin;
-    a_depth = depth;
+    a_depth = rf.depth;
     a_cur = ptask;
     a_trl = ptrail;
     if (st == A_AWAIT) {
@@ -1126,15 +1158,19 @@ static AStatus emit_trail (ATask* t, ATrail* tr, uint32_t time, AVal evt) {
             }
         }
         if (st != A_OK) {
-            // a child exited: raised at the await of the parent, or
-            // propagated if the parent is on the C stack
+            // a child exited
             if (tr->waiting) {
                 // leaving a block: replaces the pending exit
                 wait_set(tr, st);
                 st = A_OK;
             } else if (tr->status == TR_SUSPENDED) {
+                // raised at the await of the parent
                 EXIT = st;
                 st = trail_resume(t, tr, R_EXIT);
+            } else if (tr->status == TR_RUNNING) {
+                // the parent is on the C stack
+                exit_park(t, tr, st);
+                st = A_OK;
             }
         } else if (tr->status==TR_SUSPENDED && tr->time<time && !tr->waiting) {
             int done = 0;
@@ -1963,6 +1999,52 @@ void a_pin_clr (AVal* slot) {
     }
 }
 
+// A child exits to a trail that is running. The trail is below in the
+// C stack, in a call that led to the exit: it takes the exit when
+// control returns to it, and then leaves the block it is in. So what
+// that block started stops at once, as when a block waits to end:
+// suspended tasks no longer react, and running ones unwind when
+// control returns to them, before it returns to the trail.
+static void exit_park (ATask* t, ATrail* tr, AStatus st) {
+    if (tr->pend) {
+        // only the first exit counts
+        a_pay_clear();
+        return;
+    }
+    ATrailX* x = trail_x(tr);
+    tr->pend = 1;
+    x->pst = st;
+    a_pay_save(&x->ppay);
+
+    // depth of the block the trail is in: kept by the resume that its
+    // call led to
+    int depth = -1;
+    for (RFrame* rf=RSTK; rf!=NULL; rf=rf->up) {
+        if (rf->from == tr) {
+            depth = rf->depth;
+            break;
+        }
+    }
+    if (depth < 0) {
+        return;
+    }
+    const ATrailD* ds = t->desc->trails;
+    for (int j=ds[tr->idx].kid; j>=0; j=ds[j].next) {
+        ATrail* c = &t->trs[j];
+        if (c->status!=TR_OFF && trail_bdepth(t,j)-1>=depth) {
+            c->doomed = 1;
+            trail_stop(t, c);
+        }
+    }
+    for (int i=0; i<t->node.ndns && tr->nkids>0; i++) {
+        ANode* n = t->node.dns[i];
+        if (!n->dead && n->trail==tr->idx && node_adepth(n)>=depth) {
+            n->doomed = 1;
+            node_stop(n);
+        }
+    }
+}
+
 // A trail has not ended after its abort: it is running below in the C
 // stack, or it waits for one that is.
 static int trail_late (ATrail* tr) {
@@ -1990,8 +2072,6 @@ static ATrail* late_of (ANode* n) {
 
 // Marks the trails in a subtree that are running, to unwind when
 // control returns to them.
-static void node_stop (ANode* n);
-
 static void trail_stop (ATask* t, ATrail* tr) {
     if (tr->status == TR_OFF) {
         return;
@@ -2055,6 +2135,16 @@ void a_trail_doom (ATask* t, int i) {
 static void wait_for (ATrail* me, ATrail* late, AStatus st, int base) {
     trail_x(late)->waiter = me;
     ATrailX* x = trail_x(me);
+    if (me->pend) {
+        // an exit of a child arrived meanwhile: it replaces this one
+        me->pend = 0;
+        a_pay_clear();
+        a_pay_restore(&x->ppay);
+        x->ppay.v   = NULL;
+        x->ppay.n   = 0;
+        x->ppay.cap = 0;
+        st = x->pst;
+    }
     me->waiting = 1;
     x->wst = st;
     a_pay_save(&x->wpay);
