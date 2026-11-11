@@ -265,9 +265,9 @@ The next example uses tags as table keys:
 
 ```
 val pos = []           ;; a new table
-set pos@(:x) = 10
-set pos.y = 20          ;; equivalent to pos@(:y)=20
-print(pos.x, pos@(:y))  ;; -> 10, 20
+set pos@:x = 10
+set pos.y = 20          ;; equivalent to pos@:y=20
+print(pos.x, pos@:y)    ;; -> 10, 20
 ```
 
 Tags can also be used to "tag" tables, introducing the notion of lightweight
@@ -1743,18 +1743,18 @@ Therefore, it is an error to concatenate tables that hold
 Atmos uses the at (`@`) or dot (`.`) notations to index [tables](#table):
 
 ```
-Expr : Expr At                  ;; t@(e)  t@0  t@i
+Expr : Expr At                  ;; t@(e)  t@0  t@i  t@:x
      | Expr `@´ (`#´ | `+´)     ;; t@#  t@+
      | Expr `.´ ID              ;; t.x
 
 At   : `@´ `(´ Expr `)´         ;; t@(e)
-     | `@´ (NUM | ID)           ;; t@0  t@i
+     | `@´ (NUM | ID | TAG)     ;; t@0  t@i  t@:x
 ```
 
 The at notation uses parenthesis (instead of brackets) to provide the index
 expression.
-It is possible to omit the parenthesis to index literal numbers and
-identifiers.
+It is possible to omit the parenthesis to index literal numbers,
+identifiers, and tags.
 The dot notation is a syntactic sugar to index string keys: `t.x` expands to
 `t@("x")`.
 Finally, the tip markers `#` and `+` refer to the last (`#t-1`) and append
@@ -1774,7 +1774,7 @@ Examples:
 ```
 val t = [ x=1 ]
 print(t@('x'))      ;; --> 1
-print(t@(:x))       ;; --> 1
+print(t@:x)         ;; --> 1
 print(t.x)          ;; --> 1
 print(t.y)          ;; --> nil
 ```
@@ -2545,8 +2545,8 @@ Examples:
 task T () {
     val x = spawn X()
     val e = <...>
-    emit @(:global) (e) ;; global broadcast
-    emit @(:task) (e)   ;; restricted to `T`
+    emit @:global (e)   ;; global broadcast
+    emit @:task (e)     ;; restricted to `T`
     emit @x (e)         ;; restricted to `x`
 }
 ```

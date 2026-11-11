@@ -122,7 +122,7 @@ loop {
     ;;  * increments winner points
     ;;  * awaits 1s before next battle
     val winner = await(battle)
-    set points@(winner) += 1
+    set points@winner += 1
     await 1s
 
     ;;;
