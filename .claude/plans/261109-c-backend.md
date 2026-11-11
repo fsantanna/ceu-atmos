@@ -884,6 +884,15 @@ Agreed after `atmos-lang/atmos@5977b07`.
     - A branch costs about 120 bytes (the record and its slots), down
       from 430.
     - Structures: `ATask` 160 bytes (was 248), `ATrail` 72, `ANode` 64.
+- Found by the port of Pingus (`fsantanna/ceu-atmos-pingus`,
+  `doc/compiler.md`):
+    - `func f` inside a function or task, with `f` unknown, is a
+      compile error: `val func f` is the local form. Before, as in the
+      reference, it declared a variable of the program, shared by all
+      calls (two sprites shared one function).
+    - A keyword is accepted as the name of a field in a constructor
+      (`[loop=false]`), as in `t.loop`.
+    - A backslash escapes the delimiter of a string (`"a\"b"`).
 - An exit of a child waits in a parent that is running (Scheduler).
   Before, it travelled down the C stack as the status of whatever was
   in between: a suspended block further up took it as its own, and so

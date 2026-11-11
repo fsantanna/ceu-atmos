@@ -7,7 +7,7 @@ print(f(10)(20))
 var i = 10
 func g () {
     var j = 20
-    func gg () {
+    val func gg () {
         return(i + j)
     }
     print(gg())
@@ -18,7 +18,7 @@ do {
     func h () {
         do {
             var b = 20
-            func hh () {
+            val func hh () {
                 return(a + b)
             }
             return(hh)

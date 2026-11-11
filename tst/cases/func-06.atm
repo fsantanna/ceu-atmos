@@ -8,7 +8,9 @@ do {
     }
     x(:ok)
 }
+var inner
 func outer () {
+    ;; `inner` is declared: this is an assignment
     func inner () { :inner }
     inner()
 }

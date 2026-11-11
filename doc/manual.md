@@ -1476,6 +1476,21 @@ The first format supports functions and tasks:
 - `val func f (<pars>) { <body> }`:
     equivalent to `val f = func (<pars>) { <body> }`
 
+Outside functions and tasks, the first form also declares `f` as a variable of
+the program, if it does not exist, such that functions may refer to each other
+regardless of their order.
+Inside a function or task, `f` must already exist, since a new variable of the
+program would be shared by all calls of the enclosing function.
+Otherwise, the declaration is an error, and the `val` form is the one to use:
+
+```
+func f (x) {
+    val func g () { x }     ;; ok: local to each call of `f`
+    func h () { x }         ;; error, unless `h` exists
+    g()
+}
+```
+
 The second format supports two other variations based on
 [Lua functions][lua-function]:
 

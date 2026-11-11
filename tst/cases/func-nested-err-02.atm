@@ -1,0 +1,5 @@
+task T () {
+    task U () { nil }
+    await(:E)
+}
+spawn T()

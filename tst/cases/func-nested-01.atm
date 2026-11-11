@@ -1,0 +1,25 @@
+;; inside a function or task, a named function is local with `val`, or
+;; is assigned to a variable that exists
+var g
+var n = 0
+func f (x) {
+    val func h () { x * 2 }
+    set g = func () { x + 1 }
+    func g () { x + 10 }
+    set n = n + 1
+    h()
+}
+print(f(1), g(), n)
+print(f(5), g(), n)
+task T (id) {
+    val func name () { id }
+    await(:E)
+    print(name())
+}
+spawn T(:a)
+spawn T(:b)
+emit(:E)
+do {
+    func top () { :top }
+}
+print(top())

@@ -157,6 +157,10 @@ static void chk_await (Tk tk, const char* what) {
 // `func f () {...}` declares `f` at the top level if it is unknown
 // where it appears. All such names are declared ahead, so functions
 // may refer to each other regardless of their order.
+// This only holds outside functions and tasks. Inside one, the
+// declaration takes `val`, or else it assigns a variable that must
+// exist: an unknown name is an error.
+static int HPROTO = 0;
 static void hoist (Expr* e);
 
 static void hoist_list (List* l) {
@@ -213,7 +217,10 @@ static void hoist (Expr* e) {
             if (e->u.set.proto && dst->tag==E_ACC &&
                 lookup(dst->tk.str)==NULL)
             {
-                declare(dst->tk, V_VAR);
+                // inside a function, nothing is declared ahead
+                if (HPROTO == 0) {
+                    declare(dst->tk, V_VAR);
+                }
             }
             hoist_list(&e->u.set.dsts);
             hoist(e->u.set.src);
@@ -244,7 +251,9 @@ static void hoist (Expr* e) {
             hoist(e->u.xcatch.blk);
             break;
         case E_PROTO:
+            HPROTO++;
             hoist(e->u.proto.blk);
+            HPROTO--;
             break;
         case E_SPAWN:
             hoist(e->u.spawn.f);
@@ -475,6 +484,13 @@ static void res (Expr* e) {
             res(e->u.set.src);
             for (int i=0; i<e->u.set.dsts.n; i++) {
                 Expr* dst = e->u.set.dsts.v[i];
+                if (e->u.set.proto && dst->tag==E_ACC &&
+                    lookup(dst->tk.str)==NULL)
+                {
+                    // `func f` inside a function, with `f` unknown: a
+                    // global would be shared by all of its calls
+                    err(dst->tk, "invalid declaration : expected 'val'");
+                }
                 res(dst);
                 if (dst->tag == E_PUB) {
                     continue;

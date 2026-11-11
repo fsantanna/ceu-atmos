@@ -40,6 +40,8 @@ ADAPT = {
     '0060': { 'sub': PUSH },
     '0061': { 'sub': PUSH + [('t@1', 't@0'), ('t@(2)', 't@(1)'), ('t@3', 't@2')] },
     '0063': { 'sub': [('t@(#t)', 't@(#t+1)')], 'accept': BASE0 },
+    '0077': { 'sub': [('func g ()', 'val func g ()')] },
+    '0078': { 'sub': [('func g ()', 'val func g ()')] },
     '0105': { 'accept': BASE0 },
     '0106': { 'accept': BASE0 },
     '0112': { 'accept': BASE0 },

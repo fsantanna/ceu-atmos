@@ -1,0 +1,1 @@
+func-nested-err-02.atm : line 2 : near 'U' : invalid declaration : expected 'val'

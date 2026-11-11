@@ -26,6 +26,8 @@ language, according to `tst/adapt.py`.
 | `0060-ppp-3` | rewritten |  |
 | `0061-ppp-4` | rewritten |  |
 | `0063-ppp-6-error-push` | rewritten | indexes start at 0 |
+| `0077-func-7-nested` | rewritten |  |
+| `0078-func-8-nested` | rewritten |  |
 | `0105-loop-2` |  | indexes start at 0 |
 | `0106-loop-num-1` |  | indexes start at 0 |
 | `0112-loop-5` |  | indexes start at 0 |

@@ -1,0 +1,5 @@
+func f () {
+    func g () { 1 }
+    g()
+}
+print(f())

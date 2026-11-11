@@ -1,4 +1,5 @@
 ;; tasks are confined like their prototypes and arguments
+var Bad
 func main () {
     pin ts = tasks()
     pin t = [1]
