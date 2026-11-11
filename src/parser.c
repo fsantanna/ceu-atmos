@@ -519,6 +519,7 @@ static Expr* parser_dcl (void) {
         parser_pars(p);
         p->u.proto.blk = parser_block();
         dcl->u.dcl.set = p;
+        dcl->u.dcl.rec = 1;
         return dcl;
     }
 

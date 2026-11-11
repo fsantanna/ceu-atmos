@@ -898,6 +898,11 @@ Agreed after `atmos-lang/atmos@5977b07`.
     - A keyword is accepted as the name of a field in a constructor
       (`[loop=false]`), as in `t.loop`.
     - A backslash escapes the delimiter of a string (`"a\"b"`).
+- Found by the port of Flare (`fsantanna/flare`, `doc/compiler.md`):
+    - `val func f` and `val task T` are visible in their own bodies, so
+      a local function may call itself. Inside the body the name is the
+      function itself (`self` of the C function), not a capture, which
+      would be a cycle that reference counting does not reclaim.
 - An exit of a child waits in a parent that is running (Scheduler).
   Before, it travelled down the C stack as the status of whatever was
   in between: a suspended block further up took it as its own, and so

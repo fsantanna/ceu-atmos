@@ -245,7 +245,8 @@ struct Expr {
         struct { List es; }                             list;
         struct { List dcls; Expr* e; }                  where;
         // tk is val, var, or pin
-        struct { int n; Tk* ids; Expr* set; }           dcl;
+        // rec: `val func f`, whose body sees `f`
+        struct { int n; Tk* ids; Expr* set; int rec; }  dcl;
         // proto: `func f () {}` declares `f` if it is unknown
         // op: binary operator of a compound assignment, or NULL
         struct { List dsts; Expr* src; int proto; const char* op; }
@@ -330,6 +331,9 @@ struct Proto {
     int    dots;
     // task prototype (or the main chunk): may await
     int    task;
+    // variable that names the function, if `val func f`: inside the
+    // body it is the function itself, not a capture
+    Var*   self;
 };
 
 // Binds every access to its declaration and checks assignments.

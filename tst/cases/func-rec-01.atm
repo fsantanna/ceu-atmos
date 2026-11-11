@@ -1,0 +1,50 @@
+;; a function declared with `val func` sees itself, with no capture
+val func fact (n) {
+    if n <= 1 => 1 => n * fact(n-1)
+}
+print(fact(5))
+
+func outer (k) {
+    val func down (n) {
+        if n == 0 => k => down(n-1)
+    }
+    down(3)
+}
+print(outer(:a), outer(:b))
+
+;; a closure inside it captures it
+func mk (k) {
+    val func f (n) {
+        val g = func () { f(n-1) }
+        if n == 0 => k => g()
+    }
+    f
+}
+val h = mk(:deep)
+print(h(4))
+
+;; with a pinned capture
+do {
+    pin t = [10, 20, 30]
+    val func sum (i) {
+        if i == #t => 0 => t@i + sum(i+1)
+    }
+    print(sum(0))
+}
+
+;; a task that awaits itself
+spawn {
+    val task Count (n) {
+        if n > 0 {
+            await Count(n-1)
+        }
+        print(:count, n)
+        await(:E)
+        n
+    }
+    val v = await Count(2)
+    print(:done, v)
+}
+emit(:E)
+emit(:E)
+emit(:E)

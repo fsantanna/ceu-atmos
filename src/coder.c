@@ -427,6 +427,9 @@ static const char* var_raw (Unit* u, Var* v) {
         return v->csym;
     } else if (v->global) {
         return xfmt("G%d_%s", v->id, v->tk.str);
+    } else if (v == u->proto->self) {
+        // the function that the variable names
+        return "SELF";
     } else if (v->proto == u->proto) {
         if (v->slot < 0) {
             v->slot  = slot_new(u);
@@ -1683,6 +1686,10 @@ static void unit_emit (Unit* u, Buf* c) {
         buf_add(c, xfmt("    AVal L[%d];\n", n));
         buf_add(c, xfmt("    a_nils(L, %d);\n", n));
         buf_add(c, "    int D = a_depth + 1;\n");
+    }
+    if (u->proto->self != NULL) {
+        buf_add(c, "    AVal SELF = a_obj(&self->hdr);\n");
+        buf_add(c, "    (void) SELF;\n");
     }
     buf_add(c, "    AStatus st = A_OK;\n");
     buf_add(c, "    int base = a_top;\n");

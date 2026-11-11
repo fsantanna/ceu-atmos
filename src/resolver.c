@@ -108,6 +108,11 @@ static void capture (Var* v) {
         return;
     }
     for (Proto* p=PROTO; p!=v->proto; p=p->up) {
+        // the function that the variable names: it is the function
+        // itself there, and a capture would be a cycle
+        if (p->self == v) {
+            break;
+        }
         int has = 0;
         for (int i=0; i<p->ncaps; i++) {
             has = has || (p->caps[i] == v);
@@ -123,12 +128,17 @@ static void capture (Var* v) {
     }
 }
 
+// Variable that names the next function to be resolved.
+static Var* SELF = NULL;
+
 static Proto* proto_new (int dots, int task) {
     Proto* p = xalloc(sizeof(Proto));
     p->id   = NPROTOS++;
     p->up   = PROTO;
     p->dots = dots;
     p->task = task;
+    p->self = SELF;
+    SELF = NULL;
     return p;
 }
 
@@ -469,6 +479,14 @@ static void res (Expr* e) {
             break;
 
         case E_DCL: {
+            if (e->u.dcl.rec) {
+                // `val func f`: the body sees `f`, to call itself
+                e->vars = xalloc(sizeof(Var*));
+                e->vars[0] = declare(e->u.dcl.ids[0], V_VAL);
+                SELF = e->vars[0];
+                res(e->u.dcl.set);
+                break;
+            }
             // the initialization does not see the new variables
             res(e->u.dcl.set);
             VarKind kind = !strcmp(e->tk.str,"var") ? V_VAR :

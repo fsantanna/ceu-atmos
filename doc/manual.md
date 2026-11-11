@@ -1476,6 +1476,11 @@ The first format supports functions and tasks:
 - `val func f (<pars>) { <body> }`:
     equivalent to `val f = func (<pars>) { <body> }`
 
+In the `val` form, `f` is visible in its own body, such that the function may
+call itself.
+The same holds for a task, which may spawn or await itself.
+Inside the body, `f` is the function itself, not a captured copy.
+
 Outside functions and tasks, the first form also declares `f` as a variable of
 the program, if it does not exist, such that functions may refer to each other
 regardless of their order.
@@ -1488,6 +1493,12 @@ func f (x) {
     val func g () { x }     ;; ok: local to each call of `f`
     func h () { x }         ;; error, unless `h` exists
     g()
+}
+```
+
+```
+val func fact (n) {
+    if n <= 1 => 1 => n * fact(n-1)     ;; calls itself
 }
 ```
 
