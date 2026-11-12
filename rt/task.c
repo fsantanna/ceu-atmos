@@ -625,6 +625,17 @@ static void node_add (ANode* up, ANode* n) {
     }
     up->dns[up->ndns++] = n;
     n->up = up;
+    if (up->hdr.type == A_TASKS) {
+        ATasks* ts = (ATasks*) up;
+        if (ts->seq == UINT32_MAX) {
+            // out of numbers: the tasks in the pool take the first ones
+            ts->seq = 0;
+            for (int i=0; i<up->ndns-1; i++) {
+                up->dns[i]->seq = ts->seq++;
+            }
+        }
+        n->seq = ts->seq++;
+    }
     if (up == (ANode*)a_cur) {
         n->trail = a_trl->idx;
         a_trl->nkids++;
@@ -1456,6 +1467,29 @@ ATask* a_tasks_next (ATasks* ts, int* pos) {
             return (ATask*) n;
         }
     }
+    return NULL;
+}
+
+ATask* a_tasks_iter (ATasks* ts, int64_t* pos) {
+    // the children are in the order of `seq`: first one from `pos`
+    ANode** dns = ts->node.dns;
+    int lo = 0;
+    int hi = ts->node.ndns;
+    while (lo < hi) {
+        int mid = lo + (hi-lo)/2;
+        if (dns[mid]->seq < *pos) {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    for (; lo<ts->node.ndns; lo++) {
+        if (!dns[lo]->dead) {
+            *pos = (int64_t)dns[lo]->seq + 1;
+            return (ATask*) dns[lo];
+        }
+    }
+    *pos = (int64_t)ts->seq;
     return NULL;
 }
 

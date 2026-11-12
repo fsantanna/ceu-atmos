@@ -1,0 +1,44 @@
+;; the body of a loop over a pool may abort and spawn tasks of the pool
+task T (i) {
+    defer { print(:end, i) }
+    await(:X)
+}
+pin ts = tasks()
+spawn @ts T(1)
+spawn @ts T(2)
+spawn @ts T(3)
+loop _, t in ts {
+    abort t
+}
+print(:a, #ts)
+
+spawn @ts T(4)
+spawn @ts T(5)
+spawn @ts T(6)
+var n = 0
+loop i, t in ts {
+    ;; aborts the task ahead, which is not visited
+    set n = n + 1
+    if n == 1 {
+        loop _, u in ts {
+            if u != t {
+                abort u
+                break
+            }
+        }
+    }
+    print(:visit, i)
+}
+print(:b, #ts, n)
+
+;; a task spawned in the body is visited
+spawn @ts T(7)
+set n = 0
+loop _, t in ts {
+    set n = n + 1
+    if n < 3 {
+        spawn @ts T(10+n)
+    }
+    abort t
+}
+print(:c, #ts, n)

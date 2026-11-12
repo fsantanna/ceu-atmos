@@ -188,8 +188,8 @@ AStatus a_next (AVal it, AVal lim, AVal* pos, AVal* k, AVal* v) {
         }
         case A_TASKS: {
             // index among the live tasks, and the task
-            int i = (int) p;
-            ATask* x = a_tasks_next(A_TASKS_OF(it), &i);
+            int64_t i = p;
+            ATask* x = a_tasks_iter(A_TASKS_OF(it), &i);
             int64_t n = (k->type == A_INT) ? k->u.i + 1 : 0;
             if (x != NULL) {
                 a_set(k, a_int(n));

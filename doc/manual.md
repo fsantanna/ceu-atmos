@@ -2143,7 +2143,9 @@ supported:
 - `:table`:
     ranges over vector indexes and values, and than over key-values of a table
 - `:tasks`:
-    ranges over the indexes and tasks of a task pool
+    ranges over the indexes and tasks of a task pool, in the order they were
+    spawned; the body may abort tasks of the pool, which are then not
+    visited, and may spawn tasks into it, which are visited
 - `:function`:
     ranges over calls to the given function, until it returns `nil`
 - `(:number,:number)`:

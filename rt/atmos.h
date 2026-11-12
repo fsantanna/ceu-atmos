@@ -634,6 +634,8 @@ AVal a_task (const AProto* p, int ncap);
 // to each child, in spawn order.
 typedef struct ANode {
     AObj   hdr;
+    // order of the spawn among the tasks of its pool
+    uint32_t seq;
     struct ANode*  up;
     struct ANode** dns;
     int    ndns;
@@ -773,6 +775,8 @@ typedef struct ATask {
 typedef struct ATasks {
     ANode node;
     int   max;
+    // `seq` of the next task
+    uint32_t seq;
 } ATasks;
 
 #define A_TASK_OF(v)  ((ATask*)(v).u.o)
@@ -816,6 +820,11 @@ int a_tasks_len (struct ATasks* ts);
 // Next live task of a pool from position `pos`, which advances, or
 // NULL at the end.
 struct ATask* a_tasks_next (struct ATasks* ts, int* pos);
+
+// The same for a loop of the program, whose body may spawn and abort
+// tasks of the pool: `pos` is the order of the next spawn to visit, and
+// not an index, which changes when dead tasks leave.
+struct ATask* a_tasks_iter (struct ATasks* ts, int64_t* pos);
 
 // Table with the live tasks of a pool (owned).
 AVal a_tasks_tab (AVal ts);
