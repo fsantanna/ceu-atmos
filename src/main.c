@@ -6,7 +6,8 @@
 //   atmos -t f.atm         enables `test` blocks
 //
 // Environment:
-//   ATMOS_HOME     root with `rt/` and `build/` (default: build dir)
+//   ATMOS_HOME     root with `rt/` and `build/` (default: where the
+//                  compiler is, or else where it was built)
 //   ATMOS_CC       C compiler (default: cc)
 //   ATMOS_CFLAGS   C flags (default: -O1)
 //   ATMOS_LDFLAGS  linker flags, after the program (e.g. -lSDL2)
@@ -61,9 +62,33 @@ static const char* env (const char* name, const char* def) {
     return (v!=NULL && v[0]!='\0') ? v : def;
 }
 
+// Root with `rt/` and `build/`: the variable ATMOS_HOME, or the
+// directory of the compiler itself, if the runtime is there (so that a
+// checkout may be moved), or the directory where it was built.
+static const char* home_dir (void) {
+    const char* v = getenv("ATMOS_HOME");
+    if (v!=NULL && v[0]!='\0') {
+        return v;
+    }
+    char exe[4096];
+    ssize_t n = readlink("/proc/self/exe", exe, sizeof(exe)-1);
+    if (n > 0) {
+        exe[n] = '\0';
+        char* sep = strrchr(exe, '/');
+        if (sep != NULL) {
+            *sep = '\0';
+            char* hdr = xfmt("%s/rt/atmos.h", exe);
+            if (access(hdr, R_OK) == 0) {
+                return xfmt("%s", exe);
+            }
+        }
+    }
+    return ATMOS_HOME;
+}
+
 // Builds the C source into an executable. Returns 0 on success.
 static int build (const char* c, const char* exe) {
-    const char* home = env("ATMOS_HOME", ATMOS_HOME);
+    const char* home = home_dir();
     int asan = (getenv("ATMOS_ASAN") != NULL);
     char* cmd = xfmt(
         "%s %s %s -w -I%s/rt %s %s/build/libatmos%s.a -lm %s -o %s",

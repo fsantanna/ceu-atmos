@@ -88,5 +88,6 @@ language, according to `tst/adapt.py`.
 | `0425-tasks-8` |  | tasks and pools have their own types |
 | `0438-tasks-21-pool-limit-fail-then-pass` | rewritten | a terminated task leaves its pool at once |
 | `0444-every-2` | indexes start at 0 |  |
+| `0462-watching-f-error-unexpected-function` |  | the error points to the expression |
 | `0475-op-mixed-err-1` |  | await combinators follow the precedence of C |
 | `0489-timers-3-periodic-catch-up` |  | indexes start at 0 |

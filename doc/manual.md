@@ -429,6 +429,9 @@ The following environment variables affect the build:
   (e.g., `-lSDL2`).
 - `ATMOS_ASAN`: if set, builds the program with the address sanitizer, which
   also reports memory leaks when the program terminates.
+- `ATMOS_HOME`: the directory with the runtime (`rt/` and `build/`).
+  By default, it is the directory of the compiler itself, so a checkout may be
+  moved after it is built.
 
 ## Environments
 

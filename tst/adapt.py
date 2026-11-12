@@ -105,6 +105,7 @@ ADAPT = {
     '0438': { 'sub': [('atmos.gc()', '')],
               'accept': 'a terminated task leaves its pool at once' },
     '0444': IDX,
+    '0462': { 'accept': 'the error points to the expression' },
     '0475': { 'accept': 'await combinators follow the precedence of C' },
     '0489': { 'accept': BASE0 },
 }

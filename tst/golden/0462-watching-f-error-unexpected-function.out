@@ -1,1 +1,1 @@
-0462-watching-f-error-unexpected-function.atm : line 3 : near '{' : invalid await : unexpected expression
+0462-watching-f-error-unexpected-function.atm : line 3 : near 'f' : invalid await : unexpected expression

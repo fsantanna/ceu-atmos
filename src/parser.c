@@ -887,7 +887,8 @@ static Patt* parser_await (void) {
         ok = (b->kind!=PT_AND && b->kind!=PT_OR && b->kind!=PT_NOT);
     }
     if (!ok) {
-        err(TK1, "invalid await : unexpected expression");
+        // at the expression, not at what follows it
+        err(b->tk, "invalid await : unexpected expression");
     }
     return p;
 }
