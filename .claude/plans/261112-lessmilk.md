@@ -44,7 +44,8 @@ Status: sent to the session that works in the repository
 | Ports to Céu of games 1 and 2 | `leokaplan/lessmilk`, folder `ceu/` | 2015, 954 lines |
 | Port of Pingus, the model | `fsantanna/ceu-atmos-pingus` | complete |
 | Its tips | the section "What the Pingus port taught", below | |
-| The SDL environment | `fsantanna/ceu-atmos`, `lib/sdl.atm`, `exs/rocks/` | |
+| The raylib environment | `fsantanna/raylib`, `raylib.atm` | in course, by the session `raylib` |
+| The SDL environment, as a model of one | `fsantanna/ceu-atmos`, `lib/sdl.atm`, `exs/rocks/` | |
 
 - The site `lessmilk.com` could not be read when this plan was
   written. The license of the original games and of their images and
@@ -124,11 +125,14 @@ answered: ask, one at a time, before building on them.
   its documents are the base, with credit to her in the README and in
   each document. Each game is rewritten for this compiler and then
   corrected against the original.
-- **Library** (confirm): SDL2, through `lib/sdl.atm`, which exists
-  and has a test mode. The alternative is raylib, through the
-  environment that the port of the raylib games is writing: it would
-  make the two collections share one library, but depends on that
-  work.
+- **Library**: raylib, decided by the author. The port uses the
+  environment `raylib.atm` that the port of the raylib games is
+  writing (`fsantanna/raylib`, session `raylib`), copied at a fixed
+  commit and updated when convenient. The two sessions talk directly
+  about the library: what this port needs from it (sprites with
+  rotation, easings, sounds, text, the test mode), and what it finds.
+  The first draft of this plan proposed SDL2, when that environment
+  did not exist.
 - **Coordinates** (confirm): pixels, as the originals, not the
   percentages of `pico`.
 - **Assets and license** (confirm): images and sounds are not copied
@@ -199,7 +203,7 @@ screen, driven by Playwright. Set up before the first game:
 - `tools/compare.sh` compares the traces line by line and shows the
   first frame that differs. Screenshots are compared side by side,
   not pixel by pixel: fonts and scaling differ between a canvas and
-  SDL.
+  raylib.
 - What can match exactly: the logic of each game (positions, score,
   what spawns when) if the port uses the same generator and the same
   arithmetic. JavaScript numbers are doubles, as in Atmos.
@@ -220,8 +224,9 @@ screen, driven by Playwright. Set up before the first game:
       Oliveira). The copies of the originals and of the student port
       checked out next to the repository. The originals running in
       the browser with no screen, with the harness.
-- [ ] L1: the engine over the chosen library: window, images, text,
-      sound, the test mode. The modules Motion and Sprite.
+- [ ] L1: the engine over `raylib.atm`: window, images, text, sound,
+      the test mode. The modules Motion (over the easings of raylib,
+      `reasings.h`) and Sprite.
 - [ ] L2: `Run!`, the smallest: ported, compared with the original,
       documented. It sets the form of the other eleven.
 - [ ] L3: the module Physics and the module Particles. `Box Jump`,
