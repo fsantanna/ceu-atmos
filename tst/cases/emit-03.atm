@@ -1,0 +1,28 @@
+;; a task that starts during an emit does not receive it
+task T (n) {
+    await(:X)
+    print(:T, n)
+}
+pin ts = tasks()
+spawn {
+    await(:X)
+    print(:first)
+    spawn @ts T(1)
+    spawn {
+        await(:X)
+        print(:nested)
+    }
+    await(:X)
+    print(:second)
+}
+spawn {
+    loop {
+        await(:X)
+        print(:every)
+        spawn @ts T(2)
+    }
+}
+emit(:X)
+print(:a)
+emit(:X)
+print(:b)

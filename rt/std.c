@@ -165,7 +165,6 @@ MATH1(cos,   cos(x))
 MATH1(tan,   tan(x))
 MATH1(asin,  asin(x))
 MATH1(acos,  acos(x))
-MATH1(atan,  atan(x))
 MATH1(exp,   exp(x))
 MATH1(log,   log(x))
 
@@ -202,6 +201,22 @@ static AStatus math_abs (AFunc* self, int argc, AVal* argv) {
     } else {
         a_push(a_num(fabs(x)));
     }
+    return A_OK;
+}
+
+// math.atan(y [, x]): the angle of the point (x, y), with x=1 by
+// default, as in Lua.
+static AStatus math_atan (AFunc* self, int argc, AVal* argv) {
+    (void) self;
+    double y = 0;
+    double x = 1;
+    if (argn(argc,argv,0,"atan",&y) != A_OK) {
+        return A_ERROR;
+    }
+    if (argc>1 && argn(argc,argv,1,"atan",&x)!=A_OK) {
+        return A_ERROR;
+    }
+    a_push(a_num(atan2(y, x)));
     return A_OK;
 }
 

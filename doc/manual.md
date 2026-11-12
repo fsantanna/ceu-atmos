@@ -205,6 +205,13 @@ Finally, the task next to the outer task is traversed in the same way `(6)`.
 An `emit` statement traversal runs to completion before proceeding to the next
 statement, just like a function call.
 
+The tasks of a block are traversed in the order they were attached to it, and
+the tasks of a pool, at the position of the pool, in the order they were
+spawned.
+A task only reacts to an `emit` that starts after its `await`: a task that is
+spawned, or that awaits again, in reaction to an event does not awake again in
+the same traversal.
+
 The next example illustrates event broadcasts and tasks traversal.
 The example uses a `watching` statement to observe an event condition while
 executing a nested task.
@@ -665,6 +672,9 @@ The tags `:number.integer` and `:number.float` force one of them.
 
 In the code, `$x` refers to the Atmos variable `x`, which is a value of type
 `AVal` that can be read and assigned.
+Only a variable can follow the `$`: what comes after its name is C, such that
+`$t.x` is the member `x` of the `AVal`, and not the field `x` of the table `t`,
+which must be read into a variable first.
 The interface of the runtime (`rt/atmos.h`) has the operations to inspect and
 create values, such as `a_dbl(v)` to read a number, `A_STR_OF(v)->s` to read
 a string, and `a_int(i)`, `a_num(d)`, and `a_strz(s)` to create values.
@@ -2784,9 +2794,10 @@ there is no `require`.
 - `math.abs(x)`: the absolute value of `x`
 - `math.min(...)`, `math.max(...)`: the smallest or largest argument
 - `math.sqrt(x)`, `math.exp(x)`, `math.log(x)`: as in C
-- `math.sin(x)`, `math.cos(x)`, `math.tan(x)`, `math.asin(x)`, `math.acos(x)`,
-  `math.atan(x)`: as in C, in radians
-- `math.atan2(y, x)`: the angle of the point `(x, y)`, in radians
+- `math.sin(x)`, `math.cos(x)`, `math.tan(x)`, `math.asin(x)`, `math.acos(x)`:
+  as in C, in radians
+- `math.atan(y, x)`, `math.atan2(y, x)`: the angle of the point `(x, y)`, in
+  radians; in `math.atan`, `x` is optional and defaults to `1`
 - `math.pow(x, y)`: `x` to the power of `y`, as a real
 - `math.random()`: a random real in `[0,1)`
 - `math.random(n)`: a random integer from `0` to `n-1`
