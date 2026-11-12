@@ -39,7 +39,7 @@ Status: sent to the session that works in the repository
 | What | Where | State |
 |------|-------|-------|
 | The student port, the starting point | `jessicacoliveira/atmos-lessmilk@3e24458` | 2026-11-01, reference Atmos 0.8, `pico-sdl` 0.7 |
-| The originals, a copy of the site | `leokaplan/lessmilk@`(2015), folder `www.lessmilk.com/games/` | JavaScript, Phaser 1.1.3 |
+| The originals, a copy of the site | `leokaplan/lessmilk@`(2015), folder `www.lessmilk.com/games/` | JavaScript, Phaser 1.1.3 (games 1 to 9), 1.1.6 (10), 2.0.1 (11), 2.0.2 (12) |
 | An earlier sketch by the author | `fsantanna-no/atmos-lessmilk` | 2026-01, `run.atm` and notes |
 | Ports to Céu of games 1 and 2 | `leokaplan/lessmilk`, folder `ceu/` | 2015, 954 lines |
 | Port of Pingus, the model | `fsantanna/ceu-atmos-pingus` | complete |
@@ -133,12 +133,15 @@ answered: ask, one at a time, before building on them.
   rotation, easings, sounds, text, the test mode), and what it finds.
   The first draft of this plan proposed SDL2, when that environment
   did not exist.
-- **Coordinates** (confirm): pixels, as the originals, not the
-  percentages of `pico`.
-- **Assets and license** (confirm): images and sounds are not copied
-  until their license is known. The port reads them from a checkout
-  of the copies next to it. The author may know the license, or ask
-  Thomas Palef.
+- **Coordinates**: pixels, as the originals, not the percentages of
+  `pico`. Confirmed by the author at L0.
+- **Assets**: copied into the repository, unchanged, with the credits
+  in the README, decided by the author at L0 (this plan proposed to
+  keep them out). Games 1 and 2 come from the copy of the site, which
+  has the assets of those two only; games 3 to 12 come from the
+  student's port. Two files exist nowhere: `levels/map.json` of game
+  11, rebuilt from the student's `map.atm`, and `tiles.png` of game
+  10.
 - **One version per game**: the split one, with the shared modules in
   one place.
 - **Documents in English**, as the other ports, from the student's
@@ -220,10 +223,13 @@ screen, driven by Playwright. Set up before the first game:
 
 ## Milestones
 
-- [ ] L0: repository, readme with the credits (Thomas Palef, Jéssica
+- [x] L0: repository, readme with the credits (Thomas Palef, Jéssica
       Oliveira). The copies of the originals and of the student port
       checked out next to the repository. The originals running in
-      the browser with no screen, with the harness.
+      the browser with no screen, with the harness. Done at
+      `fsantanna/lessmilk@e2e08e8`: seeded `Math.random`, a stepped
+      clock, keys and mouse scripted in the `RL_INPUT` format of
+      `fsantanna/raylib`; 11 of the 12 originals run deterministic.
 - [ ] L1: the engine over `raylib.atm`: window, images, text, sound,
       the test mode. The modules Motion (over the easings of raylib,
       `reasings.h`) and Sprite.
@@ -355,13 +361,14 @@ Report in `doc/compiler.md`. To watch here:
 ## Risks
 
 - **License.** The originals and their assets have no known license.
-  The code of the port is new, but images and sounds are not: they
-  stay out of the repository until this is settled.
-- **The browser.** Stepping Phaser 1.1.3 by hand, with a fake clock,
-  may not be straightforward. The fallback is written in Fidelity.
+  The author chose to copy the assets, with credits; the license is
+  still to be asked of Thomas Palef.
 - **The physics of Phaser.** Small differences in collision change a
-  game of jumps. The module must follow what Phaser 1.1.3 does, read
-  from its source, for the few operations that the games use.
+  game of jumps. The module must follow what the Phaser of each game
+  does, read from its source, for the few operations that the games
+  use. The games use four versions: the arcade physics changed from
+  1.1 to 2.0, so games 11 and 12 may not share every rule with the
+  others.
 - **Two languages called Atmos.** The student's code looks close to
   what compiles here, and is not: indexes, `require`, and the `pico`
   calls change everywhere. Rewrite game by game, with the original
