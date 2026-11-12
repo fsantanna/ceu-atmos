@@ -903,6 +903,19 @@ Agreed after `atmos-lang/atmos@5977b07`.
       a local function may call itself. Inside the body the name is the
       function itself (`self` of the C function), not a capture, which
       would be a cycle that reference counting does not reclaim.
+- Found by the port of SNKRX (`fsantanna/snxkx`, `doc/compiler.md`):
+    - A block with pins waits for a task that is confined to it and
+      is running, as it does for its pins (`a_conf_end`). Before, the
+      block aborted it in a loop that never ended, since a running
+      task only unwinds when control returns to it.
+    - `pub` is rejected as the name of a variable or parameter: it
+      silently meant the `pub` of the task.
+    - `math` gets `tan`, `asin`, `acos`, `atan`, `atan2`, `exp`, `log`.
+- Found by the port of the raylib games (`fsantanna/raylib`):
+    - The compiler looks for its runtime next to itself, so a checkout
+      may be moved.
+    - The error of a bare `await` on a loose value points at the
+      value.
 - An exit of a child waits in a parent that is running (Scheduler).
   Before, it travelled down the C stack as the status of whatever was
   in between: a suspended block further up took it as its own, and so

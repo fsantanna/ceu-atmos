@@ -2783,7 +2783,10 @@ there is no `require`.
 - `math.floor(x)`, `math.ceil(x)`: rounds `x` down or up to an integer
 - `math.abs(x)`: the absolute value of `x`
 - `math.min(...)`, `math.max(...)`: the smallest or largest argument
-- `math.sqrt(x)`, `math.sin(x)`, `math.cos(x)`: as in C
+- `math.sqrt(x)`, `math.exp(x)`, `math.log(x)`: as in C
+- `math.sin(x)`, `math.cos(x)`, `math.tan(x)`, `math.asin(x)`, `math.acos(x)`,
+  `math.atan(x)`: as in C, in radians
+- `math.atan2(y, x)`: the angle of the point `(x, y)`, in radians
 - `math.pow(x, y)`: `x` to the power of `y`, as a real
 - `math.random()`: a random real in `[0,1)`
 - `math.random(n)`: a random integer from `0` to `n-1`

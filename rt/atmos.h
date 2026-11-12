@@ -952,9 +952,13 @@ static inline AStatus a_chk_tab (ATab* t, AVal v) {
 // unpinned and flow out as fresh values, along with what they hold.
 // The values are `vs[0..n)` if the block ends normally, or else the
 // payload of the exit. Fails for a task that is confined to the block.
-// Then, tasks confined to the block that were left unpinned are
-// aborted, since nothing else would end them before the block does.
 AStatus a_blk_xfer (AStatus st, AVal* vs, int n);
+
+// Then, the tasks confined to the block that were left unpinned are
+// aborted, since nothing else would end them before the block does:
+// they hold values pinned in it. It comes before the finalizers of
+// the block, and waits like `a_pin_end`.
+int a_conf_end (ATrail* me, AStatus* st, int base);
 
 // Sets the pub of a task, or of the running task if NULL.
 AStatus a_pub_set (ATask* t, AVal v);

@@ -70,6 +70,10 @@ static void scope_pop (void) {
 }
 
 static Var* declare (Tk tk, VarKind kind) {
+    // `pub` is always the public value of the running task
+    if (!strcmp(tk.str, "pub")) {
+        err(tk, "invalid declaration : unexpected 'pub'");
+    }
     Var* v = xalloc(sizeof(Var));
     v->tk   = tk;
     v->kind = kind;

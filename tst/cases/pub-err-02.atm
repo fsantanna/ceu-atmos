@@ -1,0 +1,3 @@
+func body (w, pub) {
+    set pub.b = 1
+}

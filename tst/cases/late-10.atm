@@ -1,0 +1,27 @@
+;; a task that holds a pin of a block, and is running when the block
+;; ends: the block waits for it (it used to loop forever)
+task Item () {
+    defer { print("item") }
+    await(false)
+}
+task Inner (ui) {
+    defer { print("inner") }
+    spawn @ui Item()
+    await(:go)
+    emit @:global :done
+    print(:never)
+    await(false)
+}
+task Outer () {
+    defer { print("outer 1") }
+    pin ui = tasks()
+    defer { print("outer 2") }
+    await Inner(ui)
+}
+spawn {
+    spawn Outer()
+    await(:done)
+    print("ends")
+}
+emit(:go)
+print("end")

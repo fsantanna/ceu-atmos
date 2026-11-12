@@ -827,6 +827,37 @@ static void blk_close (Unit* u, Blk b, Dst d, Hnd h) {
         }
     }
 
+    if (user && u->task && !u->indefer) {
+        // tasks that hold the pins of the block end before them, with
+        // the same wait as below
+        int pc = ++u->npcs;
+        out0(u, "LW_%d: ;", pc);
+        out(u, "if (a_conf_end(tr, &st, base)) {");
+        for (int j=0; j<nmine; j++) {
+            if (mine[j].trail >= 0) {
+                out(u, "    a_trail_doom(t, %d);", mine[j].trail);
+            } else if (mine[j].pin != NULL) {
+                out(u, "    a_pin_doom(&%s);", mine[j].pin);
+            } else if (mine[j].orph) {
+                out(u, "    a_orph_doom(tr);");
+            }
+        }
+        out(u, "    tr->pc = %d;", pc);
+        out(u, "    return A_AWAIT;");
+        out0(u, "AW_%d:", pc);
+        out(u, "    base = a_top;");
+        out(u, "    a_lin = %d;", u->lin);
+        out(u, "    a_depth = D + %d;", u->level);
+        out(u, "    st = a_pin_resumed(tr);");
+        if (d.kind == D_MULTI) {
+            out(u, "    %s = a_top - base;", d.n);
+        }
+        out(u, "    goto LW_%d;", pc);
+        out(u, "}");
+    } else if (user) {
+        out(u, "a_conf_end(NULL, &st, 0);");
+    }
+
     for (int i=nmine-1; i>=0; i--) {
         // A task of the block that is running only unwinds when control
         // returns to it: the exit waits for that, so that the

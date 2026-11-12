@@ -1,0 +1,1 @@
+pub-err-02.atm : line 1 : near 'pub' : invalid declaration : unexpected 'pub'

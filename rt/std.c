@@ -162,6 +162,12 @@ static AStatus argn (int argc, AVal* argv, int i, const char* f, double* n) {
 MATH1(sqrt,  sqrt(x))
 MATH1(sin,   sin(x))
 MATH1(cos,   cos(x))
+MATH1(tan,   tan(x))
+MATH1(asin,  asin(x))
+MATH1(acos,  acos(x))
+MATH1(atan,  atan(x))
+MATH1(exp,   exp(x))
+MATH1(log,   log(x))
 
 // math.floor(x) / math.ceil(x): an integer, if it fits
 static AStatus math_round (int up, int argc, AVal* argv) {
@@ -200,6 +206,20 @@ static AStatus math_abs (AFunc* self, int argc, AVal* argv) {
 }
 
 // math.pow(x, y)
+// math.atan2(y, x): the angle of the point (x, y), in (-pi, pi].
+static AStatus math_atan2 (AFunc* self, int argc, AVal* argv) {
+    (void) self;
+    double y = 0;
+    double x = 0;
+    if (argn(argc,argv,0,"atan2",&y)!=A_OK ||
+        argn(argc,argv,1,"atan2",&x)!=A_OK)
+    {
+        return A_ERROR;
+    }
+    a_push(a_num(atan2(y, x)));
+    return A_OK;
+}
+
 static AStatus math_pow (AFunc* self, int argc, AVal* argv) {
     (void) self;
     double x = 0;
@@ -618,6 +638,13 @@ void atm_std_init (void) {
     field(atm_g_math, "sqrt",       math_sqrt);
     field(atm_g_math, "sin",        math_sin);
     field(atm_g_math, "cos",        math_cos);
+    field(atm_g_math, "tan",        math_tan);
+    field(atm_g_math, "asin",       math_asin);
+    field(atm_g_math, "acos",       math_acos);
+    field(atm_g_math, "atan",       math_atan);
+    field(atm_g_math, "atan2",      math_atan2);
+    field(atm_g_math, "exp",        math_exp);
+    field(atm_g_math, "log",        math_log);
     field(atm_g_math, "pow",        math_pow);
     field(atm_g_math, "min",        math_min);
     field(atm_g_math, "max",        math_max);

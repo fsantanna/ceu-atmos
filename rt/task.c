@@ -1946,30 +1946,7 @@ AStatus a_blk_xfer (AStatus st, AVal* vs, int n) {
         st = a_err_pinned();
     }
 
-    // tasks confined to this block that nobody pinned
-    ATask*  me = a_cur;
-    ATrail* tr = a_trl;
-    if (me==NULL || tr->conf<a_depth) {
-        return st;
-    }
-    int any = 0;
-    for (int i=0; i<me->node.ndns; i++) {
-        ANode* c = me->node.dns[i];
-        if (c->hdr.type!=A_XTASK || c->dead || c->hdr.pinned ||
-            c->trail!=tr->idx)
-        {
-            continue;
-        }
-        ATask* t = (ATask*) c;
-        if (t->status!=T_DONE && t->mindepth>=a_depth) {
-            st = blk_abort(c, st);
-            any = 1;
-            // the abort may rearrange the tree: scan again
-            i = -1;
-        }
-    }
-    tr->conf = d;
-    return any ? chk_aborted(st) : st;
+    return st;
 }
 
 AStatus a_chk_task (AVal v) {
@@ -2152,6 +2129,51 @@ static void wait_for (ATrail* me, ATrail* late, AStatus st, int base) {
     x->wstk = malloc((x->wn + 1) * sizeof(AVal));
     memcpy(x->wstk, a_stk+base, x->wn * sizeof(AVal));
     a_top = base;
+}
+
+int a_conf_end (ATrail* me, AStatus* st, int base) {
+    ATask*  t  = a_cur;
+    ATrail* tr = a_trl;
+    if (t==NULL || tr->conf<a_depth) {
+        return 0;
+    }
+    int any = 0;
+    for (int i=0; i<t->node.ndns; i++) {
+        ANode* c = t->node.dns[i];
+        if (c->hdr.type!=A_XTASK || c->dead || c->hdr.pinned ||
+            c->trail!=tr->idx)
+        {
+            continue;
+        }
+        ATask* x = (ATask*) c;
+        if (x->status==T_DONE || x->mindepth<a_depth) {
+            continue;
+        }
+        // the node may leave the tree when it dies
+        AVal ref = a_obj(&c->hdr);
+        a_inc(ref);
+        *st = blk_abort(c, *st);
+        any = 1;
+        ATrail* late = late_of(c);
+        int dead = c->dead;
+        a_dec(ref);
+        if (late != NULL) {
+            // running below in the C stack: the block waits for it,
+            // if it can; otherwise it unwinds when control returns
+            if (me != NULL) {
+                wait_for(me, late, *st, base);
+                return 1;
+            }
+        } else if (dead) {
+            // the abort may rearrange the tree: scan again
+            i = -1;
+        }
+    }
+    tr->conf = a_depth - 1;
+    if (any) {
+        *st = chk_aborted(*st);
+    }
+    return 0;
 }
 
 int a_orph_end (ATrail* me, AStatus* st, int base) {
