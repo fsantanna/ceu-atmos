@@ -889,7 +889,7 @@ Agreed after `atmos-lang/atmos@5977b07`.
       byte by byte. Its benchmark shows no measurable difference
       (about 37 MB and the same CPU): the game is dominated by the
       SDL renderer and by its surfaces, not by tasks.
-- Found by the port of Pingus (`fsantanna/ceu-atmos-pingus`,
+- Found by the port of Pingus (`ia-atmos/sdl-pingus`,
   `doc/compiler.md`):
     - `func f` inside a function or task, with `f` unknown, is a
       compile error: `val func f` is the local form. Before, as in the
@@ -898,12 +898,12 @@ Agreed after `atmos-lang/atmos@5977b07`.
     - A keyword is accepted as the name of a field in a constructor
       (`[loop=false]`), as in `t.loop`.
     - A backslash escapes the delimiter of a string (`"a\"b"`).
-- Found by the port of Flare (`fsantanna/flare`, `doc/compiler.md`):
+- Found by the port of Flare (`ia-atmos/sdl-flare`, `doc/compiler.md`):
     - `val func f` and `val task T` are visible in their own bodies, so
       a local function may call itself. Inside the body the name is the
       function itself (`self` of the C function), not a capture, which
       would be a cycle that reference counting does not reclaim.
-- Found by the port of SNKRX (`fsantanna/snxkx`, `doc/compiler.md`):
+- Found by the port of SNKRX (`ia-atmos/sdl-snxkx`, `doc/compiler.md`):
     - A block with pins waits for a task that is confined to it and
       is running, as it does for its pins (`a_conf_end`). Before, the
       block aborted it in a loop that never ended, since a running
@@ -911,7 +911,7 @@ Agreed after `atmos-lang/atmos@5977b07`.
     - `pub` is rejected as the name of a variable or parameter: it
       silently meant the `pub` of the task.
     - `math` gets `tan`, `asin`, `acos`, `atan`, `atan2`, `exp`, `log`.
-- Found by the port of the raylib games (`fsantanna/raylib`):
+- Found by the port of the raylib games (`ia-atmos/env-ray`):
     - The compiler looks for its runtime next to itself, so a checkout
       may be moved.
     - The error of a bare `await` on a loose value points at the

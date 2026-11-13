@@ -1,7 +1,7 @@
 # Plan: the Lessmilk games in Atmos
 
 Status: sent to the session that works in the repository
-`fsantanna/lessmilk`.
+`ia-atmos/ray-lessmilk`.
 
 ## Context
 
@@ -20,7 +20,7 @@ Status: sent to the session that works in the repository
   `ia-atmos/lang`, which differs from the reference Atmos, and
   compares each one with its original running in a browser.
 - It is the counterpart, for a dynamic language, of the port of the
-  raylib games (`fsantanna/raylib`, plan in `261112-raylib.md`): many
+  raylib games (`ia-atmos/env-ray`, plan in `261112-raylib.md`): many
   small games and a table, next to the large ports (Pingus, SNKRX,
   Flare).
 - Goals, in order:
@@ -42,9 +42,9 @@ Status: sent to the session that works in the repository
 | The originals, a copy of the site | `leokaplan/lessmilk@`(2015), folder `www.lessmilk.com/games/` | JavaScript, Phaser 1.1.3 (games 1 to 9), 1.1.6 (10), 2.0.1 (11), 2.0.2 (12) |
 | An earlier sketch by the author | `fsantanna-no/atmos-lessmilk` | 2026-01, `run.atm` and notes |
 | Ports to Céu of games 1 and 2 | `leokaplan/lessmilk`, folder `ceu/` | 2015, 954 lines |
-| Port of Pingus, the model | `fsantanna/ceu-atmos-pingus` | complete |
+| Port of Pingus, the model | `ia-atmos/sdl-pingus` | complete |
 | Its tips | the section "What the Pingus port taught", below | |
-| The raylib environment | `fsantanna/raylib`, `raylib.atm` | in course, by the session `raylib` |
+| The raylib environment | `ia-atmos/env-ray`, `raylib.atm` | in course, by the session `raylib` |
 | The SDL environment, as a model of one | `ia-atmos/lang`, `lib/sdl.atm`, `exs/rocks/` | |
 
 - The site `lessmilk.com` could not be read when this plan was
@@ -119,7 +119,7 @@ The author asked for this plan, based on the student's port. The
 items marked "(confirm)" are recommendations that he has not
 answered: ask, one at a time, before building on them.
 
-- **Repository**: `fsantanna/lessmilk`, commits straight to `main`,
+- **Repository**: `ia-atmos/ray-lessmilk`, commits straight to `main`,
   in small grains.
 - **From the student's port.** Its task structure, its modules, and
   its documents are the base, with credit to her in the README and in
@@ -127,7 +127,7 @@ answered: ask, one at a time, before building on them.
   corrected against the original.
 - **Library**: raylib, decided by the author. The port uses the
   environment `raylib.atm` that the port of the raylib games is
-  writing (`fsantanna/raylib`, session `raylib`), copied at a fixed
+  writing (`ia-atmos/env-ray`, session `raylib`), copied at a fixed
   commit and updated when convenient. The two sessions talk directly
   about the library: what this port needs from it (sprites with
   rotation, easings, sounds, text, the test mode), and what it finds.
@@ -227,9 +227,9 @@ screen, driven by Playwright. Set up before the first game:
       Oliveira). The copies of the originals and of the student port
       checked out next to the repository. The originals running in
       the browser with no screen, with the harness. Done at
-      `fsantanna/lessmilk@e2e08e8`: seeded `Math.random`, a stepped
+      `ia-atmos/ray-lessmilk@e2e08e8`: seeded `Math.random`, a stepped
       clock, keys and mouse scripted in the `RL_INPUT` format of
-      `fsantanna/raylib`; 11 of the 12 originals run deterministic.
+      `ia-atmos/env-ray`; 11 of the 12 originals run deterministic.
 - [ ] L1: the engine over `raylib.atm`: window, images, text, sound,
       the test mode. The modules Motion (over the easings of raylib,
       `reasings.h`) and Sprite.

@@ -134,7 +134,7 @@ that it includes:
 - [`lib/sdl.atm`](lib/sdl.atm):
     A basic environment that relies on [SDL][sdl] to provide a window, keys,
     images, text, sounds, and timers.
-- [`raylib.atm`](https://github.com/fsantanna/raylib):
+- [`raylib.atm`](https://github.com/ia-atmos/env-ray):
     An environment that relies on [raylib][raylib], with keys, mouse,
     textures, sounds, and fonts.
 

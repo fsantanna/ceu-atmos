@@ -40,11 +40,13 @@ Each has the option recommended by this session.
 
 | # | Decision | Recommended |
 |---|----------|-------------|
-| 37 | Doom: the plan is sent (`261113-doom.md`), and the session waits for the author on four items: the base (Chocolate Doom or `linuxdoom-1.10`), the engine as a copy in the repository, the game data, and how far to go after the flow | Chocolate Doom; a copy with a first untouched commit; the shareware `DOOM1.WAD` fetched by a script |
+| 37 | Doom: how far to go after the flow of the game (the status bar, the messages, the menus, the automap). The other three questions of the plan were answered on 2026-11-13 with the recommended options (Chocolate Doom, a copy with a first untouched commit, the shareware data fetched by a script), and the session may start | To decide when the wipe, the intermission, the finale, and the flow are done |
 | 42 | The environment for IUP: the session `iup` waits for a plan. IUP has no native driver for the Mac, as far as this session knows (not verified) | Write the plan |
 | 43 | The environment for libuv: the session `uv` waits for a plan. To decide in it: who owns the main loop when a program has a GUI and the network | Write the plan, after `ceu-lang/ceu-libuv` |
-| 47 | The names of the repositories of `ia-atmos`, after the convention of the original organizations: `env-pico`, `env-iup`, `env-uv`, `env-raylib`, `raylib-lessmilk`, `sdl-pingus`, `sdl-snkrx` (today `snxkx`, with the letters swapped), `sdl-flare`. And whether to split `raylib` into the binding and its 23 games | Rename all at once; split `raylib`, so that Lessmilk drops its patched copy of `raylib.atm` |
-| 27 | The repository `tux` is empty, and its session is archived | Delete or archive it (the author's to do) |
+| 47 | The binding of raylib and its 23 games share one repository (`env-ray`), and Lessmilk keeps a copy of the binding, pinned at a commit | Split the games out (`ray-games`), so that the binding is used and not copied |
+| 55 | The three games over SDL (Pingus, SNKRX, Flare) wrote three platform layers of their own, and none uses `lib/sdl.atm`. The author asked to make them use the environment they are supposed to use. Of the 87 functions of SDL that the three use, 24 are common to all, and `lib/sdl.atm` covers 32. Each engine also has C of its game, which stays (the pathfinding and the maps of Flare, the physics of SNKRX, the collision maps of Pingus) | A new repository `env-sdl`, with `lib/sdl.atm` moved into it and grown from the union of the three; a session for it, with a plan; then the games move to it one at a time, Pingus first, with their traces identical |
+| 56 | Whether the file `raylib.atm`, its table `rl`, and the prefix `:rl.` of its events follow the new name of the repository (`ray`) | Not studied. Related to item 46 |
+| 27 | The repository `sdl-tux` is empty, and its session is archived | Delete or archive it (the author's to do) |
 | 49 | The picture of the organization and the social preview of the repository `lang` | Upload `doc/logo/atmos-icon.png` and `doc/logo/atmos-1280x640.png` (the author's to do, in the settings of GitHub) |
 | 54 | The assets of Lessmilk have no known license; the author chose to copy them | Ask Thomas Palef |
 
@@ -68,8 +70,7 @@ Not started, with no decision needed:
 | 12 | Tweens and springs as a library | To harvest from what SNKRX (`eng/anim.atm`) and Lessmilk (`lib/motion.atm`) wrote |
 | 15 | Faster compilation (24 s in Pingus, a single C file) | To measure in Flare first |
 | 35 | Performance. Three ports show the same profile: the dispatch of events to many tasks, the access to tables, and, the clearest, the construction of small tables (about 0.5 us each, in the Storm of pico) | Not now: SNKRX runs at almost twice the speed of its original |
-| 38 | The paper, "Structured Reactive Concurrency in Games". The author wrote an outline in `ia-atmos/src-games` | After the ports close: they are its evaluation |
-| 51 | The three games over SDL (Pingus, SNKRX, Flare) wrote three layers of their own, and none uses `lib/sdl.atm` | An idea: one shared environment for SDL |
+| 38 | The paper, "Structured Reactive Concurrency in Games". The author wrote an outline in `ia-atmos/paper-src-games` | After the ports close: they are its evaluation |
 | 52 | Environments that the families of Atmos and Céu have and this backend does not: the browser (through WebAssembly; SDL and raylib support it) and embedded boards | Ideas, not asked for |
 
 ## C. Reported and not acknowledged
@@ -108,15 +109,19 @@ What waits for the author in them, as far as this session knows.
 
 | Session | Waits for |
 |---------|-----------|
-| `doom` | The first of its four questions: the base of the engine (item 37) |
+| `doom` | Nothing: it may start its first milestone |
 | `iup`, `uv` | Their plans (items 42 and 43) |
-| `snxkx` | To confirm the new name of the compiler, and the name of its local folder |
-| `lessmilk` | Whether to switch to `ia-atmos/lang` now or later |
-| `raylib` | A permission to change the remote of its checkout of the compiler |
+| `raylib` | A permission to change the remote of its checkout of the compiler (harmless meanwhile: the old address redirects) |
 | `flare` | Three items of its plan to confirm, and a permission to install packages (not checked again since 2026-11-11) |
 
-The three that wait because of the new name of the compiler are better
-answered after the renames of item 47, so that each updates names once.
+Each session keeps its own `.claude/plans/TODO.md`, in its repository,
+since 2026-11-13: what waits for the author in each is there.
+
+The repositories of the organization were renamed on 2026-11-13, and
+every session was told its new name: `env-pico`, `env-iup`, `env-uv`,
+`env-ray`, `ray-lessmilk`, `sdl-pingus`, `sdl-snxkx`, `sdl-flare`,
+`paper-src-games`, `sdl-tux`; `doom` and `lang` kept theirs. The titles
+of the sessions still have the old names.
 
 ## E. Housekeeping of this session
 
@@ -132,4 +137,5 @@ answered after the renames of item 47, so that each updates names once.
 7, 9, 10, 13, 14, 16, 20, 21 (kept as they are); 8 (became 31); 17 and
 28 (the session `pico-sdl` wrote the binding and its examples); 25 and
 26 (moved to D); 29 and 30 (the games were chosen; Doom was added); 44
-(`await(n, p)`, done).
+(`await(n, p)`, done); the names of the repositories (first part of 47);
+51 (became 55).
