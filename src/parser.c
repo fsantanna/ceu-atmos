@@ -37,6 +37,7 @@ static Expr* parser (void);
 static Expr* parser_1_prim (void);
 static Expr* parser_7_out (Expr* pre);
 static Patt* parser_await (void);
+static Patt* parser_await_blk (int blk);
 static Expr* parser_spawn (void);
 static Expr* parser_at_err (void);
 static Expr* parser_2_suf (Expr* pre);
@@ -671,7 +672,7 @@ static Expr* parser_loop (void) {
         // loop e on P {...} is loop { val e = await P ; ... }
         Tk tk = TK0;
         Expr* awt = mk(E_AWAIT, tk);
-        awt->u.await.p = parser_await();
+        awt->u.await.p = parser_await_blk(1);
         Expr* fst = awt;
         if (loop->u.loop.n > 0) {
             fst = mk(E_DCL, tk);
@@ -700,6 +701,8 @@ static Expr* parser_loop (void) {
 //                          until (c) / while (c)
 //   value   : await(E)     a plain value expression (a call is a
 //                          value, not a spawn)
+//   count   : await(E, P)  the pattern P, E times; watching and
+//                          loop on also take it with no parentheses
 //   pattern : await<PAT>   the combinators, with their own levels:
 //       1_prim : :any/:all, until (c), (E) value, <P> group, primary
 //       2_pre  : !p
@@ -769,6 +772,42 @@ static Expr* parser_pred (void) {
     return p;
 }
 
+// A pattern that is counted starts again each time: it cannot spawn.
+static void chk_cnt (Patt* p) {
+    if (p == NULL) {
+        return;
+    }
+    if (p->kind == PT_SPAWN) {
+        err(p->tk, "invalid await : unexpected task");
+    }
+    chk_cnt(p->a);
+    chk_cnt(p->b);
+}
+
+// The rest of a count, after its expression `e` and the comma.
+static Patt* parser_await_cnt (Tk tk, Expr* e, Patt* sub) {
+    Patt* p = mkp(PT_CNT, tk);
+    p->e = e;
+    p->a = sub;
+    chk_cnt(sub);
+    return p;
+}
+
+// (E): a value  |  (E, P): a count
+static Patt* parser_await_parens (void) {
+    Tk tk = TK0;
+    Expr* e = parser();
+    Patt* p;
+    if (accept_str(",")) {
+        p = parser_await_cnt(tk, e, parser_await_3_bin());
+    } else {
+        p = mkp(PT_VAL, tk);
+        p->e = e;
+    }
+    accept_str_err(")");
+    return p;
+}
+
 static Patt* parser_await_1_prim (void) {
     // :any ts  :all ts
     if (check_tag(TK_TAG) &&
@@ -793,12 +832,9 @@ static Patt* parser_await_1_prim (void) {
         accept_angle_close();
         return p;
 
-    // (E): a value
+    // (E): a value  |  (E, P): a count
     } else if (accept_str("(")) {
-        Patt* p = mkp(PT_VAL, TK0);
-        p->e = parser();
-        accept_str_err(")");
-        return p;
+        return parser_await_parens();
 
     // primary: a call spawns
     } else {
@@ -855,11 +891,18 @@ static Patt* parser_await_3_bin (void) {
 }
 
 static Patt* parser_await (void) {
-    // value: await(E)
+    return parser_await_blk(0);
+}
+
+// The pattern before a block (watching, loop on) may be a count with
+// no parentheses: `watching E, P {...}`.
+static Patt* parser_await_blk (int blk) {
+    // value: await(E)  |  count: await(E, P)
     if (accept_str("(")) {
-        Patt* p = mkp(PT_VAL, TK0);
-        p->e = parser();
-        accept_str_err(")");
+        Patt* p = parser_await_parens();
+        if (blk && p->kind==PT_VAL && accept_str(",")) {
+            return parser_await_cnt(p->tk, p->e, parser_await_blk(0));
+        }
         return p;
     }
 
@@ -874,6 +917,9 @@ static Patt* parser_await (void) {
 
     // bare: await P, with no combinators and no loose values
     Patt* p = parser_await_3_bin();
+    if (blk && p->kind==PT_VAL && accept_str(",")) {
+        return parser_await_cnt(p->tk, p->e, parser_await_blk(0));
+    }
     Patt* b = p;
     if ((b->kind==PT_UNTIL || b->kind==PT_WHILE) && b->a!=NULL) {
         b = b->a;
@@ -1215,7 +1261,7 @@ static Expr* parser_1_prim (void) {
     } else if (accept_str("watching")) {
         Tk tk = TK0;
         Expr* awt = mk(E_AWAIT, tk);
-        awt->u.await.p = parser_await();
+        awt->u.await.p = parser_await_blk(1);
         Expr* e = mk(E_PAR, tk);
         e->u.par.mode = PAR_ANY;
         list_add(&e->u.par.blks, block1(awt));

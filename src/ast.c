@@ -47,6 +47,13 @@ static void dump_patt (Patt* p) {
             dump_patt(p->b);
             printf(")");
             break;
+        case PT_CNT:
+            printf("(count ");
+            ast_dump(p->e);
+            printf(" ");
+            dump_patt(p->a);
+            printf(")");
+            break;
     }
 }
 

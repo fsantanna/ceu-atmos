@@ -1,0 +1,3 @@
+spawn {
+    val a, b = await 2, :tic
+}

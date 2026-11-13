@@ -2178,6 +2178,10 @@ static void patt_eval (Unit* u, Patt* p, Opnd* os, int* n) {
             patt_eval(u, p->a, os, n);
             patt_eval(u, p->b, os, n);
             break;
+        case PT_CNT:
+            os[(*n)++] = gen_expr(u, p->e);
+            patt_eval(u, p->a, os, n);
+            break;
     }
 }
 
@@ -2215,6 +2219,12 @@ static const char* patt_build (Unit* u, Patt* p, Opnd* os, int* n, int* k) {
             b = patt_build(u, p->b, os, n, k);
             c = xfmt("a_pt_bin(%d, %s, %s)", p->kind==PT_AND, a, b);
             break;
+        case PT_CNT: {
+            const char* cnt = os[(*n)++].c;
+            a = patt_build(u, p->a, os, n, k);
+            c = xfmt("a_pt_cnt(%s, %s)", cnt, a);
+            break;
+        }
     }
     const char* v = xfmt("p%d", (*k)++);
     out(u, "    APatt* %s = %s;", v, c);
@@ -2238,6 +2248,9 @@ static void gen_await_patt (Unit* u, Patt* p, int lin, Dst d) {
     if (p->kind == PT_VAL) {
         // a single value needs no pattern
         out(u, "st = a_await_val(tr, %s);", os[0].c);
+    } else if (p->kind==PT_CNT && p->a->kind==PT_VAL) {
+        // nor does a single value that is counted
+        out(u, "st = a_await_cnt(tr, %s, %s);", os[0].c, os[1].c);
     } else {
         out(u, "{");
         int i = 0;

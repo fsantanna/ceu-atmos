@@ -992,6 +992,20 @@ Agreed after `atmos-lang/atmos@5977b07`.
   pin at birth for constructors, two-phase block end, lateral check on
   `emit`, confinement after a transfer, abort of confined tasks that
   nobody pinned.
+- Counted patterns, asked by the author for the study of Doom, whose
+  time is a number of tics: `await(n, p)` is satisfied at the `n`th
+  time that `p` is. Two ports had written it as a task (`Ticks(n)` in
+  Pingus, `Frames(n)` in Flare).
+    - The form `await n :e` of Esterel was not taken: `n :e` is a call
+      with no parentheses. `watching` and `loop on` take the count
+      with no parentheses (`watching 150, :tic {...}`); `await` does
+      not, since a comma there separates the values of a list.
+    - The count is an integer in the pattern itself (`ARoot.cnt`, in
+      the padding of the record), so a counted leaf allocates nothing.
+      A pattern that is satisfied starts again in place, which is what
+      a new await in the same reaction would do.
+    - A count lower than 1 is satisfied at once. A counted pattern
+      cannot spawn a task.
 
 ### Rejected
 

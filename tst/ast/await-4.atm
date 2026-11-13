@@ -1,4 +1,2 @@
-val e = await :X
-print(await 10ms)
-await :X
-until (c)
+await(3, :tic) ; await(n, :key until it.c) ; await <(2, :a) || :b>
+watching 3, :tic { } ; watching (n), 10ms { } ; loop e on 2, :tic { }

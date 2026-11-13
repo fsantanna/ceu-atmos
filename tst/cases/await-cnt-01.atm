@@ -1,0 +1,31 @@
+;; await(n, P): the pattern, n times
+spawn {
+    val e = await(3, :tic)
+    print(:three, e.n)
+    await(0, :tic)
+    print(:zero)
+    val n = 2
+    await(n, :tic)
+    print(:two)
+    ;; a clock: two periods
+    await(2, 10ms)
+    print(:clock)
+    ;; with a predicate: only the events that pass count
+    val k = await(2, :key until it.c == :a)
+    print(:keys, k.i)
+    ;; in a pattern
+    val x = await <(2, :a) || :b>
+    print(:or, x)
+    val y = await(1.5, :tic)
+    print(:frac, y.n)
+}
+loop i in 5 {
+    emit(:tic [n=i])
+}
+emit @:global (5000) ; print(:a) ; emit @:global (5000) ; print(:b) ; emit @:global (15000)
+emit(:key [c=:a, i=1])
+emit(:key [c=:b, i=2])
+emit(:key [c=:a, i=3])
+emit(:a) ; emit(:a)
+emit(:tic [n=9])
+print(:end)

@@ -1,0 +1,4 @@
+task T () { await(:x) }
+spawn {
+    await(2, T())
+}

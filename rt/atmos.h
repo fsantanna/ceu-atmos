@@ -691,6 +691,9 @@ typedef struct ARoot {
     uint8_t kind;
     // the task was spawned by the pattern, which aborts it at the end
     uint8_t own;
+    // count: times it must still be satisfied (0 for a pattern with
+    // no count, negative for a count of zero)
+    int32_t cnt;
     AVal    v;
     union {
         // duration: time left
@@ -859,6 +862,9 @@ APatt* a_pt_not (APatt* a);
 // p && q  /  p || q
 APatt* a_pt_bin (int and, APatt* a, APatt* b);
 
+// (n, p): `p` must be satisfied `n` times, starting again after each.
+APatt* a_pt_cnt (AVal n, APatt* a);
+
 // Establishes an await, taking over the pattern. Returns A_OK if it
 // is satisfied at once (results in the payload), or A_AWAIT if the
 // trail must suspend.
@@ -866,6 +872,9 @@ AStatus a_await (struct ATrail* tr, APatt* p);
 
 // The same for a single value (borrowed), with no pattern to build.
 AStatus a_await_val (struct ATrail* tr, AVal v);
+
+// The same for a value that must match `n` times: `await(n, v)`.
+AStatus a_await_cnt (struct ATrail* tr, AVal n, AVal v);
 
 // Awaits the termination of the `n` trails of the task from `lo` on.
 AStatus a_await_trails (struct ATrail* tr, int lo, int n);

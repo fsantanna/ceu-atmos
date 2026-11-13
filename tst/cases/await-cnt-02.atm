@@ -1,0 +1,33 @@
+;; watching and loop on take a count, with or without parentheses
+spawn {
+    watching 3, :tic {
+        loop on :tic { print(:in) }
+    }
+    print(:out1)
+    watching (2, :tic) {
+        await(false)
+    }
+    print(:out2)
+    var i = 0
+    loop e on 2, :tic {
+        set i = i + 1
+        print(:every2, e.n)
+        until i == 2
+    }
+    ;; the predicate is part of what is counted
+    val n = 2
+    val e = watching (n), :tic until it.n > 100 {
+        await(false)
+    }
+    print(:out3, e.n)
+    ;; a count of a count
+    val f = await(2, (2, :tic))
+    print(:out4, f.n)
+}
+loop i in 12 {
+    emit(:tic [n=i])
+}
+loop i in 6 {
+    emit(:tic [n=101+i])
+}
+print(:end)

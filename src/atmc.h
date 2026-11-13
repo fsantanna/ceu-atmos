@@ -182,6 +182,8 @@ typedef enum {
     PT_UNTIL, PT_WHILE,
     // !p  p && p  p || p
     PT_NOT, PT_AND, PT_OR,
+    // (n, p): `p` counted `n` times
+    PT_CNT,
 } PKind;
 
 typedef struct Patt Patt;
@@ -189,7 +191,7 @@ typedef struct Patt Patt;
 struct Patt {
     PKind kind;
     Tk    tk;
-    // value, task prototype, pool, or predicate
+    // value, task prototype, pool, predicate, or count
     Expr* e;
     // arguments of a spawn
     List  args;

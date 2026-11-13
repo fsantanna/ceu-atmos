@@ -119,6 +119,8 @@ typedef enum {
 struct APatt {
     // kind, and value, task, prototype, or predicate
     ARoot  r;
+    // count given to the pattern, which `r.cnt` starts from
+    int32_t n0;
     // arguments of a spawn
     AVal   args;
     APatt* a;
@@ -178,6 +180,37 @@ APatt* a_pt_bin (int and, APatt* a, APatt* b) {
     p->a = a;
     p->b = b;
     return p;
+}
+
+// Count of a pattern, as `ARoot.cnt` keeps it: negative for no times.
+// Fails if it is not a number.
+#define CNT_ERR INT32_MIN
+static int32_t cnt_of (AVal n) {
+    if (!a_isnum(n)) {
+        return CNT_ERR;
+    }
+    double d = a_dbl(n);
+    if (d < 1) {
+        return -1;
+    }
+    return (d >= INT32_MAX) ? INT32_MAX : (int32_t) d;
+}
+
+static AStatus cnt_err (void) {
+    return a_error("invalid await : expected number");
+}
+
+APatt* a_pt_cnt (AVal n, APatt* a) {
+    int32_t c = cnt_of(n);
+    if (c!=CNT_ERR && a->n0>0) {
+        // a count of a count
+        int64_t m = (c < 0) ? -1 : (int64_t)c * a->n0;
+        c = (m > INT32_MAX) ? INT32_MAX : (int32_t) m;
+    }
+    if (a->n0 >= 0) {
+        a->n0 = c;
+    }
+    return a;
 }
 
 // Aborts the tasks the pattern spawned.
@@ -302,9 +335,9 @@ static void leaf_clk (ARoot* r, int* done) {
     }
 }
 
-// Establishes a leaf. Sets `done` if it is satisfied before any event,
-// with the results in the payload.
-static AStatus leaf_start (ARoot* r, int* done) {
+// Establishes a leaf once. Sets `done` if it is satisfied before any
+// event, with the results in the payload.
+static AStatus leaf_start1 (ARoot* r, int* done) {
     *done = 0;
     switch (r->kind) {
         case PK_VAL:
@@ -322,10 +355,10 @@ static AStatus leaf_start (ARoot* r, int* done) {
                 case A_INT:
                 case A_NUM:
                     r->kind = PK_CLK;
-                    return leaf_start(r, done);
+                    return leaf_start1(r, done);
                 case A_XTASK:
                     r->kind = PK_TASK;
-                    return leaf_start(r, done);
+                    return leaf_start1(r, done);
                 case A_NIL:
                     return a_error("invalid await : invalid event pattern");
                 case A_TASKS:
@@ -371,9 +404,39 @@ static AStatus leaf_start (ARoot* r, int* done) {
     return A_OK;
 }
 
-// Tests an event against a leaf. Sets `done` if it is satisfied, with
-// the results in the payload.
+// Establishes a leaf. With a count, each time it is satisfied at once
+// counts, and it only holds at the last one.
+static AStatus leaf_start (ARoot* r, int* done) {
+    if (r->cnt < 0) {
+        // no times
+        a_pay_clear();
+        *done = 1;
+        return (r->cnt == CNT_ERR) ? cnt_err() : A_OK;
+    }
+    AStatus st = leaf_start1(r, done);
+    while (st==A_OK && *done && r->cnt>1) {
+        r->cnt--;
+        st = leaf_start1(r, done);
+    }
+    return st;
+}
+
+static void leaf_match1 (ARoot* r, ATask* t, AVal evt, int* done);
+
+// Tests an event against a leaf. With a count, it starts again until
+// its last time.
 static void leaf_match (ARoot* r, ATask* t, AVal evt, int* done) {
+    leaf_match1(r, t, evt, done);
+    if (*done && r->cnt>1) {
+        r->cnt--;
+        // the kind is known by now: it cannot fail
+        (void) leaf_start(r, done);
+    }
+}
+
+// Tests an event against a leaf once. Sets `done` if it is satisfied,
+// with the results in the payload.
+static void leaf_match1 (ARoot* r, ATask* t, AVal evt, int* done) {
     *done = 0;
     switch (r->kind) {
         case PK_TRUE:
@@ -448,9 +511,9 @@ static AStatus patt_again (APatt* p) {
     return st;
 }
 
-// Establishes a pattern. Sets `done` if it is satisfied before any
-// event, with the results in the payload.
-static AStatus patt_start (APatt* p, int* done) {
+// Establishes a pattern once. Sets `done` if it is satisfied before
+// any event, with the results in the payload.
+static AStatus patt_start1 (APatt* p, int* done) {
     AStatus st = A_OK;
     *done = 0;
     switch (p->r.kind) {
@@ -469,7 +532,7 @@ static AStatus patt_start (APatt* p, int* done) {
             if (st != A_OK) {
                 return st;
             }
-            return leaf_start(&p->r, done);
+            return leaf_start1(&p->r, done);
         }
 
         case PK_UNTIL:
@@ -521,14 +584,55 @@ static AStatus patt_start (APatt* p, int* done) {
             break;
 
         default:
-            return leaf_start(&p->r, done);
+            return leaf_start1(&p->r, done);
     }
     return st;
 }
 
+// Starts a pattern, again or for the first time, from the count it
+// has left. Each time it is satisfied at once counts.
+static AStatus patt_run (APatt* p, int* done) {
+    if (p->r.cnt < 0) {
+        // no times
+        a_pay_clear();
+        *done = 1;
+        return (p->r.cnt == CNT_ERR) ? cnt_err() : A_OK;
+    }
+    for (;;) {
+        p->da = 0;
+        p->db = 0;
+        AStatus st = patt_start1(p, done);
+        if (st!=A_OK || !*done || p->r.cnt<=1) {
+            return st;
+        }
+        p->r.cnt--;
+        patt_stop(p);
+    }
+}
+
+// Establishes a pattern. Sets `done` if it is satisfied before any
+// event, with the results in the payload.
+static AStatus patt_start (APatt* p, int* done) {
+    p->r.cnt = p->n0;
+    return patt_run(p, done);
+}
+
+static AStatus patt_match1 (APatt* p, AVal evt, int* done);
+
 // Tests an event against a pattern. Sets `done` if it is satisfied,
-// with the results in the payload.
+// with the results in the payload. With a count, it starts again
+// until its last time.
 static AStatus patt_match (APatt* p, AVal evt, int* done) {
+    AStatus st = patt_match1(p, evt, done);
+    if (st==A_OK && *done && p->r.cnt>1) {
+        p->r.cnt--;
+        patt_stop(p);
+        st = patt_run(p, done);
+    }
+    return st;
+}
+
+static AStatus patt_match1 (APatt* p, AVal evt, int* done) {
     AStatus st = A_OK;
     *done = 0;
     switch (p->r.kind) {
@@ -594,7 +698,7 @@ static AStatus patt_match (APatt* p, AVal evt, int* done) {
             return st;
 
         default:
-            leaf_match(&p->r, a_cur, evt, done);
+            leaf_match1(&p->r, a_cur, evt, done);
             return A_OK;
     }
 }
@@ -1685,6 +1789,16 @@ AStatus a_await_val (ATrail* tr, AVal v) {
     ARoot r;
     memset(&r, 0, sizeof(r));
     r.kind = PK_VAL;
+    r.v    = v;
+    a_inc(v);
+    return await_leaf(tr, &r);
+}
+
+AStatus a_await_cnt (ATrail* tr, AVal n, AVal v) {
+    ARoot r;
+    memset(&r, 0, sizeof(r));
+    r.kind = PK_VAL;
+    r.cnt  = cnt_of(n);
     r.v    = v;
     a_inc(v);
     return await_leaf(tr, &r);

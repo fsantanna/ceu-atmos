@@ -1,0 +1,3 @@
+==> ERROR:
+ v  await-cnt-err-01.atm:2 (throw)
+==> invalid await : expected number

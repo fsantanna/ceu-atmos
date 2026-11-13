@@ -2136,6 +2136,8 @@ Atmos supports four loop variations:
    an iterator expression.
 4. An *event loop* (`on`), which awaits an [event pattern](#await) at each
    iteration, with an optional variable to capture the event.
+   The parentheses of a counted pattern are optional:
+   `loop on 35, :tic {...}` iterates at every 35th `:tic`.
 
 The following iterator expression types with predefined behaviors are
 supported:
@@ -2420,6 +2422,7 @@ An `await` suspends a [task](#tasks) until a matching [emit](#emit) occurs:
 ```
 Await : `await´ Patt
 Patt  : Bare | `<´ Full `>´                 ;; bare or full patterns
+      | `(´ Expr `,´ Full `)´               ;; counted pattern
 Bare  : [`:any´ | `:all´] Expr [ Pred ]
       | Pred
 Full  : Full Pred                           ;; (5) lower precedence
@@ -2429,6 +2432,7 @@ Full  : Full Pred                           ;; (5) lower precedence
       | (`:any´ | `:all´) Expr              ;; (1)
       | Pred                                ;; (1)
       | `<´ Full `>´                        ;; (1)
+      | `(´ Expr `,´ Full `)´               ;; (1)
       | Expr                                ;; (1) higher precedence
 Pred  : (`until´ | `while´) Expr
 ```
@@ -2467,6 +2471,28 @@ The compiler rejects the ambiguous forms with the error
 `pattern error : use parentheses to disambiguate`.
 The `until`/`while` suffix applies to the whole combination to its left.
 
+A counted pattern `(n, p)` is satisfied when `p` is satisfied for the `n`th
+time, as in `await(3, :X)`, which awakes on the third `:X`.
+The pattern `p` starts again after each time, and the await evaluates to the
+results of the last one.
+A predicate of `p` is part of what is counted:
+`await(2, :Key until it.c == :a)` only counts the keys that the predicate
+accepts.
+The count `n` is evaluated once, when the await starts, and is truncated to an
+integer.
+If it is lower than `1`, then the await is satisfied at once and evaluates to
+`nil`.
+A counted pattern cannot [spawn a task](#tasks), which would only run once:
+the compiler rejects it with the error `invalid await : unexpected task`.
+
+The parentheses of a counted pattern are optional in the statements that are
+followed by a block, [watching](#watching) and [loop on](#loop):
+`watching 150, :tic {...}` and `loop on 35, :tic {...}`.
+In this form, the count is a literal, a name with fields and indexes, or an
+expression in parentheses.
+The parentheses are mandatory in an `await`, where a comma separates the
+values of a list, as in `val a, b = await :X, 10`.
+
 An `await` is only valid in the body of a task, which includes the main chunk
 and [transparent tasks](#tasks).
 It is a compile error to `await` in the body of a [function](#function),
@@ -2493,6 +2519,7 @@ A task awakes when an `emit(e)` matches the given await pattern as follows:
 | Logical   | `!p`          | not `p`       | `e`       |
 |           | `p1 && p2`    | all subs      | `e`       |
 |           | `p1 \|\| p2`  | any sub       | `e`       |
+| Count     | `(n, p)`      | `n`th `p`     | as `p`    |
 
 Note that some patterns may modify the final result:
 
@@ -2525,6 +2552,9 @@ await <:X || :Y && :Z>          ;; awakes on :X, or after both :Y and :Z
 await <!:X>                     ;; awakes on any non-:X event
 await <:X until it.n==3>        ;; awaits :X until its field n equals 3
 await :X until it.n > 3         ;; no delimiters: `>` is the operator
+await(3, :X)                    ;; awakes on the third :X
+await(n, 1s)                    ;; awakes after `n` periods of 1s
+await <(2, :X) || :Y>           ;; awakes on the second :X, or on :Y
 ```
 
 ```
@@ -2742,6 +2772,9 @@ A `watching` spawns and awaits a block as a [transparent task](#tasks) until an
 ```
 Watching : `watching´ Patt Block
 ```
+
+The parentheses of a [counted pattern](#await) are optional:
+`watching 3, :X {...}` is the same as `watching (3, :X) {...}`.
 
 A `watching P { B }` is equivalent to a `par :any` as follows:
 
