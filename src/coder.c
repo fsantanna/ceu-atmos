@@ -171,7 +171,9 @@ static int slot_new (Unit* u) {
 // CONSTANTS
 ///////////////////////////////////////////////////////////////////////////////
 
-// String constants of the program, created once at startup as `K[i]`.
+// String constants of the program, created once at startup as
+// `atm_K[i]`. Every name that the compiler declares at file scope has
+// the prefix `atm_`, away from the names of a `:prelude`.
 
 typedef struct Const {
     const char* s;
@@ -426,7 +428,7 @@ static const char* var_raw (Unit* u, Var* v) {
     if (v->csym != NULL) {
         return v->csym;
     } else if (v->global) {
-        return xfmt("G%d_%s", v->id, v->tk.str);
+        return xfmt("atm_G%d_%s", v->id, v->tk.str);
     } else if (v == u->proto->self) {
         // the function that the variable names
         return "SELF";
@@ -690,7 +692,7 @@ static Opnd gen_table (Unit* u, Expr* e) {
 // :X [...]: tags the table in place.
 static Opnd gen_tagged (Unit* u, Expr* e) {
     Opnd t = gen_expr(u, e->u.tagged.e);
-    out_try(u, "a_tag(%s, K[%d])", t.c, konst(e->tk.str+1,e->tk.len-1));
+    out_try(u, "a_tag(%s, atm_K[%d])", t.c, konst(e->tk.str+1,e->tk.len-1));
     return t;
 }
 
@@ -957,7 +959,7 @@ static void blk_close (Unit* u, Blk b, Dst d, Hnd h) {
         out(u, "}");
     }
     if (h.esc > 0) {
-        out(u, "if (st==A_ESCAPE && a_escape_is(K[%d])) {", h.esck);
+        out(u, "if (st==A_ESCAPE && a_escape_is(atm_K[%d])) {", h.esck);
         u->ind++;
         out(u, "st = A_OK;");
         out(u, "a_settop(base);");
@@ -1648,7 +1650,7 @@ static void gen_call (Unit* u, Expr* e, Dst d) {
         Expr* met = e->u.call.f;
         Opnd o = gen_expr(u, met->u.met.o);
         f = opnd_tmp(u);
-        out_try(u, "a_index(&%s, %s, K[%d])", f.c, o.c,
+        out_try(u, "a_index(&%s, %s, atm_K[%d])", f.c, o.c,
             konst(met->u.met.met.str, met->u.met.met.len));
         gen_args(u, &e->u.call.es, m.n, &o);
     } else {
@@ -1775,7 +1777,7 @@ static const char* gen_task (Proto* p, Var** pars, int npar, List* body,
         u.nslots++;
     }
     u.orph = 1;
-    const char* name = xfmt("T%d", p->id);
+    const char* name = xfmt("atm_T%d", p->id);
     trail_new(&u, name, -1, 0);
     gen_block(&u, body, dst_slot("t->ret"));
 
@@ -1794,7 +1796,7 @@ static const char* gen_task (Proto* p, Var** pars, int npar, List* body,
     buf_add(c, "    return st;\n");
     buf_add(c, "}\n\n");
     // the trails, with their tree: siblings in source order
-    buf_add(c, xfmt("static const ATrailD P%d_T[] = {\n", p->id));
+    buf_add(c, xfmt("static const ATrailD atm_P%d_T[] = {\n", p->id));
     for (int i=0; i<u.ntrs; i++) {
         int kid  = -1;
         int next = -1;
@@ -1811,9 +1813,9 @@ static const char* gen_task (Proto* p, Var** pars, int npar, List* body,
     }
     buf_add(c, "};\n");
     buf_add(c, xfmt(
-        "static const AProto P%d = { %d, %d, %d, %d, P%d_T };\n\n",
+        "static const AProto atm_P%d = { %d, %d, %d, %d, atm_P%d_T };\n\n",
         p->id, (u.nslots > 0) ? u.nslots : 1, npar, p->dots, u.ntrs, p->id));
-    return xfmt("P%d", p->id);
+    return xfmt("atm_P%d", p->id);
 }
 
 // Compiles a prototype to a C function. Returns its name.
@@ -1833,7 +1835,7 @@ static const char* gen_func (Expr* e) {
     }
     gen_block(&u, &e->u.proto.blk->u.block.es, dst_multi(&u));
 
-    const char* name = xfmt("F%d", e->proto->id);
+    const char* name = xfmt("atm_F%d", e->proto->id);
     const char* sig = xfmt(
         "static AStatus %s (AFunc* self, int argc, AVal* argv)", name);
     buf_add(&DECLS, xfmt("%s;\n", sig));
@@ -1908,6 +1910,8 @@ static void gen_nat (Unit* u, Expr* e, Dst d) {
         buf_add(&u->body, line);
         buf_add(&u->body, code.s);
         buf_add(&u->body, "\n;\n");
+        // the code may fail: `st = a_error(...)`
+        out(u, "if (st != A_OK) goto CL_%d;", u->cleanup);
         store_void(u, d);
         return;
     }
@@ -1922,6 +1926,7 @@ static void gen_nat (Unit* u, Expr* e, Dst d) {
     buf_add(&u->body, xfmt("a_set(&%s, %s", t.c, CONV[kind]));
     buf_add(&u->body, code.s);
     buf_add(&u->body, ")));\n");
+    out(u, "if (st != A_OK) goto CL_%d;", u->cleanup);
     store(u, t, d);
 }
 
@@ -2040,7 +2045,7 @@ static void gen_tra (Unit* up, int id, List* body, ParMode mode, int key,
 // block, which must abort it on exit.
 static int gen_trail (Unit* u) {
     Unit* r = (u->root != NULL) ? u->root : u;
-    const char* fn = xfmt("T%d_%d", u->proto->id, r->ntrs);
+    const char* fn = xfmt("atm_T%d_%d", u->proto->id, r->ntrs);
     return trail_new(u, fn, u->trail, u->level + 1);
 }
 
@@ -2321,7 +2326,7 @@ static void gen_toggle_on (Unit* u, Expr* e, Dst d) {
 
     int n;
     Opnd* os = gen_filters(u, e->u.toggle_on.fs, e->u.toggle_on.nf, &n);
-    out(u, "    a_trail_toggle(t, %d, K[%d], fs, %d);",
+    out(u, "    a_trail_toggle(t, %d, atm_K[%d], fs, %d);",
         id, konst(e->tk.str+1,e->tk.len-1), e->u.toggle_on.nf);
     out(u, "}");
     for (int i=0; i<n; i++) {
@@ -2379,11 +2384,11 @@ static Opnd gen_expr (Unit* u, Expr* e) {
             if (e->tk.tag==TK_STR && !e->tk.multi) {
                 str = decode(e->tk, &len);
             }
-            return opnd_c(xfmt("K[%d]", konst(str,len)));
+            return opnd_c(xfmt("atm_K[%d]", konst(str,len)));
         }
         case E_TAG:
             // a tag is the string after the colon
-            return opnd_c(xfmt("K[%d]", konst(e->tk.str+1,e->tk.len-1)));
+            return opnd_c(xfmt("atm_K[%d]", konst(e->tk.str+1,e->tk.len-1)));
         case E_ACC:
             return gen_acc(u, e);
         case E_INDEX:
@@ -2545,10 +2550,10 @@ char* coder_main (Expr* prog, Var** globals, int nglobals) {
     buf_add(&c, "\n");
 
     // constants
-    buf_add(&c, xfmt("static AVal K[%d];\n\n", (KN > 0) ? KN : 1));
-    buf_add(&c, "static void consts_init (void) {\n");
+    buf_add(&c, xfmt("static AVal atm_K[%d];\n\n", (KN > 0) ? KN : 1));
+    buf_add(&c, "static void atm_consts_init (void) {\n");
     for (int i=0; i<KN; i++) {
-        buf_add(&c, xfmt("    K[%d] = a_str(%s, %d);\n",
+        buf_add(&c, xfmt("    atm_K[%d] = a_str(%s, %d);\n",
             i, quote(KS[i].s,KS[i].len), KS[i].len));
     }
     buf_add(&c, "}\n\n");
@@ -2559,7 +2564,7 @@ char* coder_main (Expr* prog, Var** globals, int nglobals) {
     buf_add(&c, FUNCS.s ? FUNCS.s : "");
 
     buf_add(&c, "AStatus atm_main (void) {\n");
-    buf_add(&c, "    consts_init();\n");
+    buf_add(&c, "    atm_consts_init();\n");
     buf_add(&c, xfmt("    return a_main(&%s);\n", main));
     buf_add(&c, "}\n\n");
 
@@ -2567,7 +2572,7 @@ char* coder_main (Expr* prog, Var** globals, int nglobals) {
     for (int i=nglobals-1; i>=0; i--) {
         buf_add(&c, xfmt("    a_clr(&%s);\n", var_raw(&u,globals[i])));
     }
-    buf_add(&c, xfmt("    a_clrs(K, %d);\n", KN));
+    buf_add(&c, xfmt("    a_clrs(atm_K, %d);\n", KN));
     buf_add(&c, "}\n");
     return c.s;
 }

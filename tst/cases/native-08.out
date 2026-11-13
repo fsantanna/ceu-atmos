@@ -1,0 +1,10 @@
+2
+false	invalid value : -7
+defer
+4.0
+defer
+false	negative
+task
+==> ERROR:
+ v  native-08.atm:20 (throw)
+==> in a task

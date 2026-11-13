@@ -1,0 +1,22 @@
+;; a native literal may fail: it assigns an error to `st`, which is
+;; raised after the literal, as a throw
+func chk (v) {
+    val s = "x" ++ "y"                  ;; a local to release
+    `if (a_dbl($v) < 0) { st = a_error("invalid value : %d", (int)a_dbl($v)); }`
+    #s
+}
+print(chk(1))
+print(catch true { chk(-7) })
+
+func half (v) {
+    defer { print(:defer) }
+    `:number (a_dbl($v) < 0) ? (st = a_error("negative"), 0) : a_dbl($v)/2`
+}
+print(half(8))
+print(catch true { half(-1) })
+
+spawn {
+    defer { print(:task) }
+    `st = a_error("in a task");`
+    print(:never)
+}

@@ -1,0 +1,13 @@
+;; the names of a prelude do not clash with what the compiler declares
+```:prelude
+static int K  = 10;
+static int F1 = 1;
+static int T0 = 2;
+static int P0 = 3;
+static int consts_init (void) { return 4; }
+```
+val t = [x=1]
+func f () { t.x }
+task T () { await(:X) }
+pin a = spawn T()
+print(f(), `:number K + F1 + T0 + P0 + consts_init()`)

@@ -679,6 +679,17 @@ The interface of the runtime (`rt/atmos.h`) has the operations to inspect and
 create values, such as `a_dbl(v)` to read a number, `A_STR_OF(v)->s` to read
 a string, and `a_int(i)`, `a_num(d)`, and `a_strz(s)` to create values.
 
+A native literal may fail, by assigning an error to the variable `st`:
+`` `if (n < 0) { st = a_error("invalid value : %d", n); }` ``.
+The error is raised right after the literal, as a [throw](#exceptions) of the
+message, and the blocks in course terminate as usual.
+The code must not leave the literal in any other way, such as a `return` or a
+`goto`, which would skip the termination of the blocks.
+
+The names with the prefixes `a_`, `A_`, and `atm_` belong to the runtime and to
+the code that the compiler generates.
+A `:prelude` must not declare names with these prefixes.
+
 Examples:
 
 ```
