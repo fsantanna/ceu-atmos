@@ -261,9 +261,18 @@ static void pay1 (AVal v) {
     a_pay_addc(v);
 }
 
-static void pay_task (AVal t) {
+// The results of the await of a task: its final value, and the task.
+// A task that the pattern itself spawned (`await T()`) gives its value
+// away, as a call does: nobody else has the task, and the value comes
+// out with no other reference, so that it may be pinned.
+static void pay_task (AVal t, int own) {
     a_pay_clear();
-    a_pay_addc(A_TASK_OF(t)->ret);
+    if (own) {
+        a_pay_add(A_TASK_OF(t)->ret);
+        A_TASK_OF(t)->ret = a_nil();
+    } else {
+        a_pay_addc(A_TASK_OF(t)->ret);
+    }
     a_pay_addc(t);
 }
 
@@ -379,7 +388,7 @@ static AStatus leaf_start1 (ARoot* r, int* done) {
 
         case PK_TASK:
             if (A_TASK_OF(r->v)->status == T_DONE) {
-                pay_task(r->v);
+                pay_task(r->v, r->own);
                 *done = 1;
             }
             break;
@@ -453,7 +462,7 @@ static void leaf_match1 (ARoot* r, ATask* t, AVal evt, int* done) {
 
         case PK_TASK:
             if (a_eq(evt, r->v)) {
-                pay_task(r->v);
+                pay_task(r->v, r->own);
                 *done = 1;
             }
             break;
@@ -479,7 +488,7 @@ static void leaf_match1 (ARoot* r, ATask* t, AVal evt, int* done) {
             // a task of the pool terminated (and it was the last one)
             if (evt.type==A_XTASK && A_TASK_OF(evt)->pool==A_TASKS_OF(r->v)) {
                 if (r->kind==PK_ANY || a_tasks_len(A_TASKS_OF(r->v))==0) {
-                    pay_task(evt);
+                    pay_task(evt, 0);
                     a_pay_addc(r->v);
                     *done = 1;
                 }

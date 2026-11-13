@@ -2548,6 +2548,12 @@ Note that some patterns may modify the final result:
 A bare call (e.g., `await T()`, or as an operand `await<T() || :X>`)
 [spawns](#tasks) the given task and awaits its termination, evaluating to the
 task final value.
+The task gives its final value away, as a function call does: the value comes
+out with no other reference, and may be [pinned](#pin), as in
+`pin f = await Open()`.
+The task that comes as the second result no longer holds the value.
+A task that is awaited by its reference (`await(t)`) keeps its final value,
+which is then shared with whoever awaits it.
 To await the result of a call instead of spawning it, use the value form:
 `await(f())` at top level, or `(f())` as a leaf inside `<>`.
 

@@ -1,0 +1,7 @@
+a	3
+b	3
+f	native
+c	3
+v	3	nil
+shared	true	3
+false	invalid pin : shared value

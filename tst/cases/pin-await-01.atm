@@ -1,0 +1,42 @@
+;; a task that an await spawns gives its final value away, as a call
+;; does: the value may be pinned
+task T () {
+    await :go
+    [1, 2, 3]
+}
+task U () {
+    val t = [4, 5, 6]       ;; ends at once
+    t
+}
+task F () {
+    await :go
+    io.open("/dev/null", "r")       ;; a native value
+}
+
+spawn {
+    pin a = await U()
+    print(:a, #a)
+    pin b = await T()
+    print(:b, #b)
+    do {
+        pin f = await F()
+        print(:f, type(f))
+    }                       ;; the file is closed here
+    ;; in a pattern
+    pin c = await <T() || :never>
+    print(:c, #c)
+    ;; the task comes second, with its value gone
+    val v, t = await T()
+    print(:v, #v, t.ret)
+}
+emit(:go) ; emit(:go) ; emit(:go) ; emit(:go)
+
+;; a task that is not spawned by the await keeps its value: who awaits
+;; it shares the value, and cannot pin it
+pin t = spawn U()
+val x = await(t)
+val y = await(t)
+print(:shared, x == y, #t.ret)
+print(catch true {
+    pin z = await(t)
+})

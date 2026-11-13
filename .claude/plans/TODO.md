@@ -96,6 +96,11 @@ may be changed.
   the manual, after the port of Storm took one `:clock` for one frame.
 - **A native literal fails by assigning to `st`**, and the names with
   the prefixes `a_`, `A_`, and `atm_` are reserved.
+- **A task that an await spawns gives its final value away**
+  (`pin s = await T()` works; found by `env-uv`). The task that comes
+  as the second result no longer holds the value: `val v, t = await
+  T()` then `t.ret` is `nil`. A task awaited by its reference keeps
+  it.
 - **`math.atan(y, x)`** takes the point, as in Lua 5.4.
 - **`pub`** is rejected as the name of a variable.
 - **The README** follows the one of `atmos-lang/atmos`. It has no badge
