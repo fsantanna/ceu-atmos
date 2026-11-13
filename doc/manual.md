@@ -2535,6 +2535,13 @@ A task awakes when an `emit(e)` matches the given await pattern as follows:
 Note that some patterns may modify the final result:
 
 - Time: `late`: time elapsed past expiry; `dt`: clock tick length
+    - The time of an emit passes in pieces: it stops at each instant in which
+      a timer expires, so that the timer awakes at its exact time.
+      A `:clock` awakes at each piece, with its length as `dt`, and with the
+      time that the emit still has to pass as `late`.
+      Therefore, it may awake many times for a single emit, such as a frame
+      of an environment: the sum of the `dt` is the time of the emit, and
+      `late` is `0` in its last piece.
 - Tasks: task result, terminating task, and task pool
 - Condition: function result (defaults to `e` if `true`)
 

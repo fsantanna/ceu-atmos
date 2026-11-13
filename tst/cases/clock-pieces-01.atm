@@ -1,0 +1,20 @@
+;; an emit of time is delivered in pieces, one per instant that a timer expires
+var ticks = 0
+var frames = 0
+var sum = 0
+spawn {
+    loop us, late on :clock {
+        set ticks = ticks + 1
+        set sum = sum + us
+        if late == 0 {
+            set frames = frames + 1     ;; the last piece of the emit
+        }
+    }
+}
+task T () { loop { await 7ms } }
+pin ts = tasks()
+loop i in 3 { spawn @ts T() }
+loop i in 30 {
+    emit @:global (33ms)
+}
+print(ticks, frames, sum == 30*33ms)
