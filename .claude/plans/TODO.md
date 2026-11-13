@@ -41,12 +41,13 @@ Each has the option recommended by this session.
 | # | Decision | Recommended |
 |---|----------|-------------|
 | 37 | Doom: how far to go after the flow of the game (the status bar, the messages, the menus, the automap). The other three questions of the plan were answered on 2026-11-13 with the recommended options (Chocolate Doom, a copy with a first untouched commit, the shareware data fetched by a script), and the session may start | To decide when the wipe, the intermission, the finale, and the flow are done |
-| 42 | The environment for IUP: the session `iup` waits for a plan. IUP has no native driver for the Mac, as far as this session knows (not verified) | Write the plan |
-| 43 | The environment for libuv: the session `uv` waits for a plan. To decide in it: who owns the main loop when a program has a GUI and the network | Write the plan, after `ceu-lang/ceu-libuv` |
+| 42 | The environment for IUP: the plan is sent (`261113-env-iup.md`). It waits for the author on three items: a thin and generic binding, the seven tasks of 7GUIs as what to build, and how IUP gets into the container. Its first milestone is only a check that IUP builds and opens a dialog with no screen | The three as recommended in the plan |
+| 43 | The environment for libuv: the plan is sent (`261113-env-uv.md`). It waits for the author on three items: the order of the features, the samples of `ceu-libuv` as tests, and who owns the main loop (the environment, with a step function for a GUI to drive it later) | The three as recommended in the plan |
 | 47 | The binding of raylib and its 23 games share one repository (`env-ray`), and Lessmilk keeps a copy of the binding, pinned at a commit | Split the games out (`ray-games`), so that the binding is used and not copied |
 | 55 | The three games over SDL (Pingus, SNKRX, Flare) wrote three platform layers of their own, and none uses `lib/sdl.atm`. The author asked to make them use the environment they are supposed to use. Of the 87 functions of SDL that the three use, 24 are common to all, and `lib/sdl.atm` covers 32. Each engine also has C of its game, which stays (the pathfinding and the maps of Flare, the physics of SNKRX, the collision maps of Pingus) | In course: the author created `ia-atmos/env-sdl`, and its session has the plan `261113-env-sdl.md`. Five items of the plan wait for him there: one file `sdl.atm`, the prefix of the events, one test mode, `lib/sdl.atm` leaving the compiler (and where `exs/rocks/` goes), and how a game gets the environment |
 | 56 | Whether the file `raylib.atm`, its table `rl`, and the prefix `:rl.` of its events follow the new name of the repository (`ray`) | Not studied. Related to item 46 |
-| 27 | The repository `sdl-tux` is empty, and its session is archived | Delete or archive it (the author's to do) |
+| 27 | SuperTux, taken up again as `sdl-tux`: the plan is sent (`261113-sdl-tux.md`), to a new session. It waits for the author on four items: the tag `v0.7.0`, the slice (World 1, in two steps), the scripts (those of the levels as data that a small task interprets, the long scenes as Atmos code), and the SDL renderer only | The four as recommended in the plan |
+| 57 | How two environments live in one program (a GUI and the network: two loops, one `main`). Both `env-uv` and `env-iup` meet it | Not designed. `env-uv` offers a step of its loop as a first answer |
 | 49 | The picture of the organization and the social preview of the repository `lang` | Upload `doc/logo/atmos-icon.png` and `doc/logo/atmos-1280x640.png` (the author's to do, in the settings of GitHub) |
 | 54 | The assets of Lessmilk have no known license; the author chose to copy them | Ask Thomas Palef |
 
@@ -110,7 +111,7 @@ What waits for the author in them, as far as this session knows.
 | Session | Waits for |
 |---------|-----------|
 | `doom` | Nothing: it may start its first milestone |
-| `iup`, `uv` | Their plans (items 42 and 43) |
+| `iup`, `uv`, `sdl-tux`, `env-sdl` | The items of their plans marked to confirm (items 42, 43, 27, and 55) |
 | `raylib` | A permission to change the remote of its checkout of the compiler (harmless meanwhile: the old address redirects) |
 | `flare` | Three items of its plan to confirm, and a permission to install packages (not checked again since 2026-11-11) |
 
