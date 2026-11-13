@@ -17,7 +17,7 @@ Status: sent to the session that works in the repository
   Atmos over `pico-sdl`, with a written analysis per game. The author
   considers that port good: this plan starts from it.
 - This plan ports the twelve to Atmos over the compiler
-  `fsantanna/ceu-atmos`, which differs from the reference Atmos, and
+  `ia-atmos/lang`, which differs from the reference Atmos, and
   compares each one with its original running in a browser.
 - It is the counterpart, for a dynamic language, of the port of the
   raylib games (`fsantanna/raylib`, plan in `261112-raylib.md`): many
@@ -45,7 +45,7 @@ Status: sent to the session that works in the repository
 | Port of Pingus, the model | `fsantanna/ceu-atmos-pingus` | complete |
 | Its tips | the section "What the Pingus port taught", below | |
 | The raylib environment | `fsantanna/raylib`, `raylib.atm` | in course, by the session `raylib` |
-| The SDL environment, as a model of one | `fsantanna/ceu-atmos`, `lib/sdl.atm`, `exs/rocks/` | |
+| The SDL environment, as a model of one | `ia-atmos/lang`, `lib/sdl.atm`, `exs/rocks/` | |
 
 - The site `lessmilk.com` could not be read when this plan was
   written. The license of the original games and of their images and
