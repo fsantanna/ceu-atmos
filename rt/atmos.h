@@ -1189,6 +1189,11 @@ void atm_free (void);
 // External event, with the global target.
 AStatus atm_emit (AVal evt);
 
+// External event to one task or pool (and what it holds), with no
+// traversal of the rest of the program. An exit that the task raises
+// goes to who holds it, as in a broadcast, and not to the caller.
+AStatus atm_emit_to (AVal to, AVal evt);
+
 // Advances the clock, in milliseconds.
 AStatus atm_step (uint32_t ms);
 

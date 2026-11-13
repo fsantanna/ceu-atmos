@@ -2509,6 +2509,81 @@ AStatus atm_emit (AVal evt) {
     return emit_top(&ROOT.node, evt);
 }
 
+// The task that holds a node, beyond its pool, and the trail of that
+// task which spawned it. NULL for the main chunk.
+static ATask* node_holder (ANode* n, int* i) {
+    ANode* x = n;
+    do {
+        *i = x->trail;
+        x  = x->up;
+    } while (x!=NULL && x->hdr.type!=A_XTASK);
+    return (ATask*) x;
+}
+
+AStatus atm_emit_to (AVal to, AVal evt) {
+    if (to.type!=A_XTASK && to.type!=A_TASKS) {
+        return a_error("invalid emit : expected task");
+    }
+    if (a_isnum(evt)) {
+        return a_error("invalid emit : expected global");
+    }
+    ANode* n = (ANode*) to.u.o;
+
+    // who holds the target, taken before the emit: a task that ends
+    // leaves the tree
+    int i = 0;
+    ATask* t = node_holder(n, &i);
+    AVal tref = a_nil();
+    if (t != NULL) {
+        tref = a_obj(&t->node.hdr);
+        a_inc(tref);
+    }
+
+    a_inc(to);
+    AStatus st = emit_top(n, evt);
+    a_dec(to);
+
+    // An exit that leaves the target did not pass through who holds
+    // it, since the emit started at the target. It is delivered as a
+    // broadcast does: raised in the trail that spawned the target, and
+    // upwards while nobody handles it.
+    while (st!=A_OK && t!=NULL) {
+        int ni = 0;
+        ATask* nt = node_holder(&t->node, &ni);
+        AVal nref = a_nil();
+        if (nt != NULL) {
+            nref = a_obj(&nt->node.hdr);
+            a_inc(nref);
+        }
+        while (t->trs != NULL) {
+            ATrail* tr = &t->trs[i];
+            if (tr->waiting) {
+                // leaving a block: replaces the pending exit
+                wait_set(tr, st);
+                st = A_OK;
+            } else if (tr->status == TR_SUSPENDED) {
+                // raised at its await
+                EXIT = st;
+                st = trail_resume(t, tr, R_EXIT);
+            } else if (tr->status == TR_RUNNING) {
+                // it is on the C stack
+                exit_park(t, tr, st);
+                st = A_OK;
+            }
+            if (st==A_OK || t->trs==NULL || i==0) {
+                break;
+            }
+            i = t->desc->trails[i].up;
+        }
+        a_dec(tref);
+        t    = nt;
+        tref = nref;
+        i    = ni;
+    }
+    a_dec(tref);
+    return st;
+}
+
 AStatus atm_step (uint32_t ms) {
     return emit_tick(ms * 1000.0);
 }

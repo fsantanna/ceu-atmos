@@ -466,6 +466,13 @@ if (st == A_OK) {
 atm_quit();
 ```
 
+An environment may also emit to a single task or pool, with
+`atm_emit_to(t, evt)`: only that task and what it holds are traversed, which
+matters when many tasks wait and each event is for one of them, as with the
+connections of a network.
+If the task raises an exception, it goes to the task that holds it, as usual,
+and not back to the environment.
+
 An environment may be part of the program itself, in a
 [native literal](#native-literals) with the tag `:prelude`.
 The example `exs/stdin.atm` emits each line of the standard input as an event.

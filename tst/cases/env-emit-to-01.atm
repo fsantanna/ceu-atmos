@@ -1,0 +1,76 @@
+;; an environment emits to one task: the exit of the task goes to who
+;; holds it, as in a broadcast, and not back to the environment
+```:prelude
+#include <stdio.h>
+static AVal ENV_WHO[4];
+static int  ENV_N = 0;
+static void env_who (AVal t) {
+    a_inc(t);
+    ENV_WHO[ENV_N++] = t;
+}
+int main (int argc, char** argv) {
+    atm_init(argc, argv);
+    AStatus st = atm_main();
+    for (int i=0; i<ENV_N && st==A_OK; i++) {
+        AVal x = a_strz("x");
+        st = atm_emit_to(ENV_WHO[i], x);
+        a_dec(x);
+    }
+    for (int i=0; i<ENV_N; i++) {
+        a_dec(ENV_WHO[i]);
+    }
+    if (st == A_OK) {
+        st = atm_stop();
+    }
+    fflush(stdout);
+    if (st != A_OK) {
+        a_error_dump();
+    }
+    atm_quit();
+    return (st == A_OK) ? 0 : 1;
+}
+```
+task T (v) {
+    val me = task
+    `env_who($me);`
+    await :x
+    if v == :throw {
+        throw :E
+    }
+    v
+}
+
+;; awaited inside a catch
+spawn {
+    val ok, e = catch :E {
+        await T(:throw)
+    }
+    print(:caught, ok, e)
+}
+;; a result
+spawn {
+    val v = await T(10)
+    print(:result, v)
+}
+;; in a pool, held by a task with nested blocks
+spawn {
+    pin ts = tasks()
+    val ok = catch :E {
+        par {
+            spawn @ts T(:throw)
+            await(false)
+        } with {
+            defer { print(:branch, :aborted) }
+            await(false)
+        }
+    }
+    print(:pool, ok, #ts)
+}
+;; only its target awakes
+spawn {
+    await :x
+    print(:never)
+}
+
+;; the environment emits while the main chunk waits
+await(false)
