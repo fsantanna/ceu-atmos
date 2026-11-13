@@ -1,59 +1,110 @@
-# ceu-atmos
+# The Programming Language Atmos
+
+***Structured Event-Driven Concurrency***
+
+[
+    [About](#about)                 |
+    [Hello World!](#hello-world)    |
+    [Install & Run](#install--run)  |
+    [Documentation](#documentation) |
+    [Environments](#environments)   |
+    [Resources](#resources)         |
+    [Development](#development)
+]
 
 <img src="atmos-logo.png" width="250" align="right">
 
-Atmos with a C backend: a from-scratch implementation of the
-[Atmos](https://github.com/atmos-lang/atmos) programming language that
-compiles to C.
+# About
 
-- No VM, no interpreter, no Lua.
-- Whole-program compilation to one C file, then `cc`.
-- Stackless tasks with structured, deterministic concurrency.
-- Reference counting, no garbage collector.
+Atmos is a programming language that reconciles *[Structured Concurrency][sc]*
+and *[Event-Driven Programming][events]*, extending classical structured
+programming with two main functionalities:
 
-The language is described in the [manual](doc/manual.md), and there are
-a few [examples](exs/).
+- Structured Deterministic Concurrency:
+    - A `task` primitive with deterministic scheduling provides predictable
+      behavior and safe abortion.
+    - A `tasks` container primitive holds attached tasks and controls their
+      lifecycle.
+    - A `pin` declaration attaches a task or tasks to its enclosing lexical
+      scope.
+    - Structured primitives (e.g., `par`) compose concurrent tasks with lexical
+      scope.
+- Event Signaling Mechanisms:
+    - An `await` primitive suspends a task and waits for events.
+    - An `emit` primitive signals events and awakes awaiting tasks.
 
-The plan, with the settled decisions and the milestones, is in
-[`.claude/plans/261109-c-backend.md`](.claude/plans/261109-c-backend.md).
+Atmos is inspired by [synchronous programming languages][sync] like [Céu][ceu]
+and [Esterel][esterel].
+
+This repository is the implementation of Atmos that compiles to C:
+
+- No virtual machine, no interpreter, and no garbage collector.
+- The whole program becomes a single C file, which a C compiler builds.
+- Tasks have no stacks of their own: a task is a record with its variables
+  and the point where it resumes.
+- Memory is reclaimed by reference counting, and by the lexical scope of
+  `pin` declarations.
+
+The original implementation of Atmos, which compiles to [Lua][lua], is at
+[atmos-lang/atmos][atmos-lua].
+The two differ in some points, which are [listed below](#differences).
+The functional streams and the threads of the original are not part of this
+implementation.
 
 **Experimental: work in progress.**
 
-## Build
+[sc]:           https://en.wikipedia.org/wiki/Structured_concurrency
+[events]:       https://en.wikipedia.org/wiki/Event-driven_programming
+
+[sync]:         https://fsantanna.github.io/sc.html
+[ceu]:          http://www.ceu-lang.org/
+[esterel]:      https://en.wikipedia.org/wiki/Esterel
+[lua]:          https://www.lua.org/
+[atmos-lua]:    https://github.com/atmos-lang/atmos/
+
+# Hello World!
+
+During 5 seconds, displays `Hello World!` every second:
 
 ```
+watching 5s {
+    loop on 1s {
+        print "Hello World!"
+    }
+}
+```
+
+The program body is a task in Atmos that behaves as follows:
+
+- The `watching` command will execute its block during 5 seconds.
+- The `loop on` will execute its block every second.
+- Once the `watching` terminates, the body reaches its end, and the program
+  exits cleanly.
+
+Time is part of the language: with no environment, a program follows the real
+clock.
+
+# Install & Run
+
+Atmos requires a C compiler and `make`:
+
+```
+git clone https://github.com/ia-atmos/lang
+cd lang/
 make
+./atmos exs/hello.atm
 ```
 
-It builds the compiler `./atmos` and the runtime libraries in `build/`.
-It requires a C compiler and `make`.
+The `make` builds the compiler `./atmos` and the runtime libraries in
+`build/`.
 
-## Use
+The compiler translates a program to C, builds it, and runs it:
 
 ```
 ./atmos hello.atm [args]    # compiles, builds, and runs
 ./atmos -c hello.atm        # emits C only
 ./atmos -o hello hello.atm  # builds only
 ./atmos -t hello.atm        # enables test blocks
-```
-
-```
-spawn {
-    watching :done {
-        par {
-            loop on :tick {
-                print "tick A"
-            }
-        } with {
-            loop on :tick {
-                print "tick B"
-            }
-        }
-    }
-    print "done"
-}
-emit(:tick)     ;; --> tick A, tick B
-emit(:done)     ;; --> done
 ```
 
 Environment variables:
@@ -63,6 +114,52 @@ Environment variables:
 - `ATMOS_LDFLAGS`: linker flags, which go after the program
   (e.g. `-lSDL2`).
 - `ATMOS_ASAN`: if set, builds the program with the address sanitizer.
+
+# Documentation
+
+- [Manual](doc/manual.md)
+- [Examples](exs/)
+
+# Environments
+
+An environment is an external component that bridges input events from the real
+world into an Atmos application.
+
+The default environment only deals with time: it follows the real clock, and
+terminates the program when there is nothing left to awake.
+
+Other environments are written in C, in the Atmos program itself or in a file
+that it includes:
+
+- [`lib/sdl.atm`](lib/sdl.atm):
+    A basic environment that relies on [SDL][sdl] to provide a window, keys,
+    images, text, sounds, and timers.
+- [`raylib.atm`](https://github.com/fsantanna/raylib):
+    An environment that relies on [raylib][raylib], with keys, mouse,
+    textures, sounds, and fonts.
+
+Both have a test mode with no screen, with a fixed number of frames and
+scripted input.
+
+[sdl]:          https://www.libsdl.org/
+[raylib]:       https://www.raylib.com/
+
+# Resources
+
+- [A toy problem][toy]: Drag, Click, or Cancel
+- A simple but complete 2D game in Atmos:
+    - [`exs/rocks/`](exs/rocks/)
+- Academic publications (Céu):
+    - http://ceu-lang.org/chico/#ceu
+- Mailing list (Céu & Atmos):
+    - https://groups.google.com/g/ceu-lang
+
+[toy]: https://fsantanna.github.io/toy.html
+
+# Development
+
+The plan, with the settled decisions and the milestones, is in
+[`.claude/plans/261109-c-backend.md`](.claude/plans/261109-c-backend.md).
 
 ## Test
 
@@ -94,7 +191,9 @@ exs/    examples
 lib/    libraries in Atmos: sdl.atm
 ```
 
-## Differences from the current Atmos
+## Differences
+
+From the [original implementation][atmos-lua], which compiles to Lua:
 
 - Indexes start at `0`: vectors, numeric loops, and strings.
 - An unknown identifier is a compile error: globals are static.
