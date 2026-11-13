@@ -1,5 +1,7 @@
 # ceu-atmos
 
+<img src="atmos-logo.png" width="250" align="right">
+
 Atmos with a C backend: a from-scratch implementation of the
 [Atmos](https://github.com/atmos-lang/atmos) programming language that
 compiles to C.
