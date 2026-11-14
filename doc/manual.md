@@ -51,7 +51,7 @@
     * Conditionals
         - `if` `ifs` `match`
     * Loop
-        - `loop` `break` `until` `while`
+        - `loop` `break` `skip` `until` `while`
     * Exceptions
         - `throw` `catch`
     * Task Operations
@@ -371,8 +371,8 @@ Atmos borrows much from Lua, and some differences are worth mentioning:
 - Statements `return` and `break`:
     - Lua: `return 10`, `break`, always the last statement of a block
     - Atmos: `return 10`, `break`, anywhere, since they are expressions
-        - The same holds for `abort`, `emit`, `escape`, `throw`, `until`, and
-          `while`, which take their [arguments](#statement-arguments) with or
+        - The same holds for `abort`, `emit`, `escape`, `skip`, `throw`,
+          `until`, and `while`, which take their [arguments](#statement-arguments) with or
           without parenthesis.
 - Method call:
     - Lua: `o:f()` (single colon)
@@ -536,25 +536,22 @@ The following keywords are reserved in Atmos:
     pub                 ;; public variable
     return              ;; escape prototype
     set                 ;; assign expression
+    skip                ;; loop skip
     spawn               ;; spawn task
     task                ;; task prototype
     tasks               ;; task pool
     test                ;; test block
     throw               ;; throw error
-    toggle              ;; toggle task
-    true                ;; true value                       (30)
+    toggle              ;; toggle task                      (30)
+    true                ;; true value
     until               ;; until loop condition
     val                 ;; constant declaration
     var                 ;; variable declaration
     watching            ;; watching block
     where               ;; where block
     while               ;; while loop condition
-    with                ;; with block                       (37)
+    with                ;; with block                       (38)
 ```
-
-<!--
-    skip                ;; loop skip
--->
 
 ## Symbols
 
@@ -1136,7 +1133,7 @@ They are only valid as an item of a [block](#blocks) or as the body of a
 It is a compile error to use them where a value is expected, such as in an
 operand or in an argument: `print(val x = 1)`.
 
-The statements that leave a scope, such as `return`, `break`, and `throw`,
+The statements that leave a scope, such as `return`, `break`, `skip`, and `throw`,
 are valid in any position, even though they never produce a value:
 `val v = f() || throw :X`.
 
@@ -1913,8 +1910,8 @@ The call formats are also valid for the statements `await`, `do`, and
 
 #### Statement Arguments
 
-The statements `abort`, `break`, `emit`, `escape`, `return`, `throw`, `until`,
-and `while` take their arguments with no parenthesis:
+The statements `abort`, `break`, `emit`, `escape`, `return`, `skip`, `throw`,
+`until`, and `while` take their arguments with no parenthesis:
 
 - The arguments are a list of expressions separated by commas, which extends
   as far as possible: `return x + 1, y` returns two values.
@@ -1928,6 +1925,7 @@ and `while` take their arguments with no parenthesis:
   all of them.
 
 The statements `abort` and `emit` expect a single argument.
+The statement `skip` expects no arguments: `skip` and `skip()` are the same.
 
 Examples:
 
@@ -2290,20 +2288,6 @@ Break : `break´ Expr*
       | `while´ Expr+
 ```
 
-<!--
-Skip  : `skip´ `(´ `)´
-The block may also contain a `skip()` statement to jump back to the next loop
-step.
-var i = 0
-loop {                  ;; infinite loop
-    set i = i + 1
-    if (i % 2) == 0 {
-        skip()          ;; jump back
-    }
-    print(i)          ;; --> 1,3,5,...
-}
--->
-
 The loop as a whole evaluates to the values passed to `break`.
 
 A break is lexical:
@@ -2342,6 +2326,69 @@ val x = loop {
     <...>
 }
 print(x)            ;; value of f()
+```
+
+### Skips
+
+A `skip` immediately goes to the next step of the deepest enclosing loop:
+
+```
+Skip : `skip´
+```
+
+The next step depends on the [loop](#loop) variation:
+
+1. In an infinite loop, the block restarts from the top.
+2. In a numeric infinite loop, the block restarts with the variable advanced.
+3. In an iterator loop, the block restarts with the next item, or the loop
+   terminates if there are no more items.
+4. In an event loop, the loop awaits the next occurrence of the event.
+
+A `skip` takes no values, since a step has no value to give: `skip` and
+`skip()` are the same, and an argument is a compile error.
+A skip alone never terminates a loop, and does not affect the value of the
+loop as a whole.
+
+Like a [break](#breaks), a skip is lexical:
+it must appear inside the loop it skips, in the same function or task body.
+The blocks between the skip and the loop, such as a [watching](#watching) or
+the branches of a [par](#parallel), are aborted, and their
+[defers](#defer) execute.
+
+The clauses `until` and `while` are ordinary statements of the block:
+a `skip` that executes before them also skips their tests.
+
+Like the other statements that leave a scope, a `skip` is an expression
+that is valid in any position: `val x = t.x || skip`.
+
+Examples:
+
+```
+loop i in 6 {
+    if i % 2 == 0 {
+        skip        ;; next item
+    }
+    print(i)        ;; --> 1, 3, 5
+}
+```
+
+```
+loop e on :X {
+    val v = e.v || skip     ;; ignores events with no `v`
+    print(v)
+}
+```
+
+```
+var i = 0
+loop {
+    set i = i + 1
+    if i < 10 {
+        skip        ;; skips the test below
+    }
+    until true
+}
+print(i)            ;; --> 10
 ```
 
 ## Exceptions
@@ -3238,6 +3285,7 @@ Expr  : `do´[TAG]  Block                            ;; explicit block
       | `break´ Expr*                               ;; loop break
       | `until´ Expr+
       | `while´ Expr+
+      | `skip´                                      ;; loop skip
 
       | `throw´ Expr*                               ;; throw exception
       | `catch´ Expr Block                          ;; catch exception
