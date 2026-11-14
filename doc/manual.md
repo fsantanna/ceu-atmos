@@ -418,7 +418,7 @@ The compiler accepts the following options:
 ```
 $ atmos
 
-Usage: atmos [-c] [-o <out>] [-t] <input> [<args>] ...
+Usage: atmos [-c] [-o <out>] [-t] [-e <env>] <input> [<args>] ...
 
 Options:
    -c          Emit C only.
