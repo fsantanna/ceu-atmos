@@ -1,0 +1,20 @@
+step	1
+skip
+par1	ends
+par2	ends
+watching	ends
+step	2
+par1	ends
+par2	ends
+watching	ends
+after	2
+step	3
+skip
+par1	ends
+par2	ends
+watching	ends
+step	4
+end
+par1	ends
+par2	ends
+watching	ends

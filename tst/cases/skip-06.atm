@@ -1,0 +1,27 @@
+;; transparent blocks are aborted by a skip that crosses them
+spawn {
+    var n = 0
+    loop {
+        set n = n + 1
+        print(:step, n)
+        watching :W {
+            defer { print(:watching, :ends) }
+            par {
+                defer { print(:par1, :ends) }
+                await(:S)
+                print(:skip)
+                skip
+            } with {
+                defer { print(:par2, :ends) }
+                await(false)
+            }
+        }
+        print(:after, n)
+        until n == 3
+    }
+    print(:done)
+}
+emit(:S)
+emit(:W)
+emit(:S)
+print(:end)

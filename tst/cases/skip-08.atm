@@ -1,0 +1,29 @@
+;; a nested task skips at once, with its parent running
+spawn {
+    loop i in 3 {
+        spawn {
+            if i < 2 { skip }
+            print(:in, i)
+        }
+        print(:after, i)
+    }
+}
+;; and through a `par :any`, which gives no value
+spawn {
+    loop i in 2 {
+        val v = par :any {
+            await(:A)
+            skip
+        } with {
+            await(:B)
+            :b
+        }
+        print(:any, i, v)
+    }
+    print(:done)
+}
+emit(:A)
+emit(:B)
+emit(:A)
+emit(:B)
+print(:end)

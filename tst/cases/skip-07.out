@@ -1,0 +1,15 @@
+x	0
+nested	0	ends
+sibling	0	ends
+step	0	ends
+y	1
+sibling	1	ends
+nested	1	ends
+step	1	ends
+x	2
+nested	2	ends
+sibling	2	ends
+step	2	ends
+after
+outer	ends
+end

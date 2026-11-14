@@ -1,0 +1,20 @@
+in	0
+do	0
+out	0
+body	0
+do	1
+body	1
+in	2
+do	2
+out	2
+body	2
+c
+b
+a
+c
+b
+a
+d	0
+d	1
+d	2
+nil

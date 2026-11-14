@@ -1,0 +1,25 @@
+;; a skip in a nested transparent task goes to the next step of the
+;; loop of its parent
+spawn {
+    defer { print(:outer, :ends) }
+    loop i in 3 {
+        defer { print(:step, i, :ends) }
+        spawn {
+            defer { print(:nested, i, :ends) }
+            await(:X)
+            print(:x, i)
+            skip
+        }
+        spawn {
+            defer { print(:sibling, i, :ends) }
+            await(false)
+        }
+        await(:Y)
+        print(:y, i)
+    }
+    print(:after)
+}
+emit(:X)
+emit(:Y)
+emit(:X)
+print(:end)

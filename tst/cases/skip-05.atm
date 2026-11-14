@@ -1,0 +1,28 @@
+;; the blocks between a skip and its loop end, and their defers run
+loop i in 3 {
+    defer { print(:body, i) }
+    do {
+        defer { print(:do, i) }
+        if i == 1 { skip }
+        print(:in, i)
+    }
+    print(:out, i)
+}
+;; in the order of any exit: from the inside out
+loop i in 2 {
+    defer { print(:a) }
+    defer { print(:b) }
+    do {
+        defer { print(:c) }
+        skip
+    }
+}
+;; nothing after the skip runs, and the loop has no value
+val r = loop i in 3 {
+    do {
+        defer { print(:d, i) }
+        skip
+    }
+    print(:no)
+}
+print(r)
