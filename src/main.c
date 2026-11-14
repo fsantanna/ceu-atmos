@@ -131,7 +131,7 @@ static void usage (void) {
         "Usage: " ATMOS_NAME " [-c] [-o <out>] [-t] [-e <env>] <input> [<args>] ...\n"
         "\n"
         "Options:\n"
-        "   -c          Emit C only.\n"
+        "   -c          Emit C only (to the standard output).\n"
         "   -o <out>    Build only.\n"
         "   -t          Enable test blocks.\n"
         "   -e <env>    Include the file of an environment first.\n"

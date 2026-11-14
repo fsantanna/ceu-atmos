@@ -1,0 +1,50 @@
+;; C that the program calls may emit into the program: the native literal
+;; takes the status of the emit, with the abortion of the task that called
+```:prelude
+#include <stdio.h>
+static AStatus engine_frame (void) {
+    AStatus st = A_OK;
+    for (int i=0; i<2 && st==A_OK; i++) {
+        AVal e = a_strz("tic");
+        st = atm_emit(e);
+        a_dec(e);
+    }
+    return st;
+}
+int main (int argc, char** argv) {
+    atm_init(argc, argv);
+    AStatus st = atm_main();
+    for (int i=0; i<3 && st==A_OK && atm_alive(); i++) {
+        AVal e = a_strz("frame");
+        st = atm_emit(e);
+        a_dec(e);
+    }
+    if (st == A_OK) { st = atm_stop(); }
+    fflush(stdout);
+    if (st != A_OK) { a_error_dump(); }
+    atm_quit();
+    return (st == A_OK) ? 0 : 1;
+}
+```
+;; a task raises inside the nested emit
+spawn {
+    val ok = catch :E {
+        spawn {
+            await(3, :tic)
+            throw :E
+        }
+        await(false)
+    }
+    print(:caught, ok)
+}
+;; the nested emit aborts the task that made the call
+watching 5, :tic {
+    defer { print(:aborted) }
+    loop on :frame {
+        print(:frame, :in)
+        `st = a_chk_aborted(engine_frame());`
+        print(:frame, :out)
+    }
+}
+print(:after)
+await(false)

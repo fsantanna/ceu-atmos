@@ -421,7 +421,7 @@ $ atmos
 Usage: atmos [-c] [-o <out>] [-t] [-e <env>] <input> [<args>] ...
 
 Options:
-   -c          Emit C only.
+   -c          Emit C only (to the standard output).
    -o <out>    Build only.
    -t          Enable test blocks.
    -e <env>    Include the file of an environment first.
@@ -720,6 +720,15 @@ The error is raised right after the literal, as a [throw](#exceptions) of the
 message, and the blocks in course terminate as usual.
 The code must not leave the literal in any other way, such as a `return` or a
 `goto`, which would skip the termination of the blocks.
+
+The C that a native literal calls may emit an event into the program, with
+`atm_emit` (see [Environments](#environments)), as an engine that calls back
+does.
+The literal takes the status of the emit, as `` `st = a_chk_aborted(f());` ``:
+it is an error that no task handled, or the abortion of the running task itself
+by what the event awoke, which then unwinds at once.
+An exception that a task raises during the emit goes to the task that holds it,
+as usual, and not to the literal.
 
 The names with the prefixes `a_`, `A_`, and `atm_` belong to the runtime and to
 the code that the compiler generates.
