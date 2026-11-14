@@ -52,6 +52,7 @@ Each has the option recommended by this session.
 | 27 | SuperTux, taken up again as `sdl-tux`: the plan is sent (`261113-sdl-tux.md`), to a new session. It waits for the author on four items: the tag `v0.7.0`, the slice (World 1, in two steps), the scripts (those of the levels as data that a small task interprets, the long scenes as Atmos code), and the SDL renderer only | The four as recommended in the plan |
 | 57 | How two environments live in one program (a GUI and the network: two loops, one `main`). Both `env-uv` and `env-iup` meet it | Not designed. `env-uv` offers a step of its loop as a first answer |
 | 49 | The picture of the organization and the social preview of the repository `lang` | Upload `doc/logo/atmos-icon.png` and `doc/logo/atmos-1280x640.png` (the author's to do, in the settings of GitHub) |
+| 61 | Master of Orion (`ia-atmos/pico-1oom`, a fork of 1oom): the session exists and has its initial instructions (`261114-pico-1oom.md`); the author commands it there, one to one with fidelity first. Three things it must hear from him before any work: the original project forbids code made by AI (the port stays in the fork, and nothing goes back); the game needs the LBX files of an original copy, which cannot be fetched; and which branch to port | His to decide, in that session |
 | 54 | The assets of Lessmilk have no known license; the author chose to copy them | Ask Thomas Palef |
 
 ## B. Work known and not done
