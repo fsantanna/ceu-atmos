@@ -34,7 +34,6 @@ Each has the option recommended by this session.
 | 41 | The error `invalid escape : pinned value` does not say what escaped (asked by two ports) | Add the type of the value. It changes the expected output of 13 tests |
 | 45 | A snapshot of the tasks by the runtime, to save and restore a program. Possible in this backend (a task is a record, not a C stack); native values need hooks from each binding | To talk about. Doom is the use case |
 | 46 | The vocabulary of the events of an environment. Settled on 2026-11-13 (in the session `pico-sdl`): the tags have no prefix. Open: the names and the fields. Today: keys are `:key.dn [key='A']` in pico, `[name='A']` in sdl, `[key=262, name='RIGHT']` in raylib; the mouse is `:mouse.button.dn` and `:mouse.motion` in pico, `:mouse.dn` in the others, `:mouse.mv` in SNKRX; a frame is the time and `:draw` in pico and sdl, `:frame` and `:draw` in raylib and Flare, `:tick` and `:draw` in SNKRX | The names of pico, which are those of the original `env-pico`: `:quit`; `:key.dn` and `:key.up` with `key` as the name of the key (and `code` where the library has a number); `:mouse.motion`, `:mouse.button.dn`, `:mouse.button.up` with `x`, `y`, `button`; and two events per frame, `:frame` for the logic and `:draw` for the drawing. Events of a handle carry it as `h` (`:action [h=btn]`) |
-| 48 | A `skip` for loops (issue 7 of `atmos-lang/atmos`; Lessmilk missed it). In course, in a session of its own (`skip`, in this repository): the name is `skip`, with no value, parentheses optional as in `break`, valid only inside a loop, aborting the transparent blocks it leaves. Open, and asked there: whether `continue` gives an error that points to `skip` | A dedicated error for `continue` |
 | 60 | An `emit` to one task (`emit @t (e)`) whose target raises an exception: the exception goes to the task that emitted, and the task that holds the target never sees it. With a broadcast of the same event it goes to the holder. The reference does the same. Found when an environment emitted to one task from C; for that case there is now `atm_emit_to`, which delivers the exception to the holder | To the holder in both, as in a broadcast: where an exception goes should not depend on how the event was emitted. It departs from the reference |
 | 58 | `test` blocks to test a game (asked by the author in the session `pico-sdl`). Today a run with no screen is driven from outside, by environment variables that each binding reads in its `main`, with other names in each | A convention of the bindings, not of the language: one call that puts the environment in the test mode (fixed frames, no real time, no sound), and the rest is plain Atmos in the `test` block (`await(10, :frame)`, an `emit` of an input event, an assertion, a screenshot by a function; the run ends with the block). Polled input needs a function of the binding to set it. To try first in one environment |
 | 59 | How a program selects its environment. The author asked (2026-11-14, in the session of pico) for a compiler of its own per environment (`atmos-pico`, `atmos-iup`), made from this compiler, with `include` still working, and with the examples and documents using the dedicated one. Done here: `make env` builds one, and the option `-e` does the same by hand. Open: it still needs the directory of this compiler, a C compiler, and the development files of the library; a download that needs none of them is another, larger thing | To confirm the mechanism. Each environment then builds its `atmos-<env>` with it and uses it in its examples |
@@ -111,6 +110,9 @@ may be changed.
 - **An uncaught table shows as its constructor** in the message of
   the error (`:Err.io [msg="..."]`), cut at 200 characters, and no
   longer as `table: 0x...`.
+- **The names of the exit statements** (`break`, `skip`, `return`,
+  `until`, ...) cannot be declared, as `pub`, and may be the names of
+  fields, as the keywords (`[skip=true]`).
 - **`math.atan(y, x)`** takes the point, as in Lua 5.4.
 - **`pub`** is rejected as the name of a variable.
 - **The README** follows the one of `atmos-lang/atmos`. It has no badge
@@ -168,5 +170,7 @@ of the sessions still have the old names.
 7, 9, 10, 14, 16, 20, 21 (kept as they are); 8 (became 31); 17 and
 28 (the session `pico-sdl` wrote the binding and its examples); 25 and
 26 (moved to D); 29 and 30 (the games were chosen; Doom was added); 44
-(`await(n, p)`, done); the names of the repositories (first part of 47);
+(`await(n, p)`, done); 48 (`skip`, done by a session of its own on
+2026-11-14: no value, parentheses optional; the author chose no
+dedicated error for `continue`); the names of the repositories (first part of 47);
 51 (became 55).

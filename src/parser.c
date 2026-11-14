@@ -1000,7 +1000,8 @@ static Expr* parser_at_err (void) {
 // The next two tokens are a keyword and `=`: no expression starts
 // like this.
 static int field_key (void) {
-    if (!check_tag(TK_KEY)) {
+    // a keyword, or the name of an exit statement (`break`, `skip`)
+    if (!check_tag(TK_KEY) && !(check_tag(TK_ID) && in(EXITS,TK1.str))) {
         return 0;
     }
     Lex lex = lexer_save();

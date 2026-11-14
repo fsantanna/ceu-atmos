@@ -1,0 +1,2 @@
+;; the name of an exit statement cannot be declared
+val break = 1

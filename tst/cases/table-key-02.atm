@@ -1,0 +1,5 @@
+;; the name of an exit statement may be the name of a field, as a keyword
+val t = [break=1, skip=2, return=3, until=4, while=5, throw=6]
+print(t.break + t.skip + t.return + t.until + t.while + t.throw)
+set t.skip = 10
+print(t.skip)

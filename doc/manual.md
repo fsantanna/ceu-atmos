@@ -815,7 +815,7 @@ formats:
 
 - `@(e1)=e2` maps key/index `e1` to value `e2`
 - `id=e` maps string `id` to `e` (same as `@("id")=e`).
-  The name may be a keyword, as in `[loop=true]`.
+  The name may be a keyword, as in `[loop=true]` or `[skip=true]`.
 - `e` maps numeric index `i` to `e` (same as `@(i)=e`), where `i` starts at `0`
   and increments after each assignment
 
