@@ -1017,6 +1017,8 @@ spawn {                     ;; fires a transparent task
     await(15s)
     print "timeout"
 }
+
+await(20s)                  ;; the tasks live while the main chunk does
 ```
 
 A task or pool is always lexically attached to an enclosing block, which on
@@ -1025,6 +1027,55 @@ order in which they were attached.
 A [pin](#pin) assignment, which is mandatory for pools, explicitly
 attaches the reference to the declaration block.
 By default, an unassigned `spawn` attaches the new task to the enclosing block.
+
+Since a block aborts its tasks when it terminates, a `spawn` that is the last
+statement of its block starts a task that is aborted right after its first
+reaction, before it awakes from any [await](#await).
+This is the compile error
+`invalid spawn : the task is aborted at the end of its block`, when all of
+the following hold:
+
+- The `spawn` has no pool, and its value is not used.
+- In its block, the `spawn` is only followed by other spawns, if anything.
+  The block may be the body of any construct, such as an `if`, a `loop`, a
+  `do`, a branch of a `par`, a task, or the main chunk.
+- The task may await: a `spawn { ... }` has an `await`, a `watching`, a
+  `loop on`, a `par`, or a `toggle on` (not counting nested functions,
+  tasks, and spawned blocks), or a `spawn T(...)` refers to a task prototype
+  that is known at compile time and has one.
+
+A task that never awaits terminates in its first reaction, and a `spawn` that
+is followed by another statement, such as an `emit` or an `await`, may awake
+in the meantime.
+These are not errors.
+
+There are two ways out:
+
+- A `pin` outside the block, which receives the task as the value of the
+  block and holds it.
+- A [pool](#tasks) in the block that should hold the task.
+
+```
+task T (id) {
+    await(:tick)
+    print(id)
+}
+
+if x {
+    spawn T(:a)             ;; ERROR: aborted at the end of the `if`
+}
+
+pin t = if x {              ;; OK: `t` is pinned outside the `if`
+    spawn T(:b)
+}
+
+pin ts = tasks()
+loop i in 3 {
+    spawn @ts T(i)          ;; OK: the tasks live in `ts`
+}
+
+emit(:tick)                 ;; --> b, 0, 1, 2
+```
 
 A task that is not attached to any block, such as one that a function spawns
 and its caller ignores, lives as long as the task that spawned it.
@@ -1060,7 +1111,8 @@ do {
         }
         await(false)
     }
-}                       ;; --> aborted 3,1,2
+    print("exit")
+}                       ;; --> exit, aborted 3,1,2
 ```
 
 See [Ambiguities](#ambiguities):
@@ -1452,7 +1504,9 @@ The exception is a task or a pool, since tasks may refer to themselves.
 Tasks and pools must always be pinned:
 it is an error to assign a running task to a `val` or `var` if it is not
 pinned somewhere else.
-An unassigned `spawn` is implicitly pinned in the enclosing block.
+An unassigned `spawn` is implicitly pinned in the enclosing block, and
+[cannot be the last statement](#tasks) of that block, where the task would
+be aborted at once.
 
 A pinned value cannot escape its block, which would leave a dangling
 reference after the block reclaims it.
