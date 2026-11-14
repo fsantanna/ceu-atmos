@@ -28,7 +28,8 @@ Each has the option recommended by this session.
 | 32 | `await :all ts` on an empty pool never awakes, as in the reference | Satisfied at once |
 | 33 | Time emitted to a pool or a task (slow motion in SNKRX) | Not now: a global factor and `:tick` solve it there |
 | 34 | A constructor nested in a `pin` constructor is not pinned with it | Pin it with the outer one |
-| 36 | A `spawn` that dies with its block, silently. In course, in a session of its own (`spawn-check`, in this repository): a compile error when a `spawn` with no pool, whose value is not used, is in the tail of its block and its task may await. A scan before the work found it 13 times in the sources of two ports today (4 in Pingus, 9 in SNKRX; two were read and are live defects), and in 16 of the tests of this repository, which are to be adapted. Open, and asked there: an error or a warning | An error |
+| 62 | A task whose value is dropped with no pin outlives its block: `do { (spawn T()) ; nil }`, or a function that spawns and whose caller ignores the result. It stays attached to the enclosing task and only ends with it. A `spawn` as a statement is pinned to its block; these two forms are not. Found by the session of the check of spawns | Pin a task to the block where its value is dropped, as the statement does. To decide with the rules of `pin` |
+| 63 | Two limits of the check of spawns (item 36, done): a `pin t = if c { spawn T() }` that is the last statement of a loop body dies at each step and is not flagged; and the check is lexical, so a task that ends in its start through an await that is satisfied at once is flagged (4 of the tests were so) | Extend the check to a `pin` of a task that ends its block. Keep it lexical |
 | 39 | `grab` and `context`, issues 22 and 21 of `atmos-lang/atmos`. `grab` would serve the modals of all ports; `context` the draw targets of SNKRX and raylib | To talk about. The comments of the issues were not read (no access) |
 | 40 | Friction with `pin`, in six ports: a table of a module cannot hold a pinned value (Flare); nor a variable captured by a function (Lessmilk); nor a table that is an argument, `f([x=a])` (pico); nor the `pub` of the task itself (Flare); nor the table of an await pattern or of an emit, `await :close [h=dlg]` with `dlg` pinned, which every program of IUP has (IUP); and a connection accepted in a loop cannot be pinned there and live in a pool outside (libuv). The author opened a session for it, "Pin rules discussion", which has these cases | For the module: a scoped assignment, `with m.x = v {...}`. For the temporary tables (an argument, a pattern, an event): let a constructor that receives a pinned value be pinned in the block of that value, instead of an error. Not weak references, and not the task in its own `pub` |
 | 41 | The error `invalid escape : pinned value` does not say what escaped (asked by two ports) | Add the type of the value. It changes the expected output of 13 tests |
@@ -113,6 +114,11 @@ may be changed.
 - **The names of the exit statements** (`break`, `skip`, `return`,
   `until`, ...) cannot be declared, as `pub`, and may be the names of
   fields, as the keywords (`[skip=true]`).
+- **A `spawn` that is aborted at the end of its block is a compile
+  error**, not a warning (item 36, done on 2026-11-14 by a session of
+  its own; the author was asked and has not answered). It applies when
+  the spawn has no pool, its value is not used, only spawns follow it
+  in the block, and its task may await.
 - **`math.atan(y, x)`** takes the point, as in Lua 5.4.
 - **`pub`** is rejected as the name of a variable.
 - **The README** follows the one of `atmos-lang/atmos`. It has no badge
@@ -172,5 +178,6 @@ of the sessions still have the old names.
 26 (moved to D); 29 and 30 (the games were chosen; Doom was added); 44
 (`await(n, p)`, done); 48 (`skip`, done by a session of its own on
 2026-11-14: no value, parentheses optional; the author chose no
-dedicated error for `continue`); the names of the repositories (first part of 47);
+dedicated error for `continue`); 36 (the check of spawns, done on
+2026-11-14; it found 5 live defects in three ports); the names of the repositories (first part of 47);
 51 (became 55).
