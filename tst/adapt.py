@@ -6,6 +6,8 @@
 #   ops     `print(a OP b)` becomes a call, for the operators that
 #           became functions
 #   sub     textual replacements, in order
+#   last    the program ends with a `spawn`, which is now an error: it
+#           gets a `nil` after it
 #   accept  the output differs from the reference by design, for the
 #           given reason
 #
@@ -16,11 +18,13 @@ BASE0 = 'indexes start at 0'
 MSG   = 'the error has another message'
 DEAD  = 'a terminated task needs no owner'
 TYPE  = 'tasks and pools have their own types'
+LAST  = 'a spawn is not the last statement of its block'
 
 # vector push and pop written with explicit positions
 PUSH = [('t@(#t) = nil', 't@(#t-1) = nil'), ('#t+1', '#t')]
 
 IDX = { 'idx': True }
+END = { 'last': True }
 
 ADAPT = {
     '0008': { 'ops': True },
@@ -51,6 +55,8 @@ ADAPT = {
     '0164': { 'accept': TYPE },
     '0171': { 'sub': [("'table'", "'xtask'")] },
     '0172': { 'sub': [("'table'", "'xtask'")] },
+    '0178': END,
+    '0180': END,
     '0202': { 'accept': MSG },
     '0203': { 'accept': MSG },
     '0216': { 'accept': MSG },
@@ -68,10 +74,15 @@ ADAPT = {
     '0241': { 'ops': True, 'accept': '?? compares tables field by field' },
     '0242': { 'ops': True },
     '0244': { 'sub': [('(\\===)(', 'X.eq(')] },
-    '0255': IDX,
+    '0253': END,
+    '0254': END,
+    '0255': { 'idx': True, 'last': True },
     '0262': { 'accept': MSG },
+    '0263': END,
     '0277': { 'sub': [('print(co)', 'print(type(co))')], 'accept': DEAD },
     '0281': { 'accept': DEAD },
+    '0282': { 'sub': [('spawn U()', 'pin u = spawn U()\n            u')],
+              'how': LAST },
     '0294': IDX,
     '0295': IDX,
     '0297': IDX,
@@ -98,15 +109,28 @@ ADAPT = {
     '0323': IDX,
     '0327': IDX,
     '0328': IDX,
+    '0335': END,
+    '0336': END,
     '0338': { 'accept': DEAD },
     '0348': { 'sub': [("'table'", "'xtask'")] },
     '0356': IDX,
+    '0357': END,
+    '0368': END,
+    '0379': END,
+    '0423': END,
     '0425': { 'accept': TYPE },
     '0438': { 'sub': [('atmos.gc()', '')],
               'accept': 'a terminated task leaves its pool at once' },
     '0444': IDX,
+    '0458': END,
+    '0459': END,
+    '0460': END,
     '0462': { 'accept': 'the error points to the expression' },
-    '0475': { 'accept': 'await combinators follow the precedence of C' },
+    '0475': { 'last': True,
+              'accept': 'await combinators follow the precedence of C' },
+    '0478': END,
+    '0479': END,
+    '0484': END,
     '0489': { 'accept': BASE0 },
 }
 
@@ -151,5 +175,10 @@ def adapt (num, src):
     for old, new in a.get('sub', []):
         src = src.replace(old, new)
     if a.get('sub') and not how:
-        how.append('rewritten')
+        how.append(a.get('how', 'rewritten'))
+    if a.get('last'):
+        last = src.rstrip().split('\n')[-1]
+        ind  = last[:len(last)-len(last.lstrip())]
+        src  = src.rstrip() + '\n' + ind + 'nil\n    '
+        how.append(LAST)
     return src, ', '.join(how) or None, a.get('accept')

@@ -15,5 +15,6 @@ do {
         }
         await(false)
     }
+    nil
 }
 print(:end)

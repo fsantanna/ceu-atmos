@@ -20,3 +20,4 @@ spawn {
     }
     print(:stopped)
 }
+nil

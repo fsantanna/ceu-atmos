@@ -7,4 +7,5 @@
             print(:no)
             emit @(:global) (:20)
         }) ()
+        nil
     

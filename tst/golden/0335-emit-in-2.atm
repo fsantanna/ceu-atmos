@@ -5,4 +5,5 @@
         spawn (task () {
             emit @(:global) (:10)
         }) ()
+        nil
     

@@ -37,6 +37,8 @@ language, according to `tst/adapt.py`.
 | `0164-tasks-2` |  | tasks and pools have their own types |
 | `0171-tasks-9-max` | rewritten |  |
 | `0172-tasks-10-max` | rewritten |  |
+| `0178-await-task-1` | a spawn is not the last statement of its block |  |
+| `0180-await-task-3` | a spawn is not the last statement of its block |  |
 | `0202-is-1` |  | the error has another message |
 | `0203-is-1` |  | the error has another message |
 | `0216-func-4` |  | the error has another message |
@@ -53,10 +55,14 @@ language, according to `tst/adapt.py`.
 | `0241-is-4` | operators that became functions | ?? compares tables field by field |
 | `0242-in-1` | operators that became functions |  |
 | `0244-case` | rewritten |  |
-| `0255-task-8b-me-as-emit-payload` | indexes start at 0 |  |
+| `0253-task-7-ancestor-alias-in-nested-task` | a spawn is not the last statement of its block |  |
+| `0254-task-8-non-ancestor-alias-rejected` | a spawn is not the last statement of its block |  |
+| `0255-task-8b-me-as-emit-payload` | indexes start at 0, a spawn is not the last statement of its block |  |
 | `0262-spawn-neg-direct-call-proto-fails` |  | the error has another message |
+| `0263-spawn-neg-await-plain-func-fails` | a spawn is not the last statement of its block |  |
 | `0277-spawn-5` | rewritten | a terminated task needs no owner |
 | `0281-spawn-5b-4` |  | a terminated task needs no owner |
+| `0282-spawn-5c` | a spawn is not the last statement of its block |  |
 | `0294-emit-9` | indexes start at 0 |  |
 | `0295-emit-10` | indexes start at 0 |  |
 | `0297-emit-12` | indexes start at 0 |  |
@@ -82,12 +88,24 @@ language, according to `tst/adapt.py`.
 | `0323-payload-4` | indexes start at 0 |  |
 | `0327-payload-8-multi-emit-await-args` | indexes start at 0 |  |
 | `0328-payload-9` | indexes start at 0 |  |
+| `0335-emit-in-2` | a spawn is not the last statement of its block |  |
+| `0336-emit-in-3` | a spawn is not the last statement of its block |  |
 | `0338-pin-1` |  | a terminated task needs no owner |
 | `0348-task-term-4` | rewritten |  |
 | `0356-pub-7` | indexes start at 0 |  |
+| `0357-nested-1` | a spawn is not the last statement of its block |  |
+| `0368-abort-2` | a spawn is not the last statement of its block |  |
+| `0379-abort-12` | a spawn is not the last statement of its block |  |
+| `0423-tasks-7-error-bare-pool-needs-any-all` | a spawn is not the last statement of its block |  |
 | `0425-tasks-8` |  | tasks and pools have their own types |
 | `0438-tasks-21-pool-limit-fail-then-pass` | rewritten | a terminated task leaves its pool at once |
 | `0444-every-2` | indexes start at 0 |  |
+| `0458-par-any-3-return` | a spawn is not the last statement of its block |  |
+| `0459-par-all-3-return` | a spawn is not the last statement of its block |  |
+| `0460-watching-2` | a spawn is not the last statement of its block |  |
 | `0462-watching-f-error-unexpected-function` |  | the error points to the expression |
-| `0475-op-mixed-err-1` |  | await combinators follow the precedence of C |
+| `0475-op-mixed-err-1` | a spawn is not the last statement of its block | await combinators follow the precedence of C |
+| `0478-task-promote-solo-1` | a spawn is not the last statement of its block |  |
+| `0479-task-promote-nil-arg-1` | a spawn is not the last statement of its block |  |
+| `0484-task-promote-nontask-err-1` | a spawn is not the last statement of its block |  |
 | `0489-timers-3-periodic-catch-up` |  | indexes start at 0 |

@@ -5,4 +5,5 @@
             val x = await T(10)
             print(x)
         }
+        nil
     

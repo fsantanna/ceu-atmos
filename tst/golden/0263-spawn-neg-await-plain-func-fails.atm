@@ -1,3 +1,4 @@
         val F = func () { }
         spawn { await F() }
+        nil
     

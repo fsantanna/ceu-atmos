@@ -16,3 +16,4 @@ spawn (task () {
     val a, b = await <Now(1) && Now(2)>
     print(a, b)
 })()
+nil

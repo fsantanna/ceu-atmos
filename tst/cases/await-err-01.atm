@@ -1,3 +1,4 @@
 spawn (task () {
     await until (it.x)
 })()
+nil
