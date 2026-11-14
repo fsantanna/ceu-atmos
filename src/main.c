@@ -4,6 +4,13 @@
 //   atmos -c f.atm         emits C only (to stdout)
 //   atmos -o out f.atm     builds only
 //   atmos -t f.atm         enables `test` blocks
+//   atmos -e env.atm f.atm includes the file of an environment before
+//                          the program
+//
+// A compiler dedicated to an environment (`make env`, as `atmos-pico`)
+// is this same program built with the file of the environment, and the
+// flags that it needs, as defaults: ATMOS_ENV, ATMOS_ENV_CFLAGS,
+// ATMOS_ENV_LDFLAGS, and ATMOS_NAME.
 //
 // Environment:
 //   ATMOS_HOME     root with `rt/` and `build/` (default: where the
@@ -24,11 +31,23 @@
 #ifndef ATMOS_HOME
 #define ATMOS_HOME "."
 #endif
+#ifndef ATMOS_NAME
+#define ATMOS_NAME "atmos"
+#endif
+#ifndef ATMOS_ENV
+#define ATMOS_ENV NULL
+#endif
+#ifndef ATMOS_ENV_CFLAGS
+#define ATMOS_ENV_CFLAGS ""
+#endif
+#ifndef ATMOS_ENV_LDFLAGS
+#define ATMOS_ENV_LDFLAGS ""
+#endif
 
 static char* slurp (const char* path, size_t* len) {
     FILE* f = fopen(path, "rb");
     if (f == NULL) {
-        fprintf(stderr, "atmos : cannot open '%s'\n", path);
+        fprintf(stderr, ATMOS_NAME " : cannot open '%s'\n", path);
         exit(1);
     }
     fseek(f, 0, SEEK_END);
@@ -36,7 +55,7 @@ static char* slurp (const char* path, size_t* len) {
     fseek(f, 0, SEEK_SET);
     char* buf = xalloc(n + 1);
     if (fread(buf, 1, n, f) != (size_t)n) {
-        fprintf(stderr, "atmos : cannot read '%s'\n", path);
+        fprintf(stderr, ATMOS_NAME " : cannot read '%s'\n", path);
         exit(1);
     }
     fclose(f);
@@ -90,13 +109,17 @@ static const char* home_dir (void) {
 static int build (const char* c, const char* exe) {
     const char* home = home_dir();
     int asan = (getenv("ATMOS_ASAN") != NULL);
+    // the flags of the environment of a dedicated compiler, then those
+    // of the user
     char* cmd = xfmt(
-        "%s %s %s -w -I%s/rt %s %s/build/libatmos%s.a -lm %s -o %s",
+        "%s %s %s %s -w -I%s/rt %s %s/build/libatmos%s.a -lm %s %s -o %s",
         env("ATMOS_CC", "cc"),
         env("ATMOS_CFLAGS", "-O1"),
+        ATMOS_ENV_CFLAGS,
         asan ? "-fsanitize=address -fno-omit-frame-pointer -g" : "",
         home, c, home,
         asan ? "-asan" : "",
+        ATMOS_ENV_LDFLAGS,
         env("ATMOS_LDFLAGS", ""),
         exe
     );
@@ -105,13 +128,17 @@ static int build (const char* c, const char* exe) {
 
 static void usage (void) {
     fprintf(stderr,
-        "Usage: atmos [-c] [-o <out>] [-t] <input> [<args>] ...\n"
+        "Usage: " ATMOS_NAME " [-c] [-o <out>] [-t] [-e <env>] <input> [<args>] ...\n"
         "\n"
         "Options:\n"
         "   -c          Emit C only.\n"
         "   -o <out>    Build only.\n"
         "   -t          Enable test blocks.\n"
+        "   -e <env>    Include the file of an environment first.\n"
     );
+    if (ATMOS_ENV != NULL) {
+        fprintf(stderr, "\nEnvironment: %s\n", (const char*)ATMOS_ENV);
+    }
     exit(1);
 }
 
@@ -121,6 +148,7 @@ int main (int argc, char** argv) {
     int only = 0;
     const char* exe = NULL;
     const char* inp = NULL;
+    OPT_ENV = ATMOS_ENV;
     int i = 1;
     for (; i<argc && inp==NULL; i++) {
         if (!strcmp(argv[i], "--lex")) {
@@ -133,6 +161,8 @@ int main (int argc, char** argv) {
             OPT_TEST = 1;
         } else if (!strcmp(argv[i], "-o") && i+1<argc) {
             exe = argv[++i];
+        } else if (!strcmp(argv[i], "-e") && i+1<argc) {
+            OPT_ENV = argv[++i];
         } else if (argv[i][0] == '-') {
             usage();
         } else {
@@ -141,6 +171,12 @@ int main (int argc, char** argv) {
     }
     if (inp == NULL) {
         usage();
+    }
+
+    if (OPT_ENV!=NULL && access(OPT_ENV,R_OK)!=0) {
+        fprintf(stderr, ATMOS_NAME " : cannot read the environment '%s'\n",
+            OPT_ENV);
+        return 1;
     }
 
     size_t len;
@@ -175,7 +211,7 @@ int main (int argc, char** argv) {
     // builds in a temporary directory, removed at the end
     char dir[] = "/tmp/atmos-XXXXXX";
     if (mkdtemp(dir) == NULL) {
-        fprintf(stderr, "atmos : cannot create temporary directory\n");
+        fprintf(stderr, ATMOS_NAME " : cannot create temporary directory\n");
         return 1;
     }
     char* cfile = xfmt("%s/main.c", dir);
@@ -187,7 +223,7 @@ int main (int argc, char** argv) {
 
     int ret = build(cfile, xfile);
     if (ret != 0) {
-        fprintf(stderr, "atmos : C compilation failed\n");
+        fprintf(stderr, ATMOS_NAME " : C compilation failed\n");
         ret = 1;
     } else if (exe == NULL) {
         // runs the program with the remaining arguments

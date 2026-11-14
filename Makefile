@@ -16,6 +16,23 @@ all: atmos build/libatmos.a build/libatmos-asan.a
 atmos: $(CC_SRC) $(CC_HDR)
 	$(CC) $(CFLAGS) -DATMOS_HOME='"$(CURDIR)"' -Isrc $(CC_SRC) -o $@
 
+# A compiler dedicated to an environment, such as `atmos-pico`: this
+# compiler, with the file of the environment included before every
+# program, and with the flags that the environment needs. Paths must be
+# absolute, and the flags must have no quotes.
+#
+#   make -C <lang> env OUT=<dir>/atmos-pico ENV=<dir>/pico.atm \
+#        ENV_CFLAGS="-I<dir>/c/src" ENV_LDFLAGS="<dir>/c/libpico.a -lSDL2"
+env: $(CC_SRC) $(CC_HDR) build/libatmos.a build/libatmos-asan.a
+	@test -n "$(OUT)" -a -n "$(ENV)" || \
+	    { echo "usage: make env OUT=<executable> ENV=<file.atm> [ENV_CFLAGS=...] [ENV_LDFLAGS=...]"; exit 1; }
+	$(CC) $(CFLAGS) -DATMOS_HOME='"$(CURDIR)"' \
+	    -DATMOS_NAME='"$(notdir $(OUT))"' \
+	    -DATMOS_ENV='"$(abspath $(ENV))"' \
+	    -DATMOS_ENV_CFLAGS='"$(ENV_CFLAGS)"' \
+	    -DATMOS_ENV_LDFLAGS='"$(ENV_LDFLAGS)"' \
+	    -Isrc $(CC_SRC) -o $(OUT)
+
 build/rt/%.o: rt/%.c $(RT_HDR)
 	@mkdir -p build/rt
 	$(CC) $(CFLAGS) -Irt -c $< -o $@
@@ -52,9 +69,12 @@ test-cases: all
 test-golden: all
 	tst/run.sh golden
 
-test: test-rt test-lex test-ast test-cases test-golden
+test-env: all
+	tst/env/run.sh
+
+test: test-rt test-lex test-ast test-cases test-golden test-env
 
 clean:
 	rm -rf build
 
-.PHONY: all test test-rt test-lex test-ast test-cases test-golden clean
+.PHONY: all env test test-rt test-lex test-ast test-cases test-golden test-env clean

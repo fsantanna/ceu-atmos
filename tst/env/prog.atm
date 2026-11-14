@@ -1,0 +1,2 @@
+;; no include: the dedicated compiler brings the environment
+print(envt.add(1))

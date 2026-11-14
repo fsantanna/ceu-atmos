@@ -37,7 +37,7 @@ Each has the option recommended by this session.
 | 48 | A `skip` (continue) for loops: issue 7 of `atmos-lang/atmos`, and Lessmilk missed it | Not studied yet |
 | 60 | An `emit` to one task (`emit @t (e)`) whose target raises an exception: the exception goes to the task that emitted, and the task that holds the target never sees it. With a broadcast of the same event it goes to the holder. The reference does the same. Found when an environment emitted to one task from C; for that case there is now `atm_emit_to`, which delivers the exception to the holder | To the holder in both, as in a broadcast: where an exception goes should not depend on how the event was emitted. It departs from the reference |
 | 58 | `test` blocks to test a game (asked by the author in the session `pico-sdl`). Today a run with no screen is driven from outside, by environment variables that each binding reads in its `main`, with other names in each | A convention of the bindings, not of the language: one call that puts the environment in the test mode (fixed frames, no real time, no sound), and the rest is plain Atmos in the `test` block (`await(10, :frame)`, an `emit` of an input event, an assertion, a screenshot by a function; the run ends with the block). Polled input needs a function of the binding to set it. To try first in one environment |
-| 59 | How a program selects its environment. The runner of pico will insert the `include` of the binding and open the window, so that a program is only its code; the other environments are included by hand | Not studied. One convention for all (an option of the compiler, or a runner per environment) |
+| 59 | How a program selects its environment. The author asked (2026-11-14, in the session of pico) for a compiler of its own per environment (`atmos-pico`, `atmos-iup`), made from this compiler, with `include` still working, and with the examples and documents using the dedicated one. Done here: `make env` builds one, and the option `-e` does the same by hand. Open: it still needs the directory of this compiler, a C compiler, and the development files of the library; a download that needs none of them is another, larger thing | To confirm the mechanism. Each environment then builds its `atmos-<env>` with it and uses it in its examples |
 
 ### Projects and repositories
 
@@ -102,6 +102,10 @@ may be changed.
   as the second result no longer holds the value: `val v, t = await
   T()` then `t.ret` is `nil`. A task awaited by its reference keeps
   it.
+- **A compiler dedicated to an environment** is this compiler built
+  with defaults (`make env`), not a wrapper nor a library: the file of
+  the environment is included before the program, and its flags go to
+  the C compiler before those of the user.
 - **`math.atan(y, x)`** takes the point, as in Lua 5.4.
 - **`pub`** is rejected as the name of a variable.
 - **The README** follows the one of `atmos-lang/atmos`. It has no badge

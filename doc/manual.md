@@ -424,6 +424,7 @@ Options:
    -c          Emit C only.
    -o <out>    Build only.
    -t          Enable test blocks.
+   -e <env>    Include the file of an environment first.
 ```
 
 The compiler translates the program to a single C file, and then calls the C
@@ -475,6 +476,33 @@ and not back to the environment.
 
 An environment may be part of the program itself, in a
 [native literal](#native-literals) with the tag `:prelude`.
+More often it is a file that the program [includes](#include), such as
+`pico.atm` or `raylib.atm`.
+
+An environment may also have a compiler of its own, such as `atmos-pico`, so
+that a program is only its code, with no `include`:
+
+```
+$ atmos-pico game.atm
+```
+
+A dedicated compiler is the Atmos compiler itself, built with the file of the
+environment and with the flags that its library needs:
+
+```
+$ make -C <lang> env OUT=<dir>/atmos-pico ENV=<dir>/pico.atm \
+       ENV_CFLAGS="-I<dir>/c/src" ENV_LDFLAGS="<dir>/c/libpico.a -lSDL2"
+```
+
+It includes the file before every program, as if the program started with the
+`include`, and passes the flags to the C compiler.
+A program that has the `include` still works, since a file is only included
+once, and so does the plain compiler with the `include`, or with the option
+`-e` and the flags in `ATMOS_CFLAGS` and `ATMOS_LDFLAGS`.
+The paths given to `make env` must be absolute, and the flags must have no
+quotes.
+A dedicated compiler still needs the directory of the compiler it was built
+from, a C compiler, and the development files of its library.
 The example `exs/stdin.atm` emits each line of the standard input as an event.
 
 # LEXICON

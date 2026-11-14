@@ -288,6 +288,9 @@ void list_ins (List* l, int i, Expr* e);
 // Enables `test` blocks (-t).
 extern int OPT_TEST;
 
+// File of an environment, included before the program (or NULL).
+extern const char* OPT_ENV;
+
 // Parses the whole program into a block.
 Expr* parser_main (void);
 

@@ -1,0 +1,9 @@
+41
+42
+err.atm : line 2 : near 'undeclared' : undeclared variable
+exit 1
+prog.atm : line 2 : near 'envt' : undeclared variable
+exit 1
+2
+11
+41

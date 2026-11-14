@@ -105,6 +105,7 @@ The compiler translates a program to C, builds it, and runs it:
 ./atmos -c hello.atm        # emits C only
 ./atmos -o hello hello.atm  # builds only
 ./atmos -t hello.atm        # enables test blocks
+./atmos -e env.atm game.atm # includes an environment first
 ```
 
 Environment variables:
@@ -140,6 +141,10 @@ that it includes:
 
 Both have a test mode with no screen, with a fixed number of frames and
 scripted input.
+
+An environment may have a compiler of its own, such as `atmos-pico`, so that a
+program needs no `include`: `make env` builds one (see the
+[manual](doc/manual.md#environments)).
 
 [sdl]:          https://www.libsdl.org/
 [raylib]:       https://www.raylib.com/

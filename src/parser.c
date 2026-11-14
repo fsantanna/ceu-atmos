@@ -16,6 +16,7 @@
 #include "atmc.h"
 
 int OPT_TEST = 0;
+const char* OPT_ENV = NULL;
 
 static Tk TK0;
 static Tk TK1;
@@ -165,10 +166,9 @@ static List parser_stmts (const char* clo);
 // include "file.atm": the statements of the file take the place of
 // the include, as if they were written there. The path is relative to
 // the file with the include. A file is only included once.
-static void parser_include (List* l) {
-    static char* done[FILES_MAX];
-    static int   ndone = 0;
+static void include_file (List* l, Tk tk, const char* path);
 
+static void parser_include (List* l) {
     Tk tk = TK0;
     if (!accept_tag(TK_STR)) {
         err(TK1, "expected file name");
@@ -181,12 +181,20 @@ static void parser_include (List* l) {
     if (path[0]!='/' && sla!=NULL) {
         path = xfmt("%.*s/%s", (int)(sla-cur), cur, TK0.str);
     }
+    include_file(l, TK0, path);
+}
+
+// Adds the statements of a file to `l`, unless it was included before.
+// `tk` is where an error is reported.
+static void include_file (List* l, Tk tk, const char* path) {
+    static char* done[FILES_MAX];
+    static int   ndone = 0;
 
     char* real = realpath(path, NULL);
     size_t len = 0;
     char* src = (real == NULL) ? NULL : file_read(real, &len);
     if (src == NULL) {
-        err(TK0, "invalid include : cannot read file");
+        err(tk, "invalid include : cannot read file");
     }
     for (int i=0; i<ndone; i++) {
         if (!strcmp(done[i], real)) {
@@ -1530,7 +1538,18 @@ Expr* parser_main (void) {
     lexer_token(&TK1);
     TK0 = TK1;
     Expr* e = mk(E_BLOCK, TK1);
-    e->u.block.es = parser_stmts("<eof>");
+    List l = { 0, NULL };
+    if (OPT_ENV != NULL) {
+        // the environment comes first, as an include written at the
+        // top of the program (which may still have it: a file is only
+        // included once)
+        include_file(&l, TK1, OPT_ENV);
+    }
+    List prog = parser_stmts("<eof>");
+    for (int i=0; i<prog.n; i++) {
+        list_add(&l, prog.v[i]);
+    }
+    e->u.block.es = l;
     accept_str_err("<eof>");
     return e;
 }

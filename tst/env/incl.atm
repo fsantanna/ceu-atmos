@@ -1,0 +1,3 @@
+;; with the include: the same file is only included once
+include "env.atm"
+print(envt.add(2))
