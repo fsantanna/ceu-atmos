@@ -205,6 +205,7 @@ From the [original implementation][atmos-lua], which compiles to Lua:
 - `await` is only valid lexically inside a task body.
 - `catch` only catches `throw`.
 - `break`, `until`, and `while` need a lexically enclosing `loop`.
+- `skip` is new: it goes to the next step of the enclosing `loop`.
 - Numbers are 64-bit integers or reals, as in Lua 5.3: `7 / 2` is
   `3.5`, `7 // 2` is `3`, and a real always shows as one (`5.0`).
 - Operators follow C:
