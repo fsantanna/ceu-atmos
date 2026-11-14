@@ -1,0 +1,3 @@
+==> ERROR:
+ v  throw-err-table-01.atm:2 (throw)
+==> :Err.io [msg="no file", code=2], second value

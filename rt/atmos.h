@@ -148,6 +148,10 @@ extern int a_depth;
 // the outermost one, then the line that raised it.
 void a_error_dump (void);
 
+// The text of `X.dump(v)` (owned), or NULL if the value cannot be
+// written (then an error is left pending).
+char* a_dump_text (AVal v);
+
 // Payload of the pending exit: the values of a break, escape, return,
 // or throw, kept outside the value stack while blocks unwind.
 extern struct AVal* a_pay;

@@ -115,11 +115,26 @@ void a_error_dump (void) {
     fprintf(stderr, " v  %s:%d (throw)\n",
         atm_files[A_LIN_FILE(TRACE_THROW)], A_LIN_LINE(TRACE_THROW));
     fprintf(stderr, "==> ");
-    for (int i=0; i<a_pay_n; i++) {
-        AVal s = a_tostring(a_pay[i]);
-        fprintf(stderr, "%s%s", (i > 0) ? ", " : "", A_STR_OF(s)->s);
-        a_dec(s);
+    // a table shows as its constructor (`:E [msg="..."]`), if it can be
+    // written so; the payload is set aside, since a dump that fails
+    // raises an error of its own
+    APay pay;
+    a_pay_save(&pay);
+    for (int i=0; i<pay.n; i++) {
+        char* txt = (pay.v[i].type == A_TAB) ? a_dump_text(pay.v[i]) : NULL;
+        const char* sep = (i > 0) ? ", " : "";
+        if (txt != NULL) {
+            // long data is cut
+            fprintf(stderr, "%s%.200s%s", sep, txt,
+                (strlen(txt) > 200) ? " ..." : "");
+            free(txt);
+        } else {
+            AVal s = a_tostring(pay.v[i]);
+            fprintf(stderr, "%s%s", sep, A_STR_OF(s)->s);
+            a_dec(s);
+        }
     }
+    a_pay_restore(&pay);
     fprintf(stderr, "\n");
 }
 

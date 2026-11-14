@@ -1,0 +1,2 @@
+;; an uncaught table shows as its constructor
+throw :Err.io [msg="no file", code=2], "second value"

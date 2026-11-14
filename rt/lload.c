@@ -686,6 +686,22 @@ static AStatus x_dump (AFunc* self, int argc, AVal* argv) {
     return st;
 }
 
+// The text of `X.dump(v)`, for a message (owned), or NULL if the value
+// cannot be written. A failure leaves an error pending: who calls
+// must not have one to keep.
+char* a_dump_text (AVal v) {
+    Dump* d = calloc(1, sizeof(Dump));
+    char* s = NULL;
+    if (dump(d,v) == A_OK) {
+        s = malloc(d->b.n + 1);
+        memcpy(s, d->b.s, d->b.n);
+        s[d->b.n] = '\0';
+    }
+    free(d->b.s);
+    free(d);
+    return s;
+}
+
 void atm_lib_load_init (void) {
     field(atm_g_X, "load", x_load);
     field(atm_g_X, "dump", x_dump);

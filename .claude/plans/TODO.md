@@ -72,8 +72,9 @@ Not started, with no decision needed:
 | # | Work | Note |
 |---|------|------|
 | 12 | Tweens and springs as a library | To harvest from what SNKRX (`eng/anim.atm`) and Lessmilk (`lib/motion.atm`) wrote |
+| 13 | The trace of an error with the tasks it crossed. The author said to skip it (2026-11-11). New evidence from the environment for libuv: an error raised inside a task of a library shows only the lines of the library (`uv.atm:N (throw)`), and not the line of the `await` in the program of the user, which is the one needed | Add one line per await that the error crosses, ` |  file:N (await)`, as a call already has. Small, and it changes the expected output of the tests that print such traces |
 | 15 | Faster compilation (24 s in Pingus, a single C file) | To measure in Flare first |
-| 35 | Performance. Three ports show the same profile: the dispatch of events to many tasks, the access to tables, and, the clearest, the construction of small tables (about 0.5 us each, in the Storm of pico) | Not now: SNKRX runs at almost twice the speed of its original |
+| 35 | Performance. Three ports show the same profile: the dispatch of events to many tasks, the access to tables, and, the clearest, the construction of small tables (about 0.5 us each, in the Storm of pico) | Not now: SNKRX runs at almost twice the speed of its original . Measured by `env-uv` (20000 round trips of an echo, in ms): a broadcast with a filter costs 374, 2084, 7880 for 10, 100, 1000 connections; an emit to one task (`atm_emit_to`) costs 196, 312, 465 |
 | 38 | The paper, "Structured Reactive Concurrency in Games". The author wrote an outline in `ia-atmos/paper-src-games` | After the ports close: they are its evaluation |
 | 52 | Environments that the families of Atmos and Céu have and this backend does not: the browser (through WebAssembly; SDL and raylib support it) and embedded boards | Ideas, not asked for |
 
@@ -106,6 +107,9 @@ may be changed.
   with defaults (`make env`), not a wrapper nor a library: the file of
   the environment is included before the program, and its flags go to
   the C compiler before those of the user.
+- **An uncaught table shows as its constructor** in the message of
+  the error (`:Err.io [msg="..."]`), cut at 200 characters, and no
+  longer as `table: 0x...`.
 - **`math.atan(y, x)`** takes the point, as in Lua 5.4.
 - **`pub`** is rejected as the name of a variable.
 - **The README** follows the one of `atmos-lang/atmos`. It has no badge
@@ -160,7 +164,7 @@ of the sessions still have the old names.
 
 ## Settled, for the record
 
-7, 9, 10, 13, 14, 16, 20, 21 (kept as they are); 8 (became 31); 17 and
+7, 9, 10, 14, 16, 20, 21 (kept as they are); 8 (became 31); 17 and
 28 (the session `pico-sdl` wrote the binding and its examples); 25 and
 26 (moved to D); 29 and 30 (the games were chosen; Doom was added); 44
 (`await(n, p)`, done); the names of the repositories (first part of 47);
