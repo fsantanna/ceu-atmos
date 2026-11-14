@@ -132,6 +132,19 @@ every session was told its new name: `env-pico`, `env-iup`, `env-uv`,
 `paper-src-games`, `sdl-tux`; `doom` and `lang` kept theirs. The titles
 of the sessions still have the old names.
 
+## Standing rules from the author, for all sessions
+
+- Commit and push straight to `main`, in fine-grained commits.
+- Each session keeps a `.claude/plans/TODO.md` (2026-11-13).
+- The events of an environment have no prefix (2026-11-13).
+- **Fidelity, then expressiveness** (2026-11-14, said in the session
+  of Lessmilk): once a port is fully faithful to its original, it may
+  relax the constraints of exactness in favor of expressiveness, as
+  long as the intent of the original author is not affected. It holds
+  for every port, after it reaches full fidelity. The plans say that a
+  difference is never an accepted variation: that stands until full
+  fidelity, and not after.
+
 ## E. Housekeeping of this session
 
 - If the container restarts, the checkout comes back with the old
