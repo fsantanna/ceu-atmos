@@ -1,0 +1,28 @@
+;; a tagged constructor is pinned from birth as a plain one is, so it
+;; may hold values that are pinned in its block or in an outer one
+pin d = io.open("/dev/null", "w")
+pin a = [h=d]
+pin b = :close [h=d]
+print(a.h == d, b.h == d, b ?? :close)
+
+;; so an event with a pinned handle may be awaited and emitted
+spawn {
+    pin pat = :close [h=d]
+    watching (pat) {
+        await(false)
+    }
+    print(:closed, 1)
+}
+spawn {
+    watching :close until it.h == d {
+        await(false)
+    }
+    print(:closed, 2)
+}
+pin e = :close [h=d]
+emit(e)
+
+;; an unpinned constructor still cannot hold it
+print(catch true {
+    val x = :close [h=d]
+})

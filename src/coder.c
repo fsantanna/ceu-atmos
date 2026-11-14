@@ -1133,10 +1133,14 @@ static void gen_dcl (Unit* u, Expr* e) {
             var_c(u, e->vars[i]);
         }
     } else if (k == 1) {
-        // pin x = [...]
-        int born = (e->vars[0]->kind==V_PIN && e->u.dcl.set->tag==E_TABLE);
+        // pin x = [...]  |  pin x = :T [...]
+        Expr* tab = e->u.dcl.set;
+        if (tab->tag == E_TAGGED) {
+            tab = tab->u.tagged.e;
+        }
+        int born = (e->vars[0]->kind==V_PIN && tab->tag==E_TABLE);
         if (born) {
-            u->born = e->u.dcl.set;
+            u->born = tab;
         }
         Opnd o = gen_expr(u, e->u.dcl.set);
         gen_boxes(u, e);
