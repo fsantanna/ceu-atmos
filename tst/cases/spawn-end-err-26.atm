@@ -1,0 +1,7 @@
+;; block with toggle on
+if true {
+    spawn {
+        toggle on :t { }
+    }
+}
+emit(:x)

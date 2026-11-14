@@ -1,0 +1,22 @@
+;; a pool
+task T (id) {
+    defer { print(:aborted, id) }
+    await(:tick)
+    print(:boom, id)
+}
+pin fx = tasks()
+var hp = 0
+spawn {
+    loop on :hit {
+        if hp == 0 {
+            spawn @fx T(:a)
+        }
+    }
+}
+emit(:hit)
+loop i in 2 {
+    spawn @fx T(i)
+}
+print(:after)
+emit(:tick)
+print(:end)

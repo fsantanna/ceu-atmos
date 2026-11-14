@@ -316,6 +316,10 @@ struct Var {
     int     global;
     // function that declares it
     Proto*  proto;
+    // prototype that defines it, as in `task T () {...}`, and if
+    // anything else assigns it
+    Expr*   def;
+    int     redef;
     // mutable and captured by a closure: lives in a shared box
     int     boxed;
     // coder: slot in `L`, and nesting level of its block

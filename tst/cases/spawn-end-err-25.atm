@@ -1,0 +1,7 @@
+;; block with par
+if true {
+    spawn {
+        par { } with { }
+    }
+}
+emit(:x)

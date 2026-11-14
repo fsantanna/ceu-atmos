@@ -1,0 +1,11 @@
+;; pin outside, but the spawn is not the value
+task T (id) {
+    defer { print(:aborted, id) }
+    await(:tick)
+    print(:boom, id)
+}
+pin t = if true {
+    spawn T(:a)
+    spawn T(:b)
+}
+emit(:tick)

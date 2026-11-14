@@ -1,0 +1,23 @@
+;; a task that is not known at compile time
+task T (id) {
+    defer { print(:aborted, id) }
+    await(:tick)
+    print(:boom, id)
+}
+func f () { T }
+val t = [T=T]
+var V = T
+task W (id) { await(:tick) }
+set W = T
+func g (X) {
+    if true {
+        spawn X(:par)
+    }
+}
+if true { spawn (f())(:call) }
+if true { spawn t.T(:field) }
+if true { spawn V(:var) }
+if true { spawn W(:set) }
+g(T)
+emit(:tick)
+print(:end)

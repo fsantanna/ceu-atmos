@@ -1,0 +1,7 @@
+;; block with an await inside an expression
+if true {
+    spawn {
+        print([1, (await :x) + 1])
+    }
+}
+emit(:x)

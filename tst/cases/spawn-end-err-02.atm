@@ -1,0 +1,12 @@
+;; else
+task T (id) {
+    defer { print(:aborted, id) }
+    await(:tick)
+    print(:boom, id)
+}
+if false {
+    print(:no)
+} else {
+    spawn T(:a)
+}
+emit(:tick)

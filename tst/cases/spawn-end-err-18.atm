@@ -1,0 +1,6 @@
+;; main chunk, block
+print(:x)
+spawn {
+    await(:tick)
+    print(:boom)
+}

@@ -1,0 +1,13 @@
+;; toggle on
+task T (id) {
+    defer { print(:aborted, id) }
+    await(:tick)
+    print(:boom, id)
+}
+spawn {
+    toggle on :t {
+        spawn T(:a)
+    }
+    await(:y)
+}
+emit(:tick)

@@ -1,0 +1,14 @@
+;; par
+task T (id) {
+    defer { print(:aborted, id) }
+    await(:tick)
+    print(:boom, id)
+}
+spawn {
+    par {
+        spawn T(:a)
+    } with {
+        await(:x)
+    }
+}
+emit(:tick)

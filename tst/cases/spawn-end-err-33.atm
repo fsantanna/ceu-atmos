@@ -1,0 +1,12 @@
+;; task inside a task
+task U () {
+    val task T () {
+        await(:tick)
+    }
+    loop {
+        await(:x)
+        spawn T()
+    }
+}
+pin u = spawn U()
+emit(:x)

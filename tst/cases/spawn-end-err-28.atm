@@ -1,0 +1,7 @@
+;; block with an await in the lambda of a case
+if true {
+    spawn {
+        if true => \{ await(:x) }
+    }
+}
+emit(:x)

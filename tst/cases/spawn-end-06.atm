@@ -1,0 +1,19 @@
+;; the value of a function goes to its caller
+task T (id) {
+    defer { print(:aborted, id) }
+    await(:tick)
+    print(:boom, id)
+}
+func mk (id) {
+    spawn T(id)
+}
+func mk2 (id) {
+    if true {
+        spawn T(id)
+    }
+}
+pin a = mk(:a)
+pin b = mk2(:b)
+print(:after)
+emit(:tick)
+print(:end)

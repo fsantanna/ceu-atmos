@@ -1,0 +1,11 @@
+;; spawn block
+task T (id) {
+    defer { print(:aborted, id) }
+    await(:tick)
+    print(:boom, id)
+}
+spawn {
+    print(:u)
+    spawn T(:a)
+}
+emit(:tick)

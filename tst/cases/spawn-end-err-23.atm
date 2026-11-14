@@ -1,0 +1,15 @@
+;; value of a par branch: aborted with the branch
+task T (id) {
+    defer { print(:aborted, id) }
+    await(:tick)
+    print(:boom, id)
+}
+spawn {
+    pin t = par :any {
+        spawn T(:a)
+    } with {
+        await(:never)
+    }
+    emit(:tick)
+}
+nil

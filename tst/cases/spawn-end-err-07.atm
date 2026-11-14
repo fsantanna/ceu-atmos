@@ -1,0 +1,10 @@
+;; loop
+task T (id) {
+    defer { print(:aborted, id) }
+    await(:tick)
+    print(:boom, id)
+}
+loop i in 2 {
+    spawn T(i)
+}
+emit(:tick)

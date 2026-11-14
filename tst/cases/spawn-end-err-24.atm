@@ -1,0 +1,7 @@
+;; block with watching
+if true {
+    spawn {
+        watching :x { }
+    }
+}
+emit(:x)

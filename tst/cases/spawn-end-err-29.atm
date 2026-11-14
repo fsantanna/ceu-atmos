@@ -1,0 +1,13 @@
+;; task declared after the spawn
+task U () {
+    if true {
+        spawn T(:a)
+    }
+    await(:x)
+}
+task T (id) {
+    await(:tick)
+    print(:boom, id)
+}
+pin u = spawn U()
+emit(:tick)

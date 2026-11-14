@@ -1,0 +1,16 @@
+;; if
+task T (id) {
+    defer { print(:aborted, id) }
+    await(:tick)
+    print(:boom, id)
+}
+var hp = 0
+spawn {
+    loop on :hit {
+        if hp == 0 {
+            spawn T(:a)
+        }
+    }
+}
+emit(:hit)
+emit(:tick)

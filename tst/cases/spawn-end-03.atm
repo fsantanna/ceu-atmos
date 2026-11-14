@@ -1,0 +1,25 @@
+;; a statement after the spawn, in its block
+task T (id) {
+    defer { print(:aborted, id) }
+    await(:tick)
+    print(:boom, id)
+}
+func f () { }
+if true {
+    spawn T(:a)
+    emit(:tick)
+}
+if true {
+    spawn T(:b)
+    f()
+}
+spawn {
+    if true {
+        spawn T(:c)
+        spawn { print(:x) }
+        await(:tick)
+    }
+    print(:after)
+}
+emit(:tick)
+print(:end)

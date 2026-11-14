@@ -1,0 +1,12 @@
+;; task
+task T (id) {
+    defer { print(:aborted, id) }
+    await(:tick)
+    print(:boom, id)
+}
+task U () {
+    print(:u)
+    spawn T(:a)
+}
+pin u = spawn U()
+emit(:tick)

@@ -1,0 +1,14 @@
+;; only spawns follow: the first one
+task T (id) {
+    defer { print(:aborted, id) }
+    await(:tick)
+    print(:boom, id)
+}
+task Q () { print(:q) }
+pin ts = tasks()
+if true {
+    spawn T(:a)
+    spawn Q()
+    spawn @ts T(:b)
+}
+emit(:tick)

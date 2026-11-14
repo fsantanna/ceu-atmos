@@ -1,0 +1,9 @@
+;; val T = task
+val T = task (id) {
+    await(:tick)
+    print(:boom, id)
+}
+if true {
+    spawn T(:a)
+}
+emit(:tick)

@@ -1,0 +1,8 @@
+;; lambda of a case
+task T (id) {
+    defer { print(:aborted, id) }
+    await(:tick)
+    print(:boom, id)
+}
+if true => \{ spawn T(:a) }
+emit(:tick)

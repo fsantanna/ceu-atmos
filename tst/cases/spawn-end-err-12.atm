@@ -1,0 +1,13 @@
+;; watching
+task T (id) {
+    defer { print(:aborted, id) }
+    await(:tick)
+    print(:boom, id)
+}
+spawn {
+    watching :x {
+        spawn T(:a)
+    }
+    await(:y)
+}
+emit(:tick)

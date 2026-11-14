@@ -1,0 +1,8 @@
+;; where: its block ends with the expression
+task T (id) {
+    defer { print(:aborted, id) }
+    await(:tick)
+    print(:boom, id)
+}
+spawn T(x) where { x = :a }
+emit(:tick)

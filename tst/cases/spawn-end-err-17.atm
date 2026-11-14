@@ -1,0 +1,8 @@
+;; main chunk
+task T (id) {
+    defer { print(:aborted, id) }
+    await(:tick)
+    print(:boom, id)
+}
+print(:x)
+spawn T(:a)

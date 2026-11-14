@@ -1,0 +1,8 @@
+;; anonymous task
+if true {
+    spawn (task () {
+        await(:tick)
+        print(:boom)
+    })()
+}
+emit(:tick)

@@ -1,0 +1,16 @@
+;; a pin outside: the value of the block is used
+task T (id) {
+    defer { print(:aborted, id) }
+    await(:tick)
+    print(:boom, id)
+}
+pin a = if true { spawn T(:a) }
+pin b = if false { nil } else { spawn T(:b) }
+pin c = ifs { true => { spawn T(:c) } }
+pin d = match 1 { 1 => spawn T(:d) }
+pin e = if true => \{ spawn T(:e) }
+pin f = do { spawn T(:f) }
+pin g = if true { do { if true { spawn T(:g) } } }
+print(:after)
+emit(:tick)
+print(:end)

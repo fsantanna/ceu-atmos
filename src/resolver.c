@@ -1,7 +1,8 @@
 // Atmos compiler: resolver.
 //
 // Binds every access to its declaration through lexical scopes, marks
-// calls to reserved names, and checks assignments.
+// calls to reserved names, and checks assignments, and the spawns that
+// would be aborted at the end of their blocks.
 
 #include <stdlib.h>
 #include <string.h>
@@ -317,25 +318,179 @@ static void res_list (List* l) {
 // assignment, or a defer.
 static int STMT = 0;
 
-static void res_stmts (List* l) {
+// The value of the expression about to be resolved is not used, and
+// only spawns follow it in its block, if anything. A task spawned
+// there with no pool is aborted when the block ends, having only the
+// reaction of its own start.
+static int VOID = 0;
+static int TAIL = 0;
+
+static void res_in (Expr* e, int isvoid, int tail) {
+    VOID = isvoid;
+    TAIL = tail;
+    res(e);
+    VOID = 0;
+    TAIL = 0;
+}
+
+static int is_spawn (Expr* e) {
+    return e->tag==E_SPAWN || e->tag==E_SPAWN_BLK;
+}
+
+// `isvoid`: the value of the block is not used.
+static void res_stmts (List* l, int isvoid) {
     for (int i=0; i<l->n; i++) {
+        int last = (i == l->n-1);
+        int tail = 1;
+        for (int j=i+1; j<l->n; j++) {
+            tail = tail && is_spawn(l->v[j]);
+        }
         STMT = 1;
-        res(l->v[i]);
+        res_in(l->v[i], isvoid || !last, tail);
     }
     STMT = 0;
 }
 
-static void res_block (Expr* e) {
+static void res_block (Expr* e, int isvoid) {
     scope_push();
-    res_stmts(&e->u.block.es);
+    res_stmts(&e->u.block.es, isvoid);
     scope_pop();
+}
+
+// Spawns to check when all declarations are known: a task may be
+// declared after the spawn.
+static Expr** SPAWNS  = NULL;
+static int    NSPAWNS = 0;
+
+static void spawns_add (Expr* e) {
+    SPAWNS = realloc(SPAWNS, (NSPAWNS+1) * sizeof(Expr*));
+    SPAWNS[NSPAWNS++] = e;
+}
+
+static int awaits (Expr* e);
+
+static int awaits_list (List* l) {
+    for (int i=0; i<l->n; i++) {
+        if (awaits(l->v[i])) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+// The expression has an awaiting construct that belongs to the task
+// that evaluates it: not in a nested function or task, and not in a
+// nested `spawn {...}`.
+static int awaits (Expr* e) {
+    if (e == NULL) {
+        return 0;
+    }
+    switch (e->tag) {
+        case E_AWAIT:
+        case E_PAR:
+        case E_TOGGLE_ON:
+            return 1;
+        case E_INDEX:
+            return awaits(e->u.index.t) || awaits(e->u.index.idx);
+        case E_TABLE:
+            return awaits_list(&e->u.table.ks) ||
+                   awaits_list(&e->u.table.vs);
+        case E_TAGGED:
+            return awaits(e->u.tagged.e);
+        case E_UNO:
+            return awaits(e->u.uno.e);
+        case E_BIN:
+            return awaits(e->u.bin.e1) || awaits(e->u.bin.e2);
+        case E_CALL:
+            return awaits(e->u.call.f) || awaits_list(&e->u.call.es);
+        case E_MET:
+            return awaits(e->u.met.o);
+        case E_PARENS:
+            return awaits(e->u.parens.e);
+        case E_LIST:
+            return awaits_list(&e->u.list.es);
+        case E_WHERE:
+            return awaits_list(&e->u.where.dcls) || awaits(e->u.where.e);
+        case E_DCL:
+            return awaits(e->u.dcl.set);
+        case E_SET:
+            return awaits_list(&e->u.set.dsts) || awaits(e->u.set.src);
+        case E_BLOCK:
+            return awaits_list(&e->u.block.es);
+        case E_DO:
+            return awaits(e->u.xdo.blk);
+        case E_IFS:
+            if (awaits(e->u.ifs.head)) {
+                return 1;
+            }
+            for (int i=0; i<e->u.ifs.n; i++) {
+                if (awaits(e->u.ifs.cases[i].cnd) ||
+                    awaits(e->u.ifs.cases[i].body))
+                {
+                    return 1;
+                }
+            }
+            return 0;
+        case E_LOOP:
+            return awaits(e->u.loop.itr) || awaits(e->u.loop.blk);
+        case E_CATCH:
+            return awaits(e->u.xcatch.cnd) || awaits(e->u.xcatch.blk);
+        case E_PROTO:
+            // a lambda of an if/ifs/match is expanded in place
+            return e->u.proto.inl && awaits(e->u.proto.blk);
+        case E_SPAWN:
+            return awaits(e->u.spawn.pool) || awaits(e->u.spawn.f) ||
+                   awaits_list(&e->u.spawn.args);
+        case E_TASKS:
+            return awaits(e->u.tasks.n);
+        case E_EMIT:
+            return awaits(e->u.emit.to) || awaits(e->u.emit.e);
+        case E_TOGGLE:
+            return awaits(e->u.toggle.t) || awaits_list(&e->u.toggle.args);
+        default:
+            return 0;
+    }
+}
+
+// The prototype of the task that a spawn starts, if it is known at
+// compile time: a literal, or a name with a single definition.
+static Expr* spawn_proto (Expr* f) {
+    while (f->tag == E_PARENS) {
+        f = f->u.parens.e;
+    }
+    if (f->tag==E_ACC && f->var!=NULL && !f->var->redef) {
+        f = f->var->def;
+    }
+    if (f!=NULL && f->tag==E_PROTO && f->u.proto.task) {
+        return f;
+    }
+    return NULL;
+}
+
+static void chk_spawns (void) {
+    for (int i=0; i<NSPAWNS; i++) {
+        Expr* e = SPAWNS[i];
+        Expr* blk = e->u.sblk.blk;
+        if (e->tag == E_SPAWN) {
+            Expr* p = spawn_proto(e->u.spawn.f);
+            blk = (p == NULL) ? NULL : p->u.proto.blk;
+        }
+        if (awaits(blk)) {
+            err(e->tk,
+                "invalid spawn : the task is aborted at the end of its block");
+        }
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
 static void res (Expr* e) {
     int stmt = STMT;
+    int isvoid = VOID;
+    int tail   = TAIL;
     STMT = 0;
+    VOID = 0;
+    TAIL = 0;
     if (e == NULL) {
         return;
     }
@@ -488,8 +643,9 @@ static void res (Expr* e) {
         case E_WHERE:
             // locals are visible in the clause and in the expression
             scope_push();
-            res_stmts(&e->u.where.dcls);
-            res(e->u.where.e);
+            // the expression is the last statement of a block
+            res_stmts(&e->u.where.dcls, 1);
+            res_in(e->u.where.e, isvoid, 1);
             scope_pop();
             break;
 
@@ -498,6 +654,7 @@ static void res (Expr* e) {
                 // `val func f`: the body sees `f`, to call itself
                 e->vars = xalloc(sizeof(Var*));
                 e->vars[0] = declare(e->u.dcl.ids[0], V_VAL);
+                e->vars[0]->def = e->u.dcl.set;
                 SELF = e->vars[0];
                 res(e->u.dcl.set);
                 break;
@@ -509,6 +666,11 @@ static void res (Expr* e) {
             e->vars = xalloc(e->u.dcl.n * sizeof(Var*));
             for (int i=0; i<e->u.dcl.n; i++) {
                 e->vars[i] = declare(e->u.dcl.ids[i], kind);
+            }
+            if (e->u.dcl.n==1 && e->u.dcl.set!=NULL &&
+                e->u.dcl.set->tag==E_PROTO)
+            {
+                e->vars[0]->def = e->u.dcl.set;
             }
             break;
         }
@@ -531,15 +693,23 @@ static void res (Expr* e) {
                 if (dst->tag==E_ACC && dst->var->kind!=V_VAR) {
                     err(dst->tk, "invalid set : expected mutable variable");
                 }
+                // `task T () {...}` defines `T`, if nothing else sets it
+                if (dst->tag == E_ACC) {
+                    if (e->u.set.proto && dst->var->def==NULL) {
+                        dst->var->def = e->u.set.src;
+                    } else {
+                        dst->var->redef = 1;
+                    }
+                }
             }
             break;
 
         case E_BLOCK:
-            res_block(e);
+            res_block(e, isvoid);
             break;
 
         case E_DO:
-            res_block(e->u.xdo.blk);
+            res_block(e->u.xdo.blk, isvoid);
             break;
 
         case E_DEFER: {
@@ -547,7 +717,7 @@ static void res (Expr* e) {
             int loops = LOOPS;
             LOOPS = 0;
             DEFERS++;
-            res_block(e->u.defer.blk);
+            res_block(e->u.defer.blk, 1);
             DEFERS--;
             LOOPS = loops;
             break;
@@ -566,7 +736,7 @@ static void res (Expr* e) {
                     c->body->u.proto.inl = 1;
                 }
                 res(c->cnd);
-                res(c->body);
+                res_in(c->body, isvoid, 1);
             }
             break;
 
@@ -578,14 +748,14 @@ static void res (Expr* e) {
                 e->vars[i] = declare(e->u.loop.ids[i], V_VAL);
             }
             LOOPS++;
-            res_block(e->u.loop.blk);
+            res_block(e->u.loop.blk, 1);
             LOOPS--;
             scope_pop();
             break;
 
         case E_CATCH:
             res(e->u.xcatch.cnd);
-            res_block(e->u.xcatch.blk);
+            res_block(e->u.xcatch.blk, isvoid);
             break;
 
         case E_ME:
@@ -596,6 +766,9 @@ static void res (Expr* e) {
             res(e->u.spawn.pool);
             res(e->u.spawn.f);
             res_list(&e->u.spawn.args);
+            if (isvoid && tail && e->u.spawn.pool==NULL) {
+                spawns_add(e);
+            }
             break;
 
         case E_TASKS:
@@ -615,13 +788,17 @@ static void res (Expr* e) {
         case E_SPAWN_BLK:
             // a transparent block shares the frame of its task
             chk_await(e->tk, "spawn");
-            res_block(e->u.sblk.blk);
+            res_block(e->u.sblk.blk, 1);
+            if (isvoid && tail) {
+                spawns_add(e);
+            }
             break;
 
         case E_PAR:
             chk_await(e->tk, "par");
             for (int i=0; i<e->u.par.blks.n; i++) {
-                res_block(e->u.par.blks.v[i]);
+                // a branch is aborted when it ends, with its tasks
+                res_block(e->u.par.blks.v[i], 1);
             }
             break;
 
@@ -638,7 +815,7 @@ static void res (Expr* e) {
             for (int i=0; i<e->u.toggle_on.nf; i++) {
                 res_patt(e->u.toggle_on.fs[i]);
             }
-            res_block(e->u.toggle_on.blk);
+            res_block(e->u.toggle_on.blk, 1);
             break;
 
         case E_PROTO: {
@@ -656,7 +833,10 @@ static void res (Expr* e) {
             for (int i=0; i<e->u.proto.n; i++) {
                 e->vars[i] = declare(e->u.proto.pars[i], V_PAR);
             }
-            res_block(e->u.proto.blk);
+            // the value of a function goes to its caller, and the one
+            // of a lambda expanded in place is the one of its case
+            res_block(e->u.proto.blk,
+                e->u.proto.inl ? isvoid : e->u.proto.task);
             scope_pop();
             if (!e->u.proto.inl) {
                 PROTO = PROTO->up;
@@ -684,9 +864,10 @@ Var** resolver_main (Expr* prog, int* n) {
     PROTO = PROTO_MAIN;
     scope_push();
     hoist(prog);
-    res_stmts(&prog->u.block.es);
+    res_stmts(&prog->u.block.es, 1);
     scope_pop();
     scope_pop();
+    chk_spawns();
 
     *n = NGLOBALS;
     return GLOBALS;

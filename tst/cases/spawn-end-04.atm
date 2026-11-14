@@ -1,0 +1,29 @@
+;; a task that cannot await ends in its start
+task Quick (v) { print(v) }
+val Q2 = task (v) { print(v) }
+task Other () {
+    ;; these do not await in `Other`
+    val f = func () { print(:f) }
+    val task U () { await(:x) }
+    spawn { await(:x) }
+    f()
+}
+if true {
+    spawn Quick(1)
+}
+loop i in 2 {
+    spawn Q2(i)
+}
+do {
+    spawn { print(:blk) }
+}
+if true {
+    spawn Other()
+}
+if true {
+    spawn {
+        spawn { await(:x) ; print(:x) }
+        emit(:x)
+    }
+}
+spawn Quick(:end)
