@@ -1,0 +1,32 @@
+;; a skip belongs to the innermost loop
+loop i in 3 {
+    loop j in 3 {
+        if j == 1 { skip }
+        print(i, j)
+    }
+    if i == 1 { skip }
+    print(:after, i)
+}
+
+;; the loop still gives the values of a break after skips
+val r = loop i {
+    if i < 3 { skip }
+    break i, :x
+}
+print(r)
+
+;; a skip before an `until` or `while` skips the test too
+var n = 0
+loop {
+    set n = n + 1
+    if n == 3 { skip }
+    until n >= 3
+}
+print(n)
+var m = 0
+loop {
+    set m = m + 1
+    if m == 2 { skip }
+    while m < 2
+}
+print(m)

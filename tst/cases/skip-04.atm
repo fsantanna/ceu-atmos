@@ -1,0 +1,17 @@
+;; a skip is an expression, valid where an exit is
+val ts = [[x=10], [], [x=30], [x=false]]
+loop _,t in ts {
+    val x = t.x || skip
+    print(x)
+}
+loop i in 4 {
+    val v = if i%2 == 0 => skip => i
+    print(v)
+}
+loop i in 3 {
+    print(i, i==1 && skip)
+}
+loop i in 3 {
+    val t = [i, (i==1 && skip)]
+    X.print(t)
+}

@@ -52,7 +52,7 @@ static const char* BUILTINS[][2] = {
 
 static const char* SPECIALS[] = {
     "", "do", "break", "until", "while", "return", "escape", "throw",
-    "abort", NULL
+    "abort", "skip", NULL
 };
 
 static void res (Expr* e);
@@ -450,6 +450,7 @@ static void res (Expr* e) {
                 case SP_BREAK:
                 case SP_UNTIL:
                 case SP_WHILE:
+                case SP_SKIP:
                     if (LOOPS == 0) {
                         err(e->u.call.f->tk,
                             "invalid %s : expected enclosing loop",
@@ -458,6 +459,9 @@ static void res (Expr* e) {
                     break;
                 default:
                     break;
+            }
+            if (e->u.call.sp==SP_SKIP && e->u.call.es.n>0) {
+                err(e->u.call.f->tk, "invalid skip : unexpected argument");
             }
             res_list(&e->u.call.es);
             break;

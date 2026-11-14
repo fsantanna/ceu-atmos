@@ -1,0 +1,17 @@
+plain	1
+plain	3
+plain	5
+num	3
+num	4
+range	0
+range	2
+range	4
+pair	1
+pair	3
+pair	4
+table	0	10
+table	2	30
+func	1
+func	3
+func	4
+nil

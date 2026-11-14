@@ -487,7 +487,8 @@ static Expr* parser_exprs (void) {
 //      return e
 //      return e1, e2       same as return (e1, e2)
 static const char* EXITS[] = {
-    "return", "break", "escape", "throw", "abort", "until", "while", NULL
+    "return", "break", "escape", "throw", "abort", "until", "while",
+    "skip", NULL
 };
 
 static Expr* parser_exit (Tk tk) {
@@ -1059,7 +1060,7 @@ static Expr* parser_1_prim (void) {
     } else if (accept_tag(TK_CLK)) {
         return mk(E_CLK, TK0);
 
-    // return e  break e  escape e  throw e  abort e
+    // return e  break e  escape e  throw e  abort e  skip
     } else if (check_tag(TK_ID) && in(EXITS,TK1.str)) {
         next();
         return parser_exit(TK0);

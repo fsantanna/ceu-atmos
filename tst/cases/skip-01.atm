@@ -1,0 +1,44 @@
+;; each form of loop: a plain loop goes to the top
+var n = 0
+loop {
+    set n = n + 1
+    if n % 2 == 0 { skip }
+    print(:plain, n)
+    if n >= 5 { break }
+}
+
+;; a numeric loop advances
+loop i {
+    if i < 3 { skip() }
+    print(:num, i)
+    until i == 4
+}
+
+;; an iterator loop goes to the next item
+loop i in 5 {
+    if i == 1 || i == 3 { skip }
+    print(:range, i)
+}
+loop i in (1,4) {
+    if i == 2 { skip }
+    print(:pair, i)
+}
+loop i,v in [10,20,30] {
+    if v == 20 { skip }
+    print(:table, i, v)
+}
+val f = func () {
+    var x = 0
+    \{
+        set x = x + 1
+        if x>4 => nil => x
+    }
+}
+loop v in f() {
+    if v == 2 { skip }
+    print(:func, v)
+}
+
+;; a loop with only skips ends by its iterator, with no value
+val r = loop i in 3 { skip }
+print(r)

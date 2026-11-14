@@ -208,7 +208,7 @@ typedef enum {
 // Calls to reserved names are statements in disguise.
 typedef enum {
     SP_NONE, SP_DO, SP_BREAK, SP_UNTIL, SP_WHILE,
-    SP_RETURN, SP_ESCAPE, SP_THROW, SP_ABORT
+    SP_RETURN, SP_ESCAPE, SP_THROW, SP_ABORT, SP_SKIP
 } Special;
 
 // One case of an if/ifs/match.

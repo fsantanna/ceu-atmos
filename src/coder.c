@@ -730,6 +730,7 @@ static Opnd gen_index (Unit* u, Expr* e) {
 // A block may stop an exit: its payload is delivered to a destination
 // and control goes to an end label.
 //  - break: the body of a loop
+//  - skip: the body of a loop, which goes to its next step
 //  - return: the body of a lambda expanded in place
 //  - error: the body of a catch, which only diverts to its label
 //  - escape: a `do :X` block, if the tag matches constant `esck`
@@ -737,6 +738,7 @@ static Opnd gen_index (Unit* u, Expr* e) {
 typedef struct Hnd {
     int brk;
     Dst brkd;
+    int skp;
     int ret;
     Dst retd;
     int err;
@@ -955,6 +957,15 @@ static void blk_close (Unit* u, Blk b, Dst d, Hnd h) {
         out(u, "a_settop(base);");
         store_pay(u, h.brkd);
         out(u, "goto LE_%d;", h.brk);
+        u->ind--;
+        out(u, "}");
+    }
+    if (h.skp > 0) {
+        out(u, "if (st == A_SKIP) {");
+        u->ind++;
+        out(u, "st = A_OK;");
+        out(u, "a_settop(base);");
+        out(u, "goto LE_%d;", h.skp);
         u->ind--;
         out(u, "}");
     }
@@ -1452,6 +1463,7 @@ static void gen_loop (Unit* u, Expr* e, Dst d) {
     }
 
     int end = ++u->nlabels;
+    int nxt = ++u->nlabels;
     out(u, "while (1) {");
     u->ind++;
     if (iter) {
@@ -1461,7 +1473,10 @@ static void gen_loop (Unit* u, Expr* e, Dst d) {
     Hnd h = hnd_none();
     h.brk  = end;
     h.brkd = d;
+    h.skp  = nxt;
     gen_block_x(u, &e->u.loop.blk->u.block.es, dst_none(), h);
+    // a skip arrives here, at the end of the step
+    out0(u, "LE_%d: ;", nxt);
     u->ind--;
     out(u, "}");
     // the loop ends without a break
@@ -1600,6 +1615,13 @@ static void gen_call (Unit* u, Expr* e, Dst d) {
         case SP_UNTIL:
         case SP_WHILE:
             gen_break(u, e);
+            store_void(u, d);
+            return;
+        case SP_SKIP:
+            // skip: the step ends, with no values
+            out(u, "a_pay_clear();");
+            out(u, "st = A_SKIP;");
+            out(u, "goto CL_%d;", u->cleanup);
             store_void(u, d);
             return;
         case SP_RETURN: {

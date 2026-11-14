@@ -101,7 +101,8 @@ static inline int a_truthy (AVal v) {
 // A_AWAIT is internal: a task suspended at an await.
 // A_JOIN is internal: a branch of a `par :any` terminated.
 typedef enum {
-    A_OK, A_ERROR, A_ESCAPE, A_BREAK, A_RETURN, A_ABORT, A_AWAIT, A_JOIN
+    A_OK, A_ERROR, A_ESCAPE, A_BREAK, A_RETURN, A_ABORT, A_AWAIT, A_JOIN,
+    A_SKIP
 } AStatus;
 
 // Raises an error with a formatted message as its value.
