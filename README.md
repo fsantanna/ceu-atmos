@@ -206,6 +206,10 @@ From the [original implementation][atmos-lua], which compiles to Lua:
 - `catch` only catches `throw`.
 - `break`, `until`, and `while` need a lexically enclosing `loop`.
 - `skip` is new: it goes to the next step of the enclosing `loop`.
+- A `spawn` with no pool and no assignment that ends its block is a
+  compile error, if the task may await: it would be aborted with the
+  block, at once. The ways out are a pin outside the block, as in
+  `pin t = if c { spawn T() }`, or a pool, as in `spawn @ts T()`.
 - Numbers are 64-bit integers or reals, as in Lua 5.3: `7 / 2` is
   `3.5`, `7 // 2` is `3`, and a real always shows as one (`5.0`).
 - Operators follow C:
